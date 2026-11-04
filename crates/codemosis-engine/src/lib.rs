@@ -6,8 +6,11 @@
 //! step that would make the code worse.
 
 pub mod answers;
+pub mod ci;
 pub mod config;
+pub mod fsguard;
 pub mod oracle;
+pub mod policy;
 pub mod report;
 pub mod session;
 pub mod testparse;
@@ -39,6 +42,7 @@ pub struct Workspace {
     pub packs: Vec<Pack>,
     pub answers: Answers,
     pub project: Project,
+    pub policy: policy::Policy,
 }
 
 impl Workspace {
@@ -47,6 +51,20 @@ impl Workspace {
         let packs = config.load_packs(root, extra_packs)?;
         let answers = Answers::load(root).map_err(EngineError::Answers)?;
         let project = Project::load(root, &config.filter())?;
+        let policy = config.policy()?;
+        let known = |name: &str| {
+            packs
+                .iter()
+                .any(|p| p.meta.id == name || p.rules.iter().any(|r| r.id == name))
+        };
+        for name in policy.named_rules() {
+            if !known(&name) {
+                return Err(EngineError::Config(ConfigError::Other(format!(
+                    "{}: '{name}' is not a rule or pack id; `codemosis rules` lists them",
+                    config::FILE_NAME
+                ))));
+            }
+        }
         Ok(Workspace {
             root: root.to_path_buf(),
             config,
@@ -54,13 +72,23 @@ impl Workspace {
             packs,
             answers,
             project,
+            policy,
         })
     }
 
-    pub fn scan(&self) -> Scan {
-        let rules = enabled_rules(&self.packs, &self.config, &self.project, &[]);
+    /// Every finding of the enabled rules (or only these), with the
+    /// project's suppressions applied.
+    pub fn scan_rules(&self, only: &[String]) -> Scan {
+        let rules = enabled_rules(&self.packs, &self.config, &self.project, only);
         let answers = |id: &str| self.answers.get(id);
-        codemosis_core::scan(&self.project, rules, &answers, None)
+        let mut scan = codemosis_core::scan(&self.project, rules, &answers, None);
+        self.policy
+            .apply_suppressions(&mut scan.findings, &codemosis_core::suppress::today());
+        scan
+    }
+
+    pub fn scan(&self) -> Scan {
+        self.scan_rules(&[])
     }
 
     /// The configured oracle, or a detected one. The flag says whether it

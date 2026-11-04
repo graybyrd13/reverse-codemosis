@@ -1,6 +1,7 @@
 id = "debugger-statement"
 title = "debugger statement"
 category = "waste"
+cwe = ["CWE-489"]
 semantics = "preserved"
 summary = "`debugger` is a breakpoint left in the code."
 explain = """

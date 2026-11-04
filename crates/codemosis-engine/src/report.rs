@@ -55,7 +55,27 @@ impl Style {
 
 fn source_line(project: &Project, f: &Finding, line: usize) -> Option<String> {
     let file = project.files.iter().find(|s| s.path == f.file)?;
-    file.text.lines().nth(line.checked_sub(1)?).map(|s| s.to_string())
+    file.text
+        .lines()
+        .nth(line.checked_sub(1)?)
+        .map(|s| codemosis_core::redact::redact(s).into_owned())
+}
+
+/// "suppressed at src/a.py:3 (legacy module) until 2027-01-31, owner @ops".
+pub fn suppression_line(s: &codemosis_core::Suppression) -> String {
+    let mut out = format!("suppressed at {}", s.at);
+    if let Some(r) = &s.reason {
+        out.push_str(&format!(" ({r})"));
+    } else {
+        out.push_str(" (no reason given)");
+    }
+    if let Some(u) = &s.until {
+        out.push_str(&format!(" until {u}"));
+    }
+    if let Some(o) = &s.owner {
+        out.push_str(&format!(", owner {o}"));
+    }
+    out
 }
 
 /// A finding, with the line it points at.
@@ -151,6 +171,7 @@ pub fn finding_with(f: &Finding, project: &Project, s: Style, show_status: bool)
         }
         Status::Explained => "no correction can be proven here; the explanation is the result".to_string(),
         Status::Refused { reason } => format!("{} {}", s.red("correction refused:"), reason),
+        Status::Suppressed { suppression } => suppression_line(suppression),
     };
     if show_status {
         let _ = writeln!(out, "  {} {}", s.blue("="), status);

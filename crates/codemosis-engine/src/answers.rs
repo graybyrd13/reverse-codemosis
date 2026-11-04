@@ -56,9 +56,6 @@ impl Answers {
 
     pub fn save(&self, root: &Path) -> Result<(), String> {
         let path = Answers::path(root);
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
-        }
         let body = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
         let text = format!(
             "# Facts supplied by people, recorded by Reverse Codemosis.\n\
@@ -66,7 +63,9 @@ impl Answers {
              # lets that correction be applied; one that keeps it records the code as intentional.\n\
              # Review this file like code, and commit it.\n\n{body}"
         );
-        std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))
+        let rel = path.strip_prefix(root).unwrap_or(&path);
+        crate::fsguard::write_confined(root, rel, text.as_bytes())
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))
     }
 
     /// The recorded answer to a question, if any.

@@ -1,6 +1,7 @@
 [pack]
 id = "rust-core"
 version = "0.1.0"
+engine = "^0.1"
 language = "rust"
 summary = "Provable simplifications for everyday Rust, and the stubs AI tools leave behind."
 description = """

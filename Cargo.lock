@@ -164,6 +164,7 @@ name = "codemosis-core"
 version = "0.1.0"
 dependencies = [
  "ignore",
+ "libc",
  "regex",
  "serde",
  "similar",
@@ -195,6 +196,7 @@ name = "codemosis-engine"
 version = "0.1.0"
 dependencies = [
  "codemosis-core",
+ "globset",
  "regex",
  "serde",
  "serde_json",

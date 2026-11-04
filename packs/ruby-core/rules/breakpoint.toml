@@ -1,6 +1,7 @@
 id = "breakpoint"
 title = "Breakpoint left in the code"
 category = "waste"
+cwe = ["CWE-489"]
 semantics = "corrected"
 summary = "`${stmt}` stops the program in a debugger, or crashes it where the debugger is not installed."
 explain = """

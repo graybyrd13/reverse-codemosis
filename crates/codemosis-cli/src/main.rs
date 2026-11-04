@@ -47,6 +47,24 @@ enum Format {
     Markdown,
 }
 
+#[derive(Clone, Copy, ValueEnum, PartialEq, Eq)]
+enum CheckFormat {
+    /// Compiler-style findings for a terminal.
+    Text,
+    /// Every finding, with fingerprints (schema codemosis/check/v1).
+    Json,
+    /// A Markdown summary, for a pull-request comment.
+    Markdown,
+    /// SARIF 2.1.0, for GitHub code scanning and other dashboards.
+    Sarif,
+    /// A GitLab Code Quality report.
+    Gitlab,
+    /// GitHub Actions annotations, plus a job summary in $GITHUB_STEP_SUMMARY.
+    Github,
+    /// A GitHub pull-request review with suggested changes, as JSON for the API.
+    Review,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Measure a project against its packs and report every finding. Changes nothing.
@@ -54,14 +72,44 @@ enum Command {
         /// Project root.
         #[arg(default_value = ".")]
         path: PathBuf,
-        #[arg(long, value_enum, default_value_t = Format::Text)]
-        format: Format,
+        #[arg(long, value_enum, default_value_t = CheckFormat::Text)]
+        format: CheckFormat,
+        /// Write the report to this file instead of standard output.
+        #[arg(long, short, value_name = "FILE")]
+        output: Option<PathBuf>,
         /// Also load the pack in this directory.
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
         /// Only run these rules (or packs).
         #[arg(long = "rule", value_name = "ID")]
         rules: Vec<String>,
+        /// Exit 1 when a new open finding reaches this threshold: error, warning,
+        /// note, any or never, or a category (findings in it or more serious ones).
+        /// Default: [policy] fail_on, or any.
+        #[arg(long, value_name = "THRESHOLD")]
+        fail_on: Option<String>,
+        /// Accept the findings recorded in this baseline; report and fail only on new ones.
+        /// Default: [policy] baseline, if set.
+        #[arg(long, value_name = "FILE")]
+        baseline: Option<PathBuf>,
+        /// Ignore any configured baseline.
+        #[arg(long, conflicts_with = "baseline")]
+        no_baseline: bool,
+        /// Also list suppressed findings, with who suppressed them and why.
+        #[arg(long)]
+        show_suppressed: bool,
+        /// Show the proven corrections as a diff (not verified by the build and tests; `fix` does that).
+        #[arg(long)]
+        diff: bool,
+    },
+    /// Record today's open findings as accepted, so `check --baseline` fails only on new ones.
+    Baseline {
+        /// Project root.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Where to write it, relative to the project root.
+        #[arg(long, short, default_value = codemosis_engine::policy::DEFAULT_BASELINE)]
+        output: PathBuf,
     },
     /// Apply every correction that can be proven, verifying each step with the build and tests.
     Fix {
@@ -257,9 +305,30 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         Command::Check {
             path,
             format,
+            output,
             packs,
             rules,
-        } => check(&path, format, &packs, &rules, s),
+            fail_on,
+            baseline,
+            no_baseline,
+            show_suppressed,
+            diff,
+        } => check(
+            &path,
+            CheckOptions {
+                format,
+                output: output.as_deref(),
+                fail_on: fail_on.as_deref(),
+                baseline: baseline.as_deref(),
+                no_baseline,
+                show_suppressed,
+                diff,
+            },
+            &packs,
+            &rules,
+            s,
+        ),
+        Command::Baseline { path, output } => baseline_cmd(&path, &output),
         Command::Fix {
             path,
             dry_run,
@@ -368,81 +437,269 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
     }
 }
 
-fn check(path: &Path, format: Format, extra: &[PathBuf], only: &[String], s: Style) -> Result<ExitCode> {
+struct CheckOptions<'a> {
+    format: CheckFormat,
+    output: Option<&'a Path>,
+    fail_on: Option<&'a str>,
+    baseline: Option<&'a Path>,
+    no_baseline: bool,
+    show_suppressed: bool,
+    diff: bool,
+}
+
+fn finding_json(f: &Finding, policy: &codemosis_engine::policy::Policy, baselined: bool) -> serde_json::Value {
+    let mut v = serde_json::to_value(f).unwrap_or_default();
+    v["fingerprint"] = serde_json::json!(f.fingerprint());
+    v["level"] = serde_json::json!(policy.level(&f.rule, f.category).as_str());
+    v["confidence"] = serde_json::json!(f.confidence().as_str());
+    if baselined {
+        v["baselined"] = serde_json::json!(true);
+    }
+    v
+}
+
+/// The proven corrections of a scan applied in memory, as a diff: one
+/// non-overlapping set of edits per file. Nothing is verified or written.
+fn proposed_diff(project: &codemosis_core::Project, findings: &[&Finding]) -> String {
+    let mut out = String::new();
+    for file in &project.files {
+        let mut chosen: Vec<codemosis_core::Edit> = Vec::new();
+        for f in findings.iter().filter(|f| f.file == file.path && f.is_fixable()) {
+            let clash = f
+                .edits
+                .iter()
+                .any(|a| chosen.iter().any(|b| codemosis_core::edit::overlaps(a, b)));
+            if !clash {
+                chosen.extend(f.edits.iter().cloned());
+            }
+        }
+        if chosen.is_empty() {
+            continue;
+        }
+        if let Ok(new) = codemosis_core::edit::apply(&file.text, &chosen) {
+            out.push_str(&codemosis_engine::session::unified_diff(
+                &file.display_path(),
+                &file.text,
+                &new,
+            ));
+        }
+    }
+    codemosis_core::redact::redact(&out).into_owned()
+}
+
+fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: Style) -> Result<ExitCode> {
+    use codemosis_engine::ci;
+    use codemosis_engine::policy::{Baseline, FailOn};
     let root = canonical(path)?;
     let ws = Workspace::open(&root, extra)?;
     let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
-    let answers = |id: &str| ws.answers.get(id);
-    let scan = codemosis_core::scan(&ws.project, rules, &answers, None);
-    let open: Vec<&Finding> = scan
-        .findings
-        .iter()
-        .filter(|f| !matches!(f.status, Status::Declined { .. }))
-        .collect();
-    let distance = codemosis_core::Distance::from_findings(&scan.findings);
-    match format {
-        Format::Json => {
+    let scan = ws.scan_rules(only);
+    let fail_on = match o.fail_on {
+        Some(t) => FailOn::parse(t).map_err(|e| anyhow!("--fail-on: {e}"))?,
+        None => ws.policy.fail_on,
+    };
+    let baseline_path = match (o.no_baseline, o.baseline, &ws.config.policy.baseline) {
+        (true, _, _) => None,
+        (false, Some(p), _) => Some(p.to_path_buf()),
+        (false, None, Some(p)) => Some(root.join(p)),
+        _ => None,
+    };
+    let baseline = match &baseline_path {
+        Some(p) => Some(Baseline::load(p).map_err(|e| anyhow!(e))?),
+        None => None,
+    };
+    let baselined: Option<std::collections::BTreeSet<String>> = baseline.as_ref().map(|b| {
+        scan.findings
+            .iter()
+            .filter(|f| b.contains(f))
+            .map(|f| f.fingerprint())
+            .collect()
+    });
+    let out = ci::CheckOutput {
+        project: &ws.project,
+        findings: &scan.findings,
+        baselined: baselined.as_ref(),
+        rules: &rules,
+        policy: &ws.policy,
+    };
+    let new = out.new_findings();
+    let fails = ws.policy.fails(&new, fail_on);
+    let distance = codemosis_core::Distance::from_findings(new.iter().copied());
+    let is_baselined = |f: &Finding| baselined.as_ref().is_some_and(|b| b.contains(&f.fingerprint()));
+    let mut body = String::new();
+    use std::fmt::Write as _;
+    match o.format {
+        CheckFormat::Json => {
             let v = serde_json::json!({
+                "schema": ci::JSON_CHECK_SCHEMA,
+                "version": env!("CARGO_PKG_VERSION"),
                 "project": root.display().to_string(),
                 "distance": distance,
-                "findings": scan.findings,
+                "fail_on_tripped": fails,
+                "findings": scan.findings.iter().map(|f| finding_json(f, &ws.policy, is_baselined(f))).collect::<Vec<_>>(),
                 "rule_errors": scan.errors.iter().map(|e| e.to_string()).collect::<Vec<_>>(),
             });
-            println!("{}", serde_json::to_string_pretty(&v)?);
+            body = serde_json::to_string_pretty(&v)? + "\n";
         }
-        Format::Markdown => {
-            println!("# Reverse Codemosis findings\n\nDistance: {distance}\n");
-            for f in &open {
-                println!(
-                    "- **{}** `{}:{}` ({}): {}",
-                    f.rule,
-                    f.file.display(),
-                    f.span.start.line,
-                    f.status.label(),
-                    f.message
-                );
+        CheckFormat::Sarif => {
+            let root_uri = format!("file://{}/", root.display().to_string().replace('\\', "/"));
+            body = serde_json::to_string_pretty(&ci::sarif(&out, Some(&root_uri)))? + "\n";
+        }
+        CheckFormat::Gitlab => body = serde_json::to_string_pretty(&ci::gitlab(&out))? + "\n",
+        CheckFormat::Review => body = serde_json::to_string_pretty(&ci::github_review(&out))? + "\n",
+        CheckFormat::Github => {
+            body = ci::github_annotations(&out);
+            let link = github_link();
+            let summary =
+                ci::summary_markdown(&out, &distance, link.as_ref().map(|l| l as &dyn Fn(&Finding) -> String));
+            if let Some(p) = std::env::var_os("GITHUB_STEP_SUMMARY") {
+                let mut f = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&p)
+                    .with_context(|| format!("cannot write the job summary to {}", Path::new(&p).display()))?;
+                writeln!(f, "{summary}")?;
             }
         }
-        Format::Text => {
-            println!(
+        CheckFormat::Markdown => {
+            body = ci::summary_markdown(&out, &distance, None);
+            if o.diff {
+                let d = proposed_diff(&ws.project, &new);
+                if !d.is_empty() {
+                    let _ = write!(body, "\n### Proven corrections (not yet verified)\n\n```diff\n{d}```\n");
+                }
+            }
+        }
+        CheckFormat::Text => {
+            let _ = writeln!(
+                body,
                 "{}",
                 s.bold(&format!("Reverse Codemosis {}", env!("CARGO_PKG_VERSION")))
             );
-            println!("  project   {}", display_root(&root));
-            println!(
+            let _ = writeln!(body, "  project   {}", display_root(&root));
+            let _ = writeln!(
+                body,
                 "  packs     {}\n",
                 report::packs_line(&applicable(&ws.packs, &ws.project.languages()))
             );
             for c in Category::ALL {
-                for f in open.iter().filter(|f| f.category == c) {
-                    println!("{}", report::finding(f, &ws.project, s));
+                for f in new.iter().filter(|f| f.category == c) {
+                    let _ = writeln!(body, "{}", report::finding(f, &ws.project, s));
+                }
+            }
+            let suppressed: Vec<&Finding> = scan
+                .findings
+                .iter()
+                .filter(|f| matches!(f.status, Status::Suppressed { .. }))
+                .collect();
+            if o.show_suppressed {
+                for f in &suppressed {
+                    let _ = writeln!(body, "{}", report::finding(f, &ws.project, s));
                 }
             }
             for err in &scan.errors {
-                println!("{} {err}", s.red("rule error:"));
+                let _ = writeln!(body, "{} {err}", s.red("rule error:"));
             }
-            let fixable = open.iter().filter(|f| f.is_fixable()).count();
-            let questions = open
+            if o.diff {
+                let d = proposed_diff(&ws.project, &new);
+                if !d.is_empty() {
+                    let _ = writeln!(
+                        body,
+                        "{}\n{}",
+                        s.bold("Proven corrections (not yet verified by your build and tests)"),
+                        d
+                    );
+                }
+            }
+            let fixable = new.iter().filter(|f| f.is_fixable()).count();
+            let questions = new
                 .iter()
                 .filter(|f| matches!(f.status, Status::NeedsAnswer { .. }))
                 .count();
-            let other = open.len() - fixable - questions;
-            println!("{}", s.bold("Summary"));
-            println!("  distance  {}", report::distance(&distance, s));
-            println!(
-                "  findings  {} provably fixable · {} need your decision · {} explained",
-                fixable, questions, other
+            let other = new.len() - fixable - questions;
+            let _ = writeln!(body, "{}", s.bold("Summary"));
+            let _ = writeln!(body, "  distance  {}", report::distance(&distance, s));
+            let _ = writeln!(
+                body,
+                "  findings  {fixable} provably fixable · {questions} need your decision · {other} explained"
             );
+            let in_baseline = baselined.as_ref().map(|b| b.len()).unwrap_or(0);
+            if !suppressed.is_empty() || baseline.is_some() {
+                let mut parts = Vec::new();
+                if !suppressed.is_empty() {
+                    parts.push(format!(
+                        "{} suppressed{}",
+                        suppressed.len(),
+                        if o.show_suppressed {
+                            ""
+                        } else {
+                            " (--show-suppressed lists them)"
+                        }
+                    ));
+                }
+                if let Some(b) = &baseline {
+                    let resolved = b.resolved(&scan.findings).len();
+                    let mut text = format!("{in_baseline} accepted by the baseline");
+                    if resolved > 0 {
+                        text.push_str(&format!(
+                            "; {resolved} baseline entr{} fixed since (run `codemosis baseline` to shrink it)",
+                            if resolved == 1 { "y is" } else { "ies are" }
+                        ));
+                    }
+                    parts.push(text);
+                }
+                let _ = writeln!(body, "  hidden    {}", parts.join(" · "));
+            }
             if fixable > 0 {
-                println!("\nRun `codemosis fix` to apply the provable corrections, verified by your build and tests.");
+                let _ = writeln!(
+                    body,
+                    "\nRun `codemosis fix` to apply the provable corrections, verified by your build and tests."
+                );
             }
         }
     }
-    Ok(if open.is_empty() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
+    match o.output {
+        Some(p) => {
+            std::fs::write(p, &body).with_context(|| format!("cannot write {}", p.display()))?;
+            if o.format == CheckFormat::Text {
+                eprintln!("Report written to {}", p.display());
+            }
+        }
+        None => print!("{body}"),
+    }
+    Ok(if fails { ExitCode::from(1) } else { ExitCode::SUCCESS })
+}
+
+/// A link to a finding on GitHub, inside a GitHub Actions run.
+fn github_link() -> Option<impl Fn(&Finding) -> String> {
+    let server = std::env::var("GITHUB_SERVER_URL").ok()?;
+    let repo = std::env::var("GITHUB_REPOSITORY").ok()?;
+    let sha = std::env::var("GITHUB_SHA").ok()?;
+    Some(move |f: &Finding| {
+        format!(
+            "{server}/{repo}/blob/{sha}/{}#L{}",
+            f.file.to_string_lossy().replace('\\', "/"),
+            f.span.start.line
+        )
     })
+}
+
+fn baseline_cmd(path: &Path, output: &Path) -> Result<ExitCode> {
+    use codemosis_engine::policy::Baseline;
+    let root = canonical(path)?;
+    let ws = Workspace::open(&root, &[])?;
+    let scan = ws.scan();
+    let b = Baseline::from_findings(&scan.findings, &codemosis_core::suppress::today());
+    let rel = output.strip_prefix(&root).unwrap_or(output);
+    codemosis_engine::fsguard::write_confined(&root, rel, b.to_json().as_bytes())
+        .with_context(|| format!("cannot write {}", output.display()))?;
+    println!(
+        "Recorded {} open finding(s) in {}.\n`codemosis check --baseline {}` now fails only on new findings; commit the file.",
+        b.findings.len(),
+        rel.display(),
+        rel.display()
+    );
+    Ok(ExitCode::SUCCESS)
 }
 
 struct FixOptions<'a> {
@@ -498,6 +755,7 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         let _ = std::io::stdout().flush();
     }
     let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
+    let policy = ws.policy.clone();
     let answers_ledger = ws.answers.clone();
     let answers = |id: &str| answers_ledger.get(id);
     let session = Session {
@@ -505,6 +763,7 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         rules,
         answers: &answers,
         oracle: oracle.as_ref(),
+        policy: Some(&policy),
         options: Options {
             write: !dry_run,
             max_steps,
@@ -533,7 +792,7 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         }
     })?;
     match format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        Format::Json => println!("{}", fix_json(&report)?),
         Format::Markdown => println!("{}", report::session_markdown(&report, &display_root(root), &shown)),
         Format::Text => print!(
             "{}",
@@ -542,7 +801,7 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
     }
     if let Some(p) = report_path {
         let body = if p.extension().is_some_and(|x| x == "json") {
-            serde_json::to_string_pretty(&report)?
+            fix_json(&report)?
         } else {
             report::session_markdown(&report, &display_root(root), &shown)
         };
@@ -552,6 +811,18 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         }
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// The fix report as JSON (schema codemosis/fix/v1).
+fn fix_json(report: &codemosis_engine::session::Report) -> Result<String> {
+    let mut v = serde_json::json!({
+        "schema": codemosis_engine::ci::JSON_FIX_SCHEMA,
+        "version": env!("CARGO_PKG_VERSION"),
+    });
+    if let (Some(obj), serde_json::Value::Object(rest)) = (v.as_object_mut(), serde_json::to_value(report)?) {
+        obj.extend(rest);
+    }
+    Ok(serde_json::to_string_pretty(&v)?)
 }
 
 fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Style) -> Result<ExitCode> {

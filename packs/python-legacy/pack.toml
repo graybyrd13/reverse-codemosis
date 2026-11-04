@@ -1,6 +1,7 @@
 [pack]
 id = "python-legacy"
 version = "0.1.0"
+engine = "^0.1"
 language = "python"
 summary = "Python 2 constructs that have exactly one Python 3 equivalent."
 description = """

@@ -231,6 +231,66 @@ pub enum Status {
     Explained,
     /// A correction exists, but an engine guard refused to apply it.
     Refused { reason: String },
+    /// A person chose not to hear about this finding here, with a reason:
+    /// an inline `codemosis: ignore[...]` comment or a `[[suppress]]` entry.
+    /// It is not counted, not corrected and not asked about.
+    Suppressed { suppression: Suppression },
+}
+
+/// Where a suppression came from and why.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct Suppression {
+    /// "in-source" (a comment in the file) or "config" (`codemosis.toml`).
+    pub kind: SuppressionKind,
+    /// Why the finding is suppressed, in the author's words.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    /// The last day the suppression applies (YYYY-MM-DD).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub until: Option<String>,
+    /// Who answers for it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub owner: Option<String>,
+    /// Where it is written: `file:line` or `codemosis.toml`.
+    pub at: String,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum SuppressionKind {
+    InSource,
+    Config,
+}
+
+/// How far a finding's correction can be trusted, for reports and SARIF.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Confidence {
+    /// Every fact the rule needs holds; the engine may apply it.
+    Proven,
+    /// Proven given a fact a person supplied (an answer).
+    ProvenGivenAnswer,
+    /// A correction exists but needs a person's decision first.
+    NeedsDecision,
+    /// No correction can be proven; the finding is explained only.
+    ManualOnly,
+    /// A correction exists but a guard refused it here.
+    Refused,
+    /// Not applicable: the finding is declined or suppressed.
+    None,
+}
+
+impl Confidence {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Confidence::Proven => "proven",
+            Confidence::ProvenGivenAnswer => "proven-given-answer",
+            Confidence::NeedsDecision => "needs-decision",
+            Confidence::ManualOnly => "manual-only",
+            Confidence::Refused => "refused",
+            Confidence::None => "none",
+        }
+    }
 }
 
 impl Status {
@@ -241,6 +301,7 @@ impl Status {
             Status::Declined { .. } => "declined",
             Status::Explained => "explained",
             Status::Refused { .. } => "refused",
+            Status::Suppressed { .. } => "suppressed",
         }
     }
 }
@@ -261,6 +322,9 @@ pub struct Finding {
     /// Stable identity of this finding, independent of line numbers.
     pub anchor: String,
     pub status: Status,
+    /// True when the correction was unlocked by a recorded answer.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub answered: bool,
     #[serde(skip)]
     pub edits: Vec<Edit>,
 }
@@ -268,6 +332,41 @@ pub struct Finding {
 impl Finding {
     pub fn is_fixable(&self) -> bool {
         matches!(self.status, Status::Fixable)
+    }
+
+    /// Neither declined by a person nor suppressed: it counts.
+    pub fn is_open(&self) -> bool {
+        !matches!(self.status, Status::Declined { .. } | Status::Suppressed { .. })
+    }
+
+    pub fn confidence(&self) -> Confidence {
+        match &self.status {
+            Status::Fixable if self.answered => Confidence::ProvenGivenAnswer,
+            Status::Fixable => Confidence::Proven,
+            Status::NeedsAnswer { .. } => Confidence::NeedsDecision,
+            Status::Explained => Confidence::ManualOnly,
+            Status::Refused { .. } => Confidence::Refused,
+            Status::Declined { .. } | Status::Suppressed { .. } => Confidence::None,
+        }
+    }
+
+    /// A stable fingerprint: the same finding has the same fingerprint
+    /// across runs, line shifts and machines. Used by baselines,
+    /// suppression matching, SARIF and GitLab reports.
+    pub fn fingerprint(&self) -> String {
+        let file = self.file.to_string_lossy().replace('\\', "/");
+        let key = format!("{}\u{0}{}\u{0}{}", self.rule, file, self.anchor);
+        let mut h: u64 = 0xcbf29ce484222325;
+        for b in key.as_bytes() {
+            h ^= *b as u64;
+            h = h.wrapping_mul(0x100000001b3);
+        }
+        let mut h2: u64 = 0x84222325cbf29ce4;
+        for b in key.as_bytes().iter().rev() {
+            h2 ^= *b as u64;
+            h2 = h2.wrapping_mul(0x100000001b3);
+        }
+        format!("{h:016x}{h2:016x}")
     }
 
     pub fn question(&self) -> Option<&Question> {
@@ -284,7 +383,8 @@ impl Finding {
 }
 
 /// The measured distance between code and its best form: the number of open
-/// findings in each category. Findings a human declined are not counted.
+/// findings in each category. Findings a human declined or suppressed are
+/// not counted.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize)]
 pub struct Distance {
     pub broken: usize,
@@ -298,7 +398,7 @@ impl Distance {
     pub fn from_findings<'a>(findings: impl IntoIterator<Item = &'a Finding>) -> Distance {
         let mut d = Distance::default();
         for f in findings {
-            if matches!(f.status, Status::Declined { .. }) {
+            if !f.is_open() {
                 continue;
             }
             *d.slot(f.category) += 1;

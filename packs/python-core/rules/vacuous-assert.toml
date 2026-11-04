@@ -1,6 +1,7 @@
 id = "vacuous-assert"
 title = "Assertion that can never fail"
 category = "contradiction"
+cwe = ["CWE-571"]
 semantics = "corrected"
 summary = "`${stmt}` asserts a two-element tuple, which is always true, so it never checks anything."
 explain = """

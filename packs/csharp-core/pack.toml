@@ -1,6 +1,7 @@
 [pack]
 id = "csharp-core"
 version = "0.1.0"
+engine = "^0.1"
 language = "csharp"
 summary = "Questions and explanations for C#."
 authors = ["Reverse Codemosis contributors"]

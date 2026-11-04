@@ -1,6 +1,7 @@
 id = "empty-catch"
 title = "Empty catch block"
 category = "hazard"
+cwe = ["CWE-390"]
 summary = "This catch block swallows the error without a trace."
 explain = """
 An empty `catch` hides every error raised in its `try`, including the ones

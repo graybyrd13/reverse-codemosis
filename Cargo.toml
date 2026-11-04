@@ -14,11 +14,12 @@ authors = ["Reverse Codemosis contributors"]
 codemosis-core = { path = "crates/codemosis-core", version = "0.1.0" }
 codemosis-engine = { path = "crates/codemosis-engine", version = "0.1.0" }
 anyhow = "1"
+globset = "0.4"
 clap = { version = "4", features = ["derive"] }
 ignore = "0.4"
 regex = "1"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = { version = "1", features = ["preserve_order"] }
 similar = "2"
 tempfile = "3"
 thiserror = "2"

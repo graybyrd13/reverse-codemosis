@@ -12,7 +12,6 @@ use crate::eval::{err, EvalCtx, EvalError, FactDoc, Value};
 use crate::process::{self, ScratchDir};
 use crate::project::SourceFile;
 use std::collections::BTreeSet;
-use std::process::Command;
 use std::time::Duration;
 use tree_sitter::Node;
 
@@ -49,8 +48,8 @@ impl CommandRunner {
                         .replace("{dir}", &dir.path.to_string_lossy())
                 })
                 .collect();
-            let mut cmd = Command::new(&args[0]);
-            cmd.args(&args[1..]).current_dir(&dir.path).env("NO_COLOR", "1");
+            let mut cmd = process::snippet_command(&args[0]);
+            cmd.args(&args[1..]).current_dir(&dir.path);
             let limit = if i + 1 == steps.len() && runnable { 30 } else { 180 };
             let r = match process::run(&mut cmd, Duration::from_secs(limit)) {
                 Ok(r) => r,

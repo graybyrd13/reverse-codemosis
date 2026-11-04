@@ -1,6 +1,7 @@
 id = "private-key"
 title = "Private key committed"
 category = "hazard"
+cwe = ["CWE-321", "CWE-798"]
 summary = "A private key is stored in this file."
 explain = """
 Anyone who can read the repository, or any copy of it, can use this key. It

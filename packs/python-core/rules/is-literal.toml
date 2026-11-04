@@ -1,6 +1,7 @@
 id = "is-literal"
 title = "Identity comparison with a literal"
 category = "contradiction"
+cwe = ["CWE-595"]
 semantics = "corrected"
 summary = "`${cmp}` asks whether two objects are the same object in memory, not whether they are equal."
 explain = """

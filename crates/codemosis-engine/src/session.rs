@@ -17,7 +17,7 @@
 
 use crate::oracle::{regressions, Oracle, OracleRun};
 use codemosis_core::rule::scan;
-use codemosis_core::{edit, Category, CompiledRule, Distance, Edit, Finding, Project, Scan, Semantics, Status};
+use codemosis_core::{edit, Category, CompiledRule, Distance, Edit, Finding, Project, Scan, Semantics};
 use serde::Serialize;
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -98,6 +98,8 @@ pub struct Session<'s> {
     pub rules: Vec<&'s CompiledRule>,
     pub answers: &'s dyn Fn(&str) -> Option<String>,
     pub oracle: Option<&'s Oracle>,
+    /// The project's policy: its `[[suppress]]` entries apply to every scan.
+    pub policy: Option<&'s crate::policy::Policy>,
     pub options: Options,
 }
 
@@ -141,7 +143,10 @@ impl Session<'_> {
     }
 
     fn scan(&self, only: Option<&BTreeSet<usize>>, st: &mut State) -> Scan {
-        let s = scan(self.project, self.rules.iter().copied(), self.answers, only);
+        let mut s = scan(self.project, self.rules.iter().copied(), self.answers, only);
+        if let Some(p) = self.policy {
+            p.apply_suppressions(&mut s.findings, &codemosis_core::suppress::today());
+        }
         st.rule_errors.extend(s.errors.iter().map(|e| e.to_string()));
         s
     }
@@ -198,7 +203,7 @@ impl Session<'_> {
         for (file, old) in self.project.files.iter().zip(&originals) {
             if file.text != *old {
                 let path = file.display_path();
-                diff.push_str(&unified_diff(&path, old, &file.text));
+                diff.push_str(&codemosis_core::redact::redact(&unified_diff(&path, old, &file.text)));
                 files_changed.push(path);
             }
         }
@@ -253,7 +258,7 @@ impl Session<'_> {
 
     fn write(&self, idx: usize) -> std::io::Result<()> {
         let f = &self.project.files[idx];
-        std::fs::write(self.project.root.join(&f.path), &f.text)
+        crate::fsguard::write_confined(&self.project.root, &f.path, f.text.as_bytes())
     }
 
     fn restore(&mut self, snapshot: &[(usize, String)]) -> std::io::Result<()> {
@@ -334,7 +339,7 @@ impl Session<'_> {
         }
         let worst = batch.iter().map(|f| f.category).min().expect("non-empty batch");
         for g in &after.findings {
-            if g.category < worst && !before_keys.contains(&g.key()) && !matches!(g.status, Status::Declined { .. }) {
+            if g.category < worst && !before_keys.contains(&g.key()) && g.is_open() {
                 reasons.push(format!(
                     "the correction would introduce a {} finding at {}:{}: {}",
                     g.category,
@@ -377,7 +382,11 @@ impl Session<'_> {
         let mut files = Vec::new();
         for (idx, old) in &snapshot {
             let f = &self.project.files[*idx];
-            diff.push_str(&unified_diff(&f.display_path(), old, &f.text));
+            diff.push_str(&codemosis_core::redact::redact(&unified_diff(
+                &f.display_path(),
+                old,
+                &f.text,
+            )));
             files.push(f.display_path());
         }
         let first = &batch[0];

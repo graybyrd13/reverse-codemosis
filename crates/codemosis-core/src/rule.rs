@@ -17,6 +17,7 @@ use crate::lex::SegKind;
 use crate::model::{Category, Edit, Evidence, Finding, Question, QuestionOption, Span, Status};
 use crate::pack::{EditSpec, RuleSpec};
 use crate::project::{Project, SourceFile};
+use crate::redact::redact;
 use crate::tables::{Table, Tables};
 use crate::template::{self, Template};
 use regex::Regex;
@@ -467,6 +468,29 @@ impl CompiledRule {
                 }
             }
         }
+        let cwe_re = Regex::new(r"^CWE-\d+$").expect("valid regex");
+        for c in &spec.cwe {
+            if !cwe_re.is_match(c) {
+                problems.push(format!("cwe: '{c}' is not like CWE-396"));
+            }
+        }
+        if spec.replaced_by.is_some() && spec.deprecated.is_none() {
+            problems.push("replaced_by only applies to a deprecated rule; add deprecated = \"why\"".into());
+        }
+        for (label, path) in spec
+            .examples
+            .iter()
+            .map(|e| ("example", &e.path))
+            .chain(spec.counterexamples.iter().map(|c| ("counterexample", &c.path)))
+        {
+            if let Some(p) = path {
+                if !is_plain_relative(p) {
+                    problems.push(format!(
+                        "{label}: path '{p}' must be a relative path inside the example project (no '..', no leading '/')"
+                    ));
+                }
+            }
+        }
         for (label, l) in spec
             .examples
             .iter()
@@ -795,6 +819,7 @@ impl CompiledRule {
                     }
                 }
             };
+            let answered = r.question.is_some() && matches!(status, Status::Fixable);
             findings.push(Finding {
                 rule: self.id.clone(),
                 title: self.spec.title.clone(),
@@ -806,6 +831,7 @@ impl CompiledRule {
                 evidence: r.evidence,
                 anchor: r.anchor,
                 status,
+                answered,
                 edits,
             });
         }
@@ -832,9 +858,9 @@ impl CompiledRule {
     fn raw_match(&self, ctx: &EvalCtx<'_>) -> Result<RawMatch, String> {
         let (start, end) = self.focus(ctx).ok_or("the match has no captured text to report")?;
         let span = Span::from_range(&ctx.file.text, start, end);
-        let message = self.summary.render(ctx).map_err(|e| format!("summary: {e}"))?;
+        let message = redact(&self.summary.render(ctx).map_err(|e| format!("summary: {e}"))?).into_owned();
         let question = match &self.question {
-            Some(t) => Some(t.render(ctx).map_err(|e| format!("ask.question: {e}"))?),
+            Some(t) => Some(redact(&t.render(ctx).map_err(|e| format!("ask.question: {e}"))?).into_owned()),
             None => None,
         };
         let mut anchor_parts = Vec::new();
@@ -850,7 +876,7 @@ impl CompiledRule {
             {
                 evidence.push(Evidence {
                     span: Span::from_range(&ctx.file.text, a, b),
-                    label: label.render(ctx).map_err(|e| format!("evidence.label: {e}"))?,
+                    label: redact(&label.render(ctx).map_err(|e| format!("evidence.label: {e}"))?).into_owned(),
                 });
             }
         }
@@ -864,7 +890,7 @@ impl CompiledRule {
                 edits.push((o.answer.clone(), self.build_edits(&o.edits, ctx)?));
             }
         }
-        let focus_text: String = ctx.file.text[start..end]
+        let focus_text: String = redact(&ctx.file.text[start..end])
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
@@ -1082,6 +1108,16 @@ pub fn definition_path_at(file: &SourceFile, start: usize, end: usize) -> String
 }
 
 /// FNV-1a: small, stable across platforms and versions.
+/// A relative path with no `..`, root or drive: safe to join to a directory.
+pub fn is_plain_relative(p: &str) -> bool {
+    use std::path::Component;
+    !p.is_empty()
+        && !p.contains('\\')
+        && std::path::Path::new(p)
+            .components()
+            .all(|c| matches!(c, Component::Normal(_) | Component::CurDir))
+}
+
 pub fn fnv1a(data: &[u8]) -> u64 {
     let mut h: u64 = 0xcbf29ce484222325;
     for b in data {
@@ -1122,6 +1158,7 @@ pub fn scan<'r>(
         }
     }
     supersede(&mut out.findings);
+    crate::suppress::apply_inline(project, &mut out.findings, &crate::suppress::today());
     sort_findings(&mut out.findings);
     out
 }

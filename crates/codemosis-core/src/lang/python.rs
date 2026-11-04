@@ -6,7 +6,6 @@ use crate::eval::{children, err, line_end, EvalCtx, EvalError, FactDoc, Value};
 use crate::model::Edit;
 use crate::process::{self, ScratchDir};
 use crate::project::SourceFile;
-use std::process::Command;
 use std::time::Duration;
 use tree_sitter::Node;
 
@@ -983,7 +982,7 @@ impl PythonRunner {
         // Not `-I`: it implies `-E`, which would ignore PYTHONHASHSEED and make
         // set and dict-of-str ordering differ between runs. `-s` skips user
         // site-packages; the scratch directory is the only path entry added.
-        let mut cmd = Command::new(python_command());
+        let mut cmd = process::snippet_command(python_command());
         cmd.arg("-s").arg("-X").arg("utf8");
         if compile_only {
             cmd.arg("-c")

@@ -1,6 +1,7 @@
 [pack]
 id = "php-core"
 version = "0.1.0"
+engine = "^0.1"
 language = "php"
 summary = "Questions for PHP: fixed waits and debugging output left behind."
 authors = ["Reverse Codemosis contributors"]

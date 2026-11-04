@@ -1,6 +1,7 @@
 id = "nan-comparison"
 title = "Comparison with NaN"
 category = "contradiction"
+cwe = ["CWE-1077"]
 semantics = "corrected"
 summary = "`${cmp}` is always ${always}: NaN is not equal to anything, itself included."
 explain = """

@@ -40,6 +40,14 @@ pub struct PackMeta {
     pub license: String,
     #[serde(default)]
     pub homepage: Option<String>,
+    /// The engine versions this pack works with, like ">=0.1, <0.3".
+    /// A pack whose requirement the running engine does not meet does not
+    /// load, rather than silently misbehaving.
+    #[serde(default)]
+    pub engine: Option<String>,
+    /// Set when the pack should no longer be used: why, and what instead.
+    #[serde(default)]
+    pub deprecated: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -94,6 +102,19 @@ pub struct RuleSpec {
     pub ask: Option<AskSpec>,
     #[serde(default)]
     pub references: Vec<String>,
+    /// Free-form labels for filtering and reports ("performance", "async").
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Common Weakness Enumeration ids the rule addresses ("CWE-396").
+    #[serde(default)]
+    pub cwe: Vec<String>,
+    /// Set when the rule should no longer be used: why, and what instead.
+    /// A deprecated rule still runs; its findings and `explain` say so.
+    #[serde(default)]
+    pub deprecated: Option<String>,
+    /// The rule that replaces this one, as a qualified id.
+    #[serde(default)]
+    pub replaced_by: Option<String>,
     #[serde(default, rename = "example")]
     pub examples: Vec<ExampleSpec>,
     #[serde(default, rename = "counterexample")]
@@ -325,6 +346,24 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
             "pack.toml: id '{}' must be lowercase letters, digits and dashes",
             meta.id
         ));
+    }
+    if let Some(req) = &meta.engine {
+        match crate::version::Requirement::parse(req) {
+            Ok(r) if !r.matches(crate::version::engine()) => {
+                return Err(PackError {
+                    origin: src.origin.clone(),
+                    problems: vec![format!(
+                        "pack.toml: this pack needs engine {r}, and this is {}; use a matching version of codemosis or of the pack",
+                        crate::version::ENGINE_VERSION
+                    )],
+                })
+            }
+            Ok(_) => {}
+            Err(e) => problems.push(format!("pack.toml: engine: {e}")),
+        }
+    }
+    if crate::version::Version::parse(&meta.version).is_err() {
+        problems.push(format!("pack.toml: version '{}' is not like 1.2.3", meta.version));
     }
     let ids: Vec<String> = match (&meta.language, meta.languages.is_empty()) {
         (Some(l), true) if l == "*" => Vec::new(),

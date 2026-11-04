@@ -1,6 +1,7 @@
 id = "duplicate-object-key"
 title = "Object key given twice"
 category = "contradiction"
+cwe = ["CWE-462"]
 summary = "Key ${second} appears twice in this object; the value given on line ${first|line} is silently discarded."
 explain = """
 In an object literal a repeated key keeps only its last value. One of the

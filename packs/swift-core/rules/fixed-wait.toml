@@ -1,5 +1,6 @@
 id = "fixed-wait"
 title = "Fixed wait"
+tags = ["timing", "flaky-tests"]
 category = "hazard"
 semantics = "preserved"
 summary = "`${stmt}` pauses for a fixed time instead of waiting for what the code actually needs."

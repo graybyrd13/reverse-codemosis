@@ -1,6 +1,7 @@
 id = "debug-dump"
 title = "Debugging dump left in the code"
 category = "waste"
+cwe = ["CWE-489"]
 semantics = "corrected"
 summary = "`${call}` prints a debugging dump of a value."
 explain = """

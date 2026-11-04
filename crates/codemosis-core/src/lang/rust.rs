@@ -2,7 +2,6 @@
 
 use super::{Language, RunOutcome, RunStatus, Runner};
 use crate::process::{self, ScratchDir};
-use std::process::Command;
 use std::time::Duration;
 use tree_sitter::Node;
 
@@ -79,7 +78,7 @@ impl RustRunner {
         }
         let has_main = code.contains("fn main");
         let bin = dir.path.join(if cfg!(windows) { "snippet.exe" } else { "snippet" });
-        let mut cmd = Command::new(rustc());
+        let mut cmd = process::snippet_command(rustc());
         cmd.arg("--edition").arg("2021").arg("-A").arg("warnings");
         if has_main && run {
             cmd.arg("-o").arg(&bin);
@@ -113,7 +112,10 @@ impl RustRunner {
                 stderr: String::new(),
             };
         }
-        match process::run(Command::new(&bin).current_dir(&dir.path), Duration::from_secs(20)) {
+        match process::run(
+            process::snippet_command(&bin).current_dir(&dir.path),
+            Duration::from_secs(20),
+        ) {
             Err(e) => RunOutcome::unavailable(format!("cannot run the compiled snippet: {e}")),
             Ok(r) => RunOutcome {
                 status: if r.timed_out {

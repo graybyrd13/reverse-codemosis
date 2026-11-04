@@ -18,6 +18,17 @@
 //!
 //! [rules]
 //! disable = ["python-core/redundant-pass"]
+//!
+//! [policy]                  # see `policy.rs`
+//! fail_on = "warning"
+//!
+//! [severity]
+//! "python-core/redundant-pass" = "warning"
+//!
+//! [[suppress]]
+//! rule = "python-core/bare-except"
+//! paths = ["legacy/**"]
+//! reason = "legacy worker, replaced in Q1"
 //! ```
 
 use codemosis_core::pack::{self, Pack, PackError};
@@ -36,6 +47,9 @@ pub struct Config {
     pub oracle: OracleSection,
     pub packs: PacksSection,
     pub rules: RulesSection,
+    pub policy: crate::policy::PolicySection,
+    pub severity: BTreeMap<String, String>,
+    pub suppress: Vec<crate::policy::SuppressEntry>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -133,6 +147,10 @@ impl Config {
             packs.push(p);
         }
         Ok(packs)
+    }
+
+    pub fn policy(&self) -> Result<crate::policy::Policy, ConfigError> {
+        crate::policy::Policy::new(&self.policy, &self.severity, &self.suppress).map_err(ConfigError::Other)
     }
 
     pub fn rule_enabled(&self, id: &str) -> bool {

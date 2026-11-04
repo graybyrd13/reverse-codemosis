@@ -1,6 +1,7 @@
 [pack]
 id = "waits"
 version = "0.1.0"
+engine = "^0.1"
 language = "*"
 summary = "Asks whether to keep fixed waits, in languages read at the lexical tier."
 description = """

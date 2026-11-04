@@ -1,6 +1,7 @@
 id = "console-log"
 title = "console.log left in the code"
 category = "waste"
+cwe = ["CWE-489"]
 semantics = "corrected"
 summary = "`${call}` writes debugging output."
 explain = """

@@ -1,6 +1,7 @@
 [pack]
 id = "swift-core"
 version = "0.1.0"
+engine = "^0.1"
 language = "swift"
 summary = "Questions for Swift: fixed waits."
 authors = ["Reverse Codemosis contributors"]

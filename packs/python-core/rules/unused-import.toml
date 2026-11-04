@@ -1,6 +1,7 @@
 id = "unused-import"
 title = "Unused import"
 category = "waste"
+cwe = ["CWE-1164"]
 semantics = "preserved"
 summary = "`${name}` is imported but never used."
 explain = """

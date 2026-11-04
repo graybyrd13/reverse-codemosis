@@ -19,13 +19,17 @@ pub mod model;
 pub mod pack;
 pub mod process;
 pub mod project;
+pub mod redact;
 pub mod rule;
 pub mod selftest;
+pub mod suppress;
 pub mod tables;
 pub mod template;
+pub mod version;
 
 pub use model::{
-    Category, Distance, Edit, Evidence, Finding, Position, Question, QuestionOption, Semantics, Span, Status,
+    Category, Confidence, Distance, Edit, Evidence, Finding, Position, Question, QuestionOption, Semantics, Span,
+    Status, Suppression, SuppressionKind,
 };
 pub use pack::Pack;
 pub use project::{FileFilter, Project, SourceFile, Tier};

@@ -1,6 +1,7 @@
 id = "string-reference-equality"
 title = "String compared with =="
 category = "contradiction"
+cwe = ["CWE-597"]
 semantics = "corrected"
 summary = "`${cmp}` compares references, not text: two equal strings are often different objects."
 explain = """

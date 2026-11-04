@@ -1,6 +1,7 @@
 id = "assignment-in-condition"
 title = "Assignment of a constant in a condition"
 category = "contradiction"
+cwe = ["CWE-481"]
 semantics = "corrected"
 summary = "`${assign}` assigns rather than compares, so this condition is always the same."
 explain = """

@@ -1,6 +1,7 @@
 id = "empty-catch"
 title = "Empty catch block"
 category = "hazard"
+cwe = ["CWE-390"]
 summary = "This catch block swallows the exception without a trace."
 explain = """
 An empty catch hides every exception of that type, including the unexpected
