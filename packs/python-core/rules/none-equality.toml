@@ -1,0 +1,63 @@
+id = "none-equality"
+title = "Equality comparison with None"
+category = "hazard"
+semantics = "preserved"
+summary = "`${cmp}` asks the object whether it equals None; `${replacement} None` asks Python, which a redefined `==` cannot fool."
+explain = """
+`x == None` calls `x.__eq__(None)`, which any class can redefine. NumPy
+arrays answer with an array, pandas objects and ORM columns answer with
+expressions, and some classes answer True. `x is None` cannot be redefined:
+it is true exactly when `x` is None.
+
+For ordinary objects the two forms always agree, and then `is None` is the
+correct one. But if `x` can be one of those special objects, `== None` may be
+deliberate (SQLAlchemy filters are written that way). Only you know what
+`x` can hold, so the correction is applied only after you answer yes.
+"""
+shape = '''
+[
+  (comparison_operator (_) @left operators: ["==" "!="] @op (none))
+  (comparison_operator (none) operators: ["==" "!="] @op (_) @left)
+] @cmp
+'''
+focus = "@cmp"
+where = ["field_count(@cmp, 'operators') == 1"]
+
+[let]
+replacement = "choose(text(@op) == '==', 'is', 'is not')"
+
+[ask]
+question = "Can `${left}` only ever hold ordinary objects whose `==` is not redefined (no NumPy arrays, pandas objects or ORM columns)?"
+
+[fix]
+edits = [{ replace = "@op", with = "${replacement}" }]
+
+[[example]]
+before = '''
+def describe(value):
+    if value == None:
+        return "missing"
+    if None != value:
+        return "present"
+
+
+print(describe(None), describe(0))
+'''
+after = '''
+def describe(value):
+    if value is None:
+        return "missing"
+    if None is not value:
+        return "present"
+
+
+print(describe(None), describe(0))
+'''
+output = "missing present\n"
+
+[[counterexample]]
+name = "already an identity test"
+code = '''
+value = 1
+print(value is None)
+'''

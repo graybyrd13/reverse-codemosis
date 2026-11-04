@@ -1,0 +1,117 @@
+# What "proven" means
+
+Reverse Codemosis claims that it never guesses. This document says exactly
+what that claim covers, so that it can be checked rather than believed.
+
+## Two sources of truth
+
+A correction is trusted because of two independent checks.
+
+1. **The rule's proof.** A rule's shape and facts define the cases where its
+   correction is safe under the language's semantics, and the rule's examples
+   demonstrate it by running real code (`codemosis pack test`). The facts are
+   written to be *conservative*: whenever one cannot be sure, it blocks the
+   correction.
+2. **The project's oracle.** On a real project every step is verified by the
+   project's own build and tests before it is kept, and rolled back if
+   anything that worked before stops working.
+
+Neither alone is enough. The rule's proof covers every input, not only those
+the tests exercise, but only within its semantic model. The oracle checks
+reality, including what the model leaves out, but only what the tests
+exercise.
+
+## The semantic model
+
+A correction marked `preserved` leaves **observable behaviour** unchanged.
+Observable behaviour is everything a program does through its inputs and
+outputs: values returned, output written, exceptions raised (type and
+message), and effects on files, the network and other processes, for every
+input.
+
+It deliberately excludes:
+
+- the program's own source text, line numbers and tracebacks;
+- introspection of code objects (`f.__code__`, `co_freevars`, bytecode);
+- identity of objects that the program creates fresh (whether two new lists
+  are the same object), timing, and memory use;
+- replacement of builtins or standard-library modules at run time by other
+  code (`builtins.sorted = ...`).
+
+The oracle still guards these: if a test depends on one of them (for
+example, a test that reads the source file), the step fails verification and
+is rolled back. `crates/codemosis-cli/tests/demo.rs` contains exactly that
+case.
+
+## The three kinds of correction
+
+| Semantics | Claim |
+|---|---|
+| `preserved` | Observable behaviour is identical before and after. |
+| `corrected` | The code contradicts itself: its behaviour cannot be what it evidently means (an assertion that can never fail, an identity test against a literal). The correction gives it the only meaning it can have had. Behaviour changes, deliberately and only there. |
+| `repaired` | The code cannot run as written: it does not compile, or it fails every time the line is reached (a name that is never defined). The repair is the only one possible, for example the only module that provides a name. |
+
+Where more than one meaning or repair is possible, there is no proof, and the
+rule must either ask or only explain.
+
+## Questions
+
+Some corrections depend on a fact no analysis can establish: whether a
+mutable default is meant to be shared, whether a handler should let Ctrl-C
+through, whether a string was meant to be an f-string. The rule then asks a
+yes/no question. "Yes" supplies the missing fact and the correction becomes
+proven *given that fact*. "No" records the code as intentional, and it is not
+reported again.
+
+Answers live in `.codemosis/answers.toml`, with the question, the rule and
+the location, so a reviewer can see every human decision the corrections
+depend on. A question's identity is derived from the rule, the file and the
+code it concerns, not from line numbers, so answers survive unrelated edits.
+
+## Conservative facts, by example
+
+`python-core/unreachable-code` deletes statements after a `return`. That
+looks trivially safe, but in Python it is not, and the rule's facts encode
+why:
+
+- a `yield` anywhere in a function makes it a generator, even in dead code,
+  so the rule refuses when the dead code contains one;
+- an assignment anywhere in a function makes the name local to the whole
+  function, even in dead code. If the dead assignment is the only one,
+  deleting it would make earlier reads of the name find a global instead of
+  raising `UnboundLocalError`. The rule refuses in that case.
+
+Both cases are among the rule's counterexamples, so the self-test fails if
+the rule ever stops handling them.
+
+`python-core/missing-module-import` adds `import json` only when nothing in
+the file binds `json`, the file cannot create names at run time (no star
+import, `exec`, `eval`, `globals()` or module `__getattr__`), every attribute
+read from it exists in the `json` module, and no other file of the project
+defines a rival `json`. Then the import is the only repair.
+
+## The acceptance contract
+
+A step on a real project is kept only if:
+
+1. every finding it targets is gone afterwards (a rule that still matches
+   its own output is defective, and its step is refused);
+2. it introduces no finding of a more serious category;
+3. every file it touches still parses, with no new syntax errors;
+4. the build does not regress (it does not start failing, or fail with more
+   errors);
+5. no test that passed before stops passing, is skipped, or disappears.
+
+The engine also refuses any correction that would overlap another or delete
+a comment.
+
+## What is not claimed
+
+- Reverse Codemosis does not claim that the code is correct afterwards, only
+  that every change it made is justified, and that nothing measured got
+  worse.
+- It does not claim to find every problem. Facts are conservative, so some
+  real problems are left alone or only explained.
+- A pack's tables are claims about the world (for example, which standard
+  library modules have no import side effects). They are reviewed like code,
+  and an error in one is a bug in the pack.

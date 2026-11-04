@@ -1,0 +1,67 @@
+id = "vacuous-assert"
+title = "Assertion that can never fail"
+category = "contradiction"
+semantics = "corrected"
+summary = "`${stmt}` asserts a two-element tuple, which is always true, so it never checks anything."
+explain = """
+`assert (condition, "message")` does not assert the condition. The
+parentheses build a tuple of two items, and a non-empty tuple is always
+true, so the assertion passes no matter what. CPython warns about it
+(SyntaxWarning: assertion is always true).
+
+The intent is unambiguous: assert the condition, with the message. The
+correction removes the parentheses so the assertion checks what it says.
+If the condition is in fact false somewhere, the assertion now fails there,
+which is exactly what it was written to do.
+"""
+shape = "(assert_statement . (tuple . (_) @cond . (_) @msg .) @tuple .) @stmt"
+focus = "@stmt"
+where = [
+  "kind(@cond) not in ['named_expression', 'list_splat', 'yield']",
+  "kind(@msg) not in ['named_expression', 'list_splat', 'yield']",
+]
+
+[fix]
+edits = [{ replace = "@tuple", with = "${cond}, ${msg}" }]
+
+[[example]]
+before = '''
+def withdraw(balance, amount):
+    assert (amount <= balance, "insufficient funds")
+    return balance - amount
+
+
+try:
+    withdraw(10, 50)
+    print("allowed")
+except AssertionError as error:
+    print("refused:", error)
+'''
+after = '''
+def withdraw(balance, amount):
+    assert amount <= balance, "insufficient funds"
+    return balance - amount
+
+
+try:
+    withdraw(10, 50)
+    print("allowed")
+except AssertionError as error:
+    print("refused:", error)
+'''
+output = "refused: insufficient funds\n"
+output_before = "allowed\n"
+
+[[counterexample]]
+name = "an ordinary assertion"
+code = '''
+x = 1
+assert x > 0, "positive"
+'''
+
+[[counterexample]]
+name = "comparing a tuple is a real check"
+code = '''
+pair = (1, 2)
+assert (1, 2) == pair
+'''

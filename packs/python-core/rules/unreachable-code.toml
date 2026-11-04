@@ -1,0 +1,117 @@
+id = "unreachable-code"
+title = "Unreachable code"
+category = "waste"
+semantics = "preserved"
+summary = "This code can never run: the block always leaves at line ${jump|line} before reaching it."
+explain = """
+A `return`, `raise`, `break` or `continue` always leaves the block it is in.
+Statements after it in the same block never execute; they are usually the
+remains of an earlier version, and they mislead readers into thinking they
+matter.
+
+Deleting statements that never run usually changes nothing, but Python has
+two exceptions, and the rule checks both. A `yield` anywhere in a function
+makes it a generator, even in dead code. And an assignment anywhere in a
+function makes that name local to the whole function, even in dead code: if
+the dead assignment is the only one, deleting it would make other reads of
+the name find a global instead. When either is the case, nothing is
+reported.
+"""
+shape = "(block [(return_statement) (raise_statement) (break_statement) (continue_statement)] @jump)"
+focus = "@dead"
+where = [
+  "exists(@dead)",
+  "occupies_lines(@dead)",
+  "py.removal_preserves_scope(@dead)",
+]
+
+[let]
+dead = "siblings_after(@jump)"
+
+[fix]
+edits = [{ delete_lines = "@dead" }]
+
+[[example]]
+before = '''
+def total(prices):
+    result = sum(prices)
+    return result
+    print("computed", result)
+    result = round(result, 2)
+
+
+print(total([1.5, 2.25]))
+'''
+after = '''
+def total(prices):
+    result = sum(prices)
+    return result
+
+
+print(total([1.5, 2.25]))
+'''
+
+[[example]]
+name = "after raise and continue"
+before = '''
+def check(values):
+    for v in values:
+        if v < 0:
+            raise ValueError(v)
+            v = 0
+        if v == 0:
+            continue
+            print("zero")
+        print(v)
+
+
+check([1, 0, 2])
+'''
+after = '''
+def check(values):
+    for v in values:
+        if v < 0:
+            raise ValueError(v)
+        if v == 0:
+            continue
+        print(v)
+
+
+check([1, 0, 2])
+'''
+
+[[counterexample]]
+name = "a dead yield still makes a generator"
+code = '''
+def gen():
+    return
+    yield 1
+
+
+print(list(gen()))
+'''
+
+[[counterexample]]
+name = "a dead assignment still makes the name local"
+code = '''
+x = "global"
+
+
+def show():
+    print(x)
+    return
+    x = "local"
+
+
+try:
+    show()
+except UnboundLocalError:
+    print("x is local to show()")
+'''
+
+[[counterexample]]
+name = "code on the same line"
+code = '''
+def f():
+    return 1; print("never")
+'''

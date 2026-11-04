@@ -1,0 +1,46 @@
+id = "print-statement"
+title = "Python 2 print statement"
+category = "broken"
+semantics = "repaired"
+summary = "`${stmt}` is a Python 2 print statement; Python 3 does not compile it."
+explain = """
+Python 3 made print a function. `print a, b` prints its arguments separated
+by spaces followed by a newline, which is exactly what `print(a, b)` does.
+A statement ending in a comma is left alone: it suppressed the newline
+through Python 2's soft-space mechanism, which has no exact Python 3 form.
+"""
+shape = "(print_statement) @stmt"
+where = [
+  "exists(@args)",
+  "!contains(@stmt, 'chevron')",
+  "!ends_with(text(@stmt), ',')",
+]
+
+[let]
+args = "field(@stmt, 'argument')"
+
+[fix]
+edits = [{ replace = "@stmt", with = "print(${args})" }]
+
+[[example]]
+before = '''
+total = 3 * 4
+print "total:", total
+'''
+after = '''
+total = 3 * 4
+print("total:", total)
+'''
+output = "total: 12\n"
+
+[[counterexample]]
+name = "already a function call"
+code = '''
+print("hello")
+'''
+
+[[counterexample]]
+name = "a trailing comma has no exact Python 3 form"
+code = '''
+print "no newline",
+'''

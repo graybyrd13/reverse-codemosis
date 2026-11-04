@@ -1,0 +1,64 @@
+id = "missing-f-prefix"
+title = "String with placeholders but no f prefix"
+category = "contradiction"
+semantics = "corrected"
+summary = "${s} contains placeholders naming variables in scope, but it is not an f-string, so they are printed literally."
+explain = """
+The string contains `{name}` placeholders, and every name in them is a
+variable visible at this point, but the string has no `f` prefix and is not
+passed to `.format()` or `%`. Python will output the braces and names
+literally.
+
+That looks like a forgotten `f`, but it could also be a template filled in
+somewhere else, so the decision is yours. Answering yes adds the `f` prefix.
+"""
+shape = "(string) @s"
+where = [
+  "py.placeholders_bound(@s)",
+  "!py.is_docstring(@s)",
+  "kind(parent(@s)) not in ['attribute', 'binary_operator', 'concatenated_string', 'pair', 'subscript']",
+]
+
+[ask]
+question = "Should ${s} be an f-string, so its placeholders are filled in from the variables in scope?"
+
+[fix]
+edits = [{ replace = "@s", with = "${s|add_string_prefix:f}" }]
+
+[[example]]
+before = '''
+def greet(name):
+    return "Hello, {name}!"
+
+
+print(greet("Ada"))
+'''
+after = '''
+def greet(name):
+    return f"Hello, {name}!"
+
+
+print(greet("Ada"))
+'''
+output = "Hello, Ada!\n"
+output_before = "Hello, {name}!\n"
+
+[[counterexample]]
+name = "a template filled in by .format"
+code = '''
+def greet(name):
+    return "Hello, {name}!".format(name=name)
+'''
+
+[[counterexample]]
+name = "placeholder names that are not variables here"
+code = '''
+TEMPLATE = "Dear {customer}, your order {order_id} has shipped."
+'''
+
+[[counterexample]]
+name = "escaped braces"
+code = '''
+name = "x"
+pattern = "{{name}} and {name}"
+'''

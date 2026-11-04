@@ -1,0 +1,15 @@
+[pack]
+id = "python-core"
+version = "0.1.0"
+language = "python"
+summary = "Provable corrections for everyday Python 3."
+description = """
+The corrections in this pack are the ones a careful reviewer makes by reflex:
+missing standard-library imports, identity tests against literals, vacuous
+assertions, unreachable code, unused imports, and simpler forms that are
+provably equal. Where a correction depends on intent (mutable defaults, bare
+except, a string that looks like it meant to be an f-string), the pack asks.
+"""
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

@@ -1,0 +1,107 @@
+id = "missing-module-import"
+title = "Module used without being imported"
+category = "broken"
+semantics = "repaired"
+summary = "`${name}` is used as a module but never imported, so this line raises NameError when it runs."
+explain = """
+The file reads `name.something`, but nothing in the file defines `name`: no
+import, no assignment, no parameter, no function or class of that name, and
+the file cannot create names at run time (no star import, exec, eval or
+globals()). Python raises NameError the first time the line runs.
+
+The repair is applied only when it is the only possible one: `name` is a
+standard-library module, every attribute the file reads from it exists in
+that module, and no other file in the project defines a name or a module
+called `name`. Then exactly one statement makes the code run: `import name`.
+"""
+shape = "(attribute object: (identifier) @name) @use"
+focus = "@name"
+anchor = ["${name}"]
+where = [
+  "py.is_reference(@name)",
+  "!py.bound(text(@name))",
+  "!py.builtin(text(@name))",
+  "!py.dynamic_names()",
+  "in_table('stdlib_modules', text(@name))",
+  "subset(py.attributes(text(@name)), table('stdlib_modules', text(@name)))",
+  "!py.defined_in_project(text(@name), text(@name))",
+]
+references = ["https://docs.python.org/3/reference/executionmodel.html#resolution-of-names"]
+
+[fix]
+edits = [{ add_import = "import ${name}" }]
+
+[[example]]
+name = "joins the standard-library imports in alphabetical order"
+before = '''
+import os
+
+
+def save(data):
+    return json.dumps(data, sort_keys=True)
+
+
+print(save({"b": 1, "a": 2}))
+'''
+after = '''
+import json
+import os
+
+
+def save(data):
+    return json.dumps(data, sort_keys=True)
+
+
+print(save({"b": 1, "a": 2}))
+'''
+output = """{"a": 2, "b": 1}\n"""
+
+[[example]]
+name = "one import serves every use"
+before = '''
+def area(r):
+    return math.pi * r * r
+
+
+def side(a):
+    return math.sqrt(a)
+
+
+print(round(area(1), 2), side(16))
+'''
+after = '''
+import math
+
+def area(r):
+    return math.pi * r * r
+
+
+def side(a):
+    return math.sqrt(a)
+
+
+print(round(area(1), 2), side(16))
+'''
+output = "3.14 4.0\n"
+
+[[counterexample]]
+name = "the name is a parameter"
+code = '''
+def save(json, data):
+    return json.dumps(data)
+'''
+
+[[counterexample]]
+name = "json.parse is not part of the json module"
+code = '''
+def load(text):
+    return json.parse(text)
+'''
+
+[[counterexample]]
+name = "a star import may provide the name"
+code = '''
+from helpers import *
+
+print(json.dumps({}))
+'''

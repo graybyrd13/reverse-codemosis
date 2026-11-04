@@ -1,0 +1,53 @@
+id = "renamed-builtin"
+title = "Python 2 builtin renamed in Python 3"
+category = "broken"
+semantics = "repaired"
+summary = "`${old}` does not exist in Python 3; its Python 3 name is `${new}`."
+explain = """
+Python 3 renamed `xrange` to `range` and `raw_input` to `input`, with the
+same behaviour. Under Python 3 the old names raise NameError. The rule
+applies only when the file defines neither the old nor the new name itself.
+"""
+shape = '''
+(call
+  function: (identifier) @old
+  (#any-of? @old "xrange" "raw_input"))
+'''
+focus = "@old"
+where = [
+  "!py.bound(text(@old))",
+  "!py.bound(text(@new))",
+  "!py.dynamic_names()",
+]
+
+[let]
+new = "choose(text(@old) == 'xrange', 'range', 'input')"
+
+[fix]
+edits = [{ replace = "@old", with = "${new}" }]
+
+[[example]]
+before = '''
+total = 0
+for i in xrange(5):
+    total += i
+print(total)
+'''
+after = '''
+total = 0
+for i in range(5):
+    total += i
+print(total)
+'''
+output = "10\n"
+
+[[counterexample]]
+name = "a compatibility shim defines the name"
+code = '''
+try:
+    xrange
+except NameError:
+    xrange = range
+
+print(list(xrange(3)))
+'''

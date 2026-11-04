@@ -1,0 +1,27 @@
+id = "diamond-operator"
+title = "Python 2 <> operator"
+category = "broken"
+semantics = "repaired"
+summary = "`<>` is Python 2's spelling of `!=`; Python 3 does not compile it."
+explain = """
+Python 2 accepted `<>` as a synonym for `!=`. Python 3 removed it.
+"""
+shape = '(comparison_operator operators: "<>" @op) @cmp'
+focus = "@cmp"
+
+[fix]
+edits = [{ replace = "@op", with = "!=" }]
+
+[[example]]
+before = '''
+print(1 <> 2)
+'''
+after = '''
+print(1 != 2)
+'''
+output = "True\n"
+
+[[counterexample]]
+code = '''
+print(1 != 2)
+'''

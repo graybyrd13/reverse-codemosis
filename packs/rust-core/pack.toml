@@ -1,0 +1,14 @@
+[pack]
+id = "rust-core"
+version = "0.1.0"
+language = "rust"
+summary = "Provable simplifications for everyday Rust, and the stubs AI tools leave behind."
+description = """
+Syntactic corrections whose equivalence follows from the Rust reference,
+checked by compiling and running every example with rustc. The compiler is
+the oracle for everything else: run Reverse Codemosis with `cargo build`
+and `cargo test` configured and no step is kept unless both still pass.
+"""
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

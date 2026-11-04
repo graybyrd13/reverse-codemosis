@@ -1,0 +1,97 @@
+# Facts about the Python standard library that rules rely on.
+#
+# Every entry is a claim the engine trusts, so every entry must be exact.
+# Leaving something out is always safe: it only means fewer corrections.
+
+# Modules whose import has no observable effect beyond defining names.
+# Removing an unused import of one of these cannot change behaviour.
+side_effect_free_modules = [
+  "abc", "argparse", "array", "base64", "bisect", "calendar", "collections",
+  "contextlib", "copy", "csv", "dataclasses", "datetime", "decimal", "enum",
+  "fnmatch", "fractions", "functools", "glob", "hashlib", "heapq", "hmac",
+  "inspect", "io", "itertools", "json", "logging", "math", "operator", "os",
+  "os.path", "pathlib", "pprint", "random", "re", "secrets", "shlex", "shutil",
+  "statistics", "string", "struct", "subprocess", "sys", "tempfile", "textwrap",
+  "time", "traceback", "types", "typing", "uuid", "zlib",
+]
+
+# Standard-library modules and the attributes the code may read from them
+# after a plain `import module`. Submodules that need their own import
+# (logging.handlers, collections.abc, xml.etree...) are deliberately absent.
+[stdlib_modules]
+base64 = ["a85decode", "a85encode", "b16decode", "b16encode", "b32decode", "b32encode", "b64decode", "b64encode", "b85decode", "b85encode", "decodebytes", "encodebytes", "standard_b64decode", "standard_b64encode", "urlsafe_b64decode", "urlsafe_b64encode"]
+collections = ["ChainMap", "Counter", "OrderedDict", "UserDict", "UserList", "UserString", "defaultdict", "deque", "namedtuple"]
+copy = ["Error", "copy", "deepcopy"]
+csv = ["Dialect", "DictReader", "DictWriter", "Error", "QUOTE_ALL", "QUOTE_MINIMAL", "QUOTE_NONE", "QUOTE_NONNUMERIC", "Sniffer", "excel", "excel_tab", "field_size_limit", "get_dialect", "list_dialects", "reader", "register_dialect", "unix_dialect", "unregister_dialect", "writer"]
+dataclasses = ["FrozenInstanceError", "InitVar", "KW_ONLY", "MISSING", "asdict", "astuple", "dataclass", "field", "fields", "is_dataclass", "make_dataclass", "replace"]
+datetime = ["MAXYEAR", "MINYEAR", "date", "datetime", "time", "timedelta", "timezone", "tzinfo"]
+enum = ["Enum", "EnumMeta", "Flag", "IntEnum", "IntFlag", "auto", "unique"]
+functools = ["WRAPPER_ASSIGNMENTS", "WRAPPER_UPDATES", "cache", "cached_property", "cmp_to_key", "lru_cache", "partial", "partialmethod", "reduce", "singledispatch", "singledispatchmethod", "total_ordering", "update_wrapper", "wraps"]
+glob = ["escape", "glob", "iglob"]
+hashlib = ["algorithms_available", "algorithms_guaranteed", "blake2b", "blake2s", "md5", "new", "pbkdf2_hmac", "scrypt", "sha1", "sha224", "sha256", "sha384", "sha3_224", "sha3_256", "sha3_384", "sha3_512", "sha512", "shake_128", "shake_256"]
+io = ["BufferedIOBase", "BufferedReader", "BufferedWriter", "BytesIO", "DEFAULT_BUFFER_SIZE", "FileIO", "IOBase", "RawIOBase", "SEEK_CUR", "SEEK_END", "SEEK_SET", "StringIO", "TextIOBase", "TextIOWrapper", "UnsupportedOperation", "open", "open_code"]
+itertools = ["accumulate", "chain", "combinations", "combinations_with_replacement", "compress", "count", "cycle", "dropwhile", "filterfalse", "groupby", "islice", "pairwise", "permutations", "product", "repeat", "starmap", "takewhile", "tee", "zip_longest"]
+json = ["JSONDecodeError", "JSONDecoder", "JSONEncoder", "dump", "dumps", "load", "loads"]
+logging = ["BASIC_FORMAT", "CRITICAL", "DEBUG", "ERROR", "FATAL", "FileHandler", "Filter", "Formatter", "Handler", "INFO", "LogRecord", "Logger", "LoggerAdapter", "NOTSET", "NullHandler", "StreamHandler", "WARN", "WARNING", "addLevelName", "basicConfig", "captureWarnings", "critical", "debug", "disable", "error", "exception", "getLevelName", "getLogger", "getLoggerClass", "info", "lastResort", "log", "makeLogRecord", "raiseExceptions", "root", "setLoggerClass", "shutdown", "warning"]
+math = ["acos", "acosh", "asin", "asinh", "atan", "atan2", "atanh", "ceil", "comb", "copysign", "cos", "cosh", "degrees", "dist", "e", "erf", "erfc", "exp", "expm1", "fabs", "factorial", "floor", "fmod", "frexp", "fsum", "gamma", "gcd", "hypot", "inf", "isclose", "isfinite", "isinf", "isnan", "isqrt", "lcm", "ldexp", "lgamma", "log", "log10", "log1p", "log2", "modf", "nan", "nextafter", "perm", "pi", "pow", "prod", "radians", "remainder", "sin", "sinh", "sqrt", "tan", "tanh", "tau", "trunc", "ulp"]
+operator = ["abs", "add", "and_", "attrgetter", "concat", "contains", "countOf", "delitem", "eq", "floordiv", "ge", "getitem", "gt", "iadd", "index", "indexOf", "inv", "invert", "is_", "is_not", "itemgetter", "le", "length_hint", "lshift", "lt", "matmul", "methodcaller", "mod", "mul", "ne", "neg", "not_", "or_", "pos", "pow", "rshift", "setitem", "sub", "truediv", "truth", "xor"]
+os = ["F_OK", "PathLike", "R_OK", "W_OK", "X_OK", "access", "chdir", "chmod", "close", "cpu_count", "curdir", "devnull", "environ", "error", "extsep", "fsdecode", "fsencode", "fspath", "get_terminal_size", "getcwd", "getenv", "getpid", "linesep", "listdir", "makedirs", "mkdir", "name", "open", "pardir", "path", "pathsep", "read", "remove", "removedirs", "rename", "renames", "replace", "rmdir", "scandir", "sep", "stat", "strerror", "symlink", "system", "unlink", "urandom", "utime", "walk", "write"]
+pathlib = ["Path", "PosixPath", "PurePath", "PurePosixPath", "PureWindowsPath", "WindowsPath"]
+random = ["Random", "SystemRandom", "betavariate", "choice", "choices", "expovariate", "gammavariate", "gauss", "getrandbits", "getstate", "lognormvariate", "normalvariate", "paretovariate", "randbytes", "randint", "random", "randrange", "sample", "seed", "setstate", "shuffle", "triangular", "uniform", "vonmisesvariate", "weibullvariate"]
+re = ["A", "ASCII", "DOTALL", "I", "IGNORECASE", "L", "LOCALE", "M", "MULTILINE", "Match", "NOFLAG", "Pattern", "RegexFlag", "S", "U", "UNICODE", "VERBOSE", "X", "compile", "error", "escape", "findall", "finditer", "fullmatch", "match", "purge", "search", "split", "sub", "subn"]
+shutil = ["Error", "SameFileError", "chown", "copy", "copy2", "copyfile", "copyfileobj", "copymode", "copystat", "copytree", "disk_usage", "get_terminal_size", "ignore_patterns", "make_archive", "move", "rmtree", "unpack_archive", "which"]
+statistics = ["NormalDist", "StatisticsError", "correlation", "covariance", "fmean", "geometric_mean", "harmonic_mean", "linear_regression", "mean", "median", "median_grouped", "median_high", "median_low", "mode", "multimode", "pstdev", "pvariance", "quantiles", "stdev", "variance"]
+string = ["Formatter", "Template", "ascii_letters", "ascii_lowercase", "ascii_uppercase", "capwords", "digits", "hexdigits", "octdigits", "printable", "punctuation", "whitespace"]
+subprocess = ["CalledProcessError", "CompletedProcess", "DEVNULL", "PIPE", "Popen", "STDOUT", "SubprocessError", "TimeoutExpired", "call", "check_call", "check_output", "getoutput", "getstatusoutput", "list2cmdline", "run"]
+sys = ["argv", "base_prefix", "builtin_module_names", "byteorder", "exc_info", "executable", "exit", "flags", "float_info", "getdefaultencoding", "getfilesystemencoding", "getrecursionlimit", "getrefcount", "getsizeof", "hexversion", "implementation", "intern", "maxsize", "maxunicode", "modules", "path", "platform", "prefix", "setrecursionlimit", "stderr", "stdin", "stdout", "version", "version_info"]
+tempfile = ["NamedTemporaryFile", "SpooledTemporaryFile", "TemporaryDirectory", "TemporaryFile", "gettempdir", "gettempprefix", "mkdtemp", "mkstemp"]
+textwrap = ["TextWrapper", "dedent", "fill", "indent", "shorten", "wrap"]
+time = ["altzone", "asctime", "ctime", "daylight", "get_clock_info", "gmtime", "localtime", "mktime", "monotonic", "monotonic_ns", "perf_counter", "perf_counter_ns", "process_time", "process_time_ns", "sleep", "strftime", "strptime", "struct_time", "time", "time_ns", "timezone", "tzname"]
+typing = ["Any", "Callable", "ClassVar", "DefaultDict", "Deque", "Dict", "Final", "FrozenSet", "Generic", "Iterable", "Iterator", "List", "Literal", "Mapping", "NamedTuple", "NoReturn", "Optional", "Protocol", "Sequence", "Set", "TYPE_CHECKING", "Tuple", "Type", "TypeVar", "TypedDict", "Union", "cast", "overload"]
+uuid = ["NAMESPACE_DNS", "NAMESPACE_OID", "NAMESPACE_URL", "NAMESPACE_X500", "UUID", "getnode", "uuid1", "uuid3", "uuid4", "uuid5"]
+
+# Names that exactly one standard-library module exports, mapped to it.
+# A name that two modules export (typing.Callable and collections.abc.Callable,
+# time.sleep and asyncio.sleep, typing.Counter and collections.Counter) is
+# ambiguous and must not appear here: importing either would be a guess.
+[stdlib_names]
+ABC = "abc"
+abstractmethod = "abc"
+Any = "typing"
+ClassVar = "typing"
+contextmanager = "contextlib"
+dataclass = "dataclasses"
+asdict = "dataclasses"
+Decimal = "decimal"
+deepcopy = "copy"
+DefaultDict = "typing"
+defaultdict = "collections"
+deque = "collections"
+Deque = "typing"
+Dict = "typing"
+Enum = "enum"
+Final = "typing"
+Fraction = "fractions"
+FrozenSet = "typing"
+Generic = "typing"
+IntEnum = "enum"
+List = "typing"
+Literal = "typing"
+lru_cache = "functools"
+namedtuple = "collections"
+NamedTuple = "typing"
+NoReturn = "typing"
+Optional = "typing"
+partial = "functools"
+Path = "pathlib"
+Protocol = "typing"
+reduce = "functools"
+Tuple = "typing"
+TypedDict = "typing"
+TypeVar = "typing"
+TYPE_CHECKING = "typing"
+timedelta = "datetime"
+total_ordering = "functools"
+Union = "typing"
+uuid4 = "uuid"
+wraps = "functools"

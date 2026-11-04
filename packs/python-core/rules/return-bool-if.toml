@@ -1,0 +1,99 @@
+id = "return-bool-if"
+title = "if/else that returns True or False"
+category = "simplification"
+semantics = "preserved"
+summary = "This if/else returns the truth value of its condition; it is `return ${cond|py.as_bool}`."
+explain = """
+`if c: return True else: return False` returns the truth value of `c`, which
+is exactly what `bool(c)` computes: `if` decides by calling the same
+`__bool__` that `bool()` calls, and evaluates `c` once, as `bool(c)` does.
+
+`bool()` is dropped only when the condition always yields True or False by
+itself (`not`, `in`, `not in`, `is`, `is not`). It is kept around other
+comparisons because classes can redefine `==`, `<` and the rest to return
+something that is not a bool, and the if/else would still have returned a
+real bool.
+"""
+shape = '''
+[
+  (if_statement
+    condition: (_) @cond
+    consequence: (block . (return_statement (true)) .)
+    alternative: (else_clause body: (block . (return_statement (false)) .))) @whole
+  (block
+    (if_statement
+      condition: (_) @cond
+      consequence: (block . (return_statement (true)) .)
+      !alternative) @whole
+    .
+    (return_statement (false)) @whole)
+]
+'''
+focus = "@whole"
+where = ["occupies_lines(@whole)"]
+
+[fix]
+edits = [{ replace = "@whole", with = "return ${cond|py.as_bool}" }]
+
+[[example]]
+before = '''
+def is_admin(user, admins):
+    if user in admins:
+        return True
+    else:
+        return False
+
+
+def is_large(n):
+    if n > 100:
+        return True
+    return False
+
+
+class Odd:
+    def __gt__(self, other):
+        return "yes"
+
+
+print(is_admin("ada", {"ada"}), is_admin("bob", {"ada"}))
+print(is_large(500), is_large(5), is_large(Odd()))
+'''
+after = '''
+def is_admin(user, admins):
+    return user in admins
+
+
+def is_large(n):
+    return bool(n > 100)
+
+
+class Odd:
+    def __gt__(self, other):
+        return "yes"
+
+
+print(is_admin("ada", {"ada"}), is_admin("bob", {"ada"}))
+print(is_large(500), is_large(5), is_large(Odd()))
+'''
+
+[[counterexample]]
+name = "an elif chain"
+code = '''
+def sign(n):
+    if n > 0:
+        return True
+    elif n < 0:
+        return False
+    else:
+        return None
+'''
+
+[[counterexample]]
+name = "more work before returning"
+code = '''
+def check(n):
+    if n:
+        print("yes")
+        return True
+    return False
+'''

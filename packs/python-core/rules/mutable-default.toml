@@ -1,0 +1,105 @@
+id = "mutable-default"
+title = "Mutable default argument"
+category = "hazard"
+semantics = "corrected"
+summary = "`${param}=${value}` is evaluated once, when `${function}` is defined; every call that omits `${param}` shares that one object."
+explain = """
+Default values are evaluated once, when the `def` statement runs, not on
+every call. A list, dict or set default is therefore a single object shared
+by every call that leaves the argument out: anything one call adds to it is
+still there in the next call.
+
+The standard safe form is a `None` default and a fresh object created inside
+the function. That form also treats an explicit `None` from a caller as
+"use the default", and it stops any deliberate sharing between calls (some
+code uses a mutable default as a cache on purpose). Both are decisions about
+intent, so the correction is applied only after you answer yes.
+"""
+shape = '''
+(function_definition
+  name: (identifier) @function
+  parameters: (parameters
+    [
+      (default_parameter name: (identifier) @param value: [(list) (dictionary) (set)] @value)
+      (typed_default_parameter name: (identifier) @param value: [(list) (dictionary) (set)] @value)
+    ])
+  body: (block) @body) @def
+'''
+focus = "@value"
+where = [
+  "exists(@first)",
+  "!same_line(@first, @function)",
+]
+
+[let]
+first = "py.first_statement(@body)"
+
+[ask]
+question = "Should every call to `${function}` that leaves out `${param}` get a fresh `${value}`, instead of all such calls sharing one? (An explicit `${param}=None` will then also mean the default.)"
+
+[fix]
+edits = [
+  { replace = "@value", with = "None" },
+  { insert_lines_before = "@first", with = "if ${param} is None:\n${indent}${param} = ${value}" },
+]
+
+[[example]]
+before = '''
+def add_tag(tag, tags=[]):
+    tags.append(tag)
+    return tags
+
+
+print(add_tag("a"))
+print(add_tag("b"))
+'''
+after = '''
+def add_tag(tag, tags=None):
+    if tags is None:
+        tags = []
+    tags.append(tag)
+    return tags
+
+
+print(add_tag("a"))
+print(add_tag("b"))
+'''
+output = "['a']\n['b']\n"
+output_before = "['a']\n['a', 'b']\n"
+
+[[example]]
+name = "after the docstring, with a type annotation"
+before = '''
+def register(name: str, seen: dict = {}) -> int:
+    """Count registrations per name."""
+    seen[name] = seen.get(name, 0) + 1
+    return seen[name]
+
+
+print(register("ada"), register("ada"))
+'''
+after = '''
+def register(name: str, seen: dict = None) -> int:
+    """Count registrations per name."""
+    if seen is None:
+        seen = {}
+    seen[name] = seen.get(name, 0) + 1
+    return seen[name]
+
+
+print(register("ada"), register("ada"))
+'''
+output = "1 1\n"
+
+[[counterexample]]
+name = "immutable defaults are safe"
+code = '''
+def f(items=(), name="x", limit=None):
+    return items
+'''
+
+[[counterexample]]
+name = "a one-line function has no room for the guard"
+code = '''
+def f(items=[]): return items
+'''

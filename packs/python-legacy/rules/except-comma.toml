@@ -1,0 +1,72 @@
+id = "except-comma"
+title = "Python 2 except clause with a comma"
+category = "broken"
+semantics = "repaired"
+summary = "`except ${type}, ${name}:` is Python 2 syntax for `except ${type} as ${name}:`."
+explain = """
+Python 2 accepted `except Error, name:` to bind the exception to `name`.
+Python 3 up to 3.13 refuses to compile it. Since 3.14 (PEP 758) the same text
+compiles but means something else: catch `Error` *or* an exception class
+called `name`. Then, when an exception reaches the handler, evaluating the
+nonexistent class `name` raises NameError instead.
+
+The rule applies only when `name` cannot be an exception class: it is not a
+builtin, nothing else in the file binds it, and the file cannot create names
+at run time. Then the Python 2 meaning, `except Error as name:`, is the only
+one under which the handler can work. `except ValueError, TypeError:` is
+left alone: in Python 3.14 that is correct code.
+"""
+shape = '(except_clause value: (_) @type @head "," @comma value: (identifier) @name @head) @clause'
+focus = "@head"
+where = [
+  "py.bindings(text(@name)) == 1",
+  "!py.builtin(text(@name))",
+  "!py.dynamic_names()",
+]
+
+[fix]
+edits = [{ replace = "@comma", with = " as" }]
+
+[[example]]
+before = '''
+try:
+    int("x")
+except ValueError, err:
+    print("bad number:", type(err).__name__)
+'''
+after = '''
+try:
+    int("x")
+except ValueError as err:
+    print("bad number:", type(err).__name__)
+'''
+output = "bad number: ValueError\n"
+
+[[counterexample]]
+name = "Python 3 syntax"
+code = '''
+try:
+    int("x")
+except (ValueError, TypeError) as err:
+    pass
+'''
+
+[[counterexample]]
+name = "Python 3.14: two exception types"
+code = '''
+try:
+    int("x")
+except ValueError, TypeError:
+    pass
+'''
+
+[[counterexample]]
+name = "Python 3.14: an exception class imported from elsewhere"
+code = '''
+from errors import ParseError
+
+try:
+    int("x")
+except ValueError, ParseError:
+    pass
+'''

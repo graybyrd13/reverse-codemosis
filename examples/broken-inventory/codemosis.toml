@@ -1,0 +1,5 @@
+# The oracle: this project's own build and tests. Reverse Codemosis keeps a
+# correction only if the build does not regress and no passing test fails.
+[oracle]
+build = "python3 -m compileall -q inventory tests"
+test = "python3 -m unittest discover -s tests -t . -v"
