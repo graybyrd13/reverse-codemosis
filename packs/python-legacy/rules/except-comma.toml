@@ -16,7 +16,7 @@ at run time. Then the Python 2 meaning, `except Error as name:`, is the only
 one under which the handler can work. `except ValueError, TypeError:` is
 left alone: in Python 3.14 that is correct code.
 """
-shape = '(except_clause value: (_) @type @head "," @comma value: (identifier) @name @head) @clause'
+shape = '(except_clause value: (_) @type @head "," @comma value: (identifier) @name @head) @_clause'
 focus = "@head"
 where = [
   "py.bindings(text(@name)) == 1",

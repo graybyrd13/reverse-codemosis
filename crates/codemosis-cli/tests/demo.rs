@@ -397,3 +397,38 @@ fn every_github_language_is_known() {
     let summary = text.lines().last().unwrap();
     assert!(summary.starts_with("845 languages known to GitHub"), "{summary}");
 }
+
+#[test]
+fn pack_reference_pages_are_current() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_codemosis"))
+        .args(["pack", "docs", "--output"])
+        .arg(tmp.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let committed = workspace().join("docs/packs");
+    let update = std::env::var("UPDATE_GOLDEN").is_ok_and(|v| v == "1");
+    for entry in fs::read_dir(tmp.path()).unwrap().flatten() {
+        let fresh = fs::read_to_string(entry.path()).unwrap();
+        let path = committed.join(entry.file_name());
+        if update {
+            fs::write(&path, &fresh).unwrap();
+        }
+        assert_eq!(
+            fs::read_to_string(&path).unwrap_or_default(),
+            fresh,
+            "docs/packs/{} is stale; run `codemosis pack docs` (or UPDATE_GOLDEN=1)",
+            entry.file_name().to_string_lossy()
+        );
+    }
+}
+
+#[test]
+fn built_in_packs_are_lint_clean() {
+    let out = Command::new(env!("CARGO_BIN_EXE_codemosis"))
+        .args(["pack", "lint", "--deny-warnings", "--color", "never"])
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
+}

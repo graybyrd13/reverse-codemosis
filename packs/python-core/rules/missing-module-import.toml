@@ -14,7 +14,7 @@ standard-library module, every attribute the file reads from it exists in
 that module, and no other file in the project defines a name or a module
 called `name`. Then exactly one statement makes the code run: `import name`.
 """
-shape = "(attribute object: (identifier) @name) @use"
+shape = "(attribute object: (identifier) @name) @_use"
 focus = "@name"
 anchor = ["${name}"]
 where = [

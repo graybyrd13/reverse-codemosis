@@ -2,6 +2,7 @@
 
 mod interactive;
 mod map;
+mod packdocs;
 mod scaffold;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -210,6 +211,14 @@ enum Command {
         #[arg(long)]
         language: Option<String>,
     },
+    /// Pin the packs a project uses by content hash in codemosis.lock.
+    Lock {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Only check that the lock matches; change nothing.
+        #[arg(long)]
+        check: bool,
+    },
     /// Write a codemosis.toml for a project, with the build and test commands detected.
     Init {
         #[arg(default_value = ".")]
@@ -232,6 +241,30 @@ enum PackCommand {
         /// Show passing checks too.
         #[arg(long, short)]
         verbose: bool,
+        /// Mutation testing: remove each rule's facts one at a time and report the
+        /// facts no example or counterexample needs.
+        #[arg(long)]
+        mutations: bool,
+    },
+    /// Find weaknesses in packs that still load: unused captures and tables,
+    /// unproven semantics, thin explanations, missing keep options.
+    Lint {
+        /// Pack directories (default: the built-in packs).
+        dirs: Vec<PathBuf>,
+        /// Exit 1 on warnings too.
+        #[arg(long)]
+        deny_warnings: bool,
+        /// Show notes as well as warnings.
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    /// Write a Markdown reference page for each pack, generated from its rules.
+    Docs {
+        /// Pack directories (default: the built-in packs).
+        dirs: Vec<PathBuf>,
+        /// Output directory.
+        #[arg(long, short, default_value = "docs/packs")]
+        output: PathBuf,
     },
     /// Create a new pack with one working rule to start from.
     New {
@@ -407,7 +440,31 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
                 no_run,
                 rule,
                 verbose,
-            } => pack_test(&dirs, !no_run, rule.as_deref(), verbose, s),
+                mutations,
+            } => {
+                if mutations {
+                    pack_mutations(&dirs, rule.as_deref(), verbose, s)
+                } else {
+                    pack_test(&dirs, !no_run, rule.as_deref(), verbose, s)
+                }
+            }
+            PackCommand::Lint {
+                dirs,
+                deny_warnings,
+                verbose,
+            } => pack_lint(&dirs, deny_warnings, verbose, s),
+            PackCommand::Docs { dirs, output } => {
+                let packs = packs_from(&dirs)?;
+                std::fs::create_dir_all(&output).with_context(|| format!("cannot create {}", output.display()))?;
+                for p in &packs {
+                    let file = output.join(format!("{}.md", p.meta.id));
+                    std::fs::write(&file, packdocs::pack_page(p))
+                        .with_context(|| format!("cannot write {}", file.display()))?;
+                }
+                std::fs::write(output.join("README.md"), packdocs::index_page(&packs))?;
+                println!("Wrote {} pack page(s) to {}.", packs.len(), output.display());
+                Ok(ExitCode::SUCCESS)
+            }
             PackCommand::New { dir, id, language } => {
                 scaffold::new_pack(&dir, &id, &language)?;
                 println!("Created pack '{id}' in {}.", dir.display());
@@ -434,6 +491,7 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         }
         Command::Facts { language } => facts(language.as_deref(), s),
         Command::Init { path } => init(&path),
+        Command::Lock { path, check } => lock_cmd(&path, check),
     }
 }
 
@@ -908,7 +966,22 @@ fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
     };
     println!("  category  {} — {}", spec.category, spec.category.describe());
     println!("  language  {target}");
-    println!("  action    {kind}\n");
+    println!("  action    {kind}");
+    if !spec.cwe.is_empty() {
+        println!("  weakness  {}", spec.cwe.join(", "));
+    }
+    if !spec.tags.is_empty() {
+        println!("  tags      {}", spec.tags.join(", "));
+    }
+    if let Some(d) = &spec.deprecated {
+        let by = spec
+            .replaced_by
+            .as_deref()
+            .map(|r| format!(" Use {r} instead."))
+            .unwrap_or_default();
+        println!("  {}  {d}{by}", s.yellow("deprecated"));
+    }
+    println!();
     println!("{}\n", spec.explain.trim());
     let (title, body) = match (&spec.shape, &spec.pattern, &spec.patterns) {
         (Some(q), _, _) => ("Shape", q.clone()),
@@ -980,16 +1053,152 @@ fn list_rules(extra: &[PathBuf], s: Style) -> Result<ExitCode> {
                 (true, true) => "ask",
                 _ => "explain",
             };
+            let title = match &r.spec.deprecated {
+                Some(_) => format!("{} (deprecated)", r.spec.title),
+                None => r.spec.title.clone(),
+            };
             println!(
                 "  {} {:<7} {:<44} {}",
                 s.category(r.spec.category),
                 kind,
                 r.id,
-                s.dim(&r.spec.title)
+                s.dim(&title)
             );
         }
         println!();
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Packs from directories, or the built-in packs when none are given.
+fn packs_from(dirs: &[PathBuf]) -> Result<Vec<Pack>> {
+    if dirs.is_empty() {
+        return pack::builtin().map_err(|e| anyhow!("{e}"));
+    }
+    let mut v = Vec::new();
+    for d in dirs {
+        let src = pack::read_dir(d).map_err(|e| anyhow!("{e}"))?;
+        v.push(pack::compile(&src).map_err(|e| anyhow!("{e}"))?);
+    }
+    Ok(v)
+}
+
+fn pack_lint(dirs: &[PathBuf], deny_warnings: bool, verbose: bool, s: Style) -> Result<ExitCode> {
+    use codemosis_core::lint::{lint_pack, Severity};
+    let packs = packs_from(dirs)?;
+    let (mut warnings, mut notes) = (0, 0);
+    for p in &packs {
+        let lints = lint_pack(p);
+        let shown: Vec<_> = lints
+            .iter()
+            .filter(|l| verbose || l.severity == Severity::Warning)
+            .collect();
+        let mark = if lints.iter().any(|l| l.severity == Severity::Warning) {
+            s.yellow("!")
+        } else {
+            s.green("✓")
+        };
+        println!("{mark} {} {}", s.bold(&p.meta.id), p.meta.version);
+        for l in shown {
+            let label = match l.severity {
+                Severity::Warning => s.yellow("warning"),
+                Severity::Note => s.dim("note"),
+            };
+            println!("    {label} [{}] {}: {}", l.code, l.at, l.message);
+        }
+        warnings += lints.iter().filter(|l| l.severity == Severity::Warning).count();
+        notes += lints.iter().filter(|l| l.severity == Severity::Note).count();
+    }
+    println!(
+        "\n{} warning(s) · {} note(s){}",
+        warnings,
+        notes,
+        if verbose || notes == 0 { "" } else { " (-v shows notes)" }
+    );
+    Ok(if deny_warnings && warnings > 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+fn pack_mutations(dirs: &[PathBuf], filter: Option<&str>, verbose: bool, s: Style) -> Result<ExitCode> {
+    let packs = packs_from(dirs)?;
+    let (mut total, mut survived) = (0, 0);
+    for p in &packs {
+        println!("{} {}", s.bold(&p.meta.id), p.meta.version);
+        for r in &p.rules {
+            if filter.is_some_and(|f| !r.id.contains(f)) || r.spec.facts.is_empty() {
+                continue;
+            }
+            let ms = selftest::mutants(r);
+            total += ms.len();
+            let alive: Vec<_> = ms.iter().filter(|m| m.survived()).collect();
+            survived += alive.len();
+            let mark = if alive.is_empty() {
+                s.green("✓")
+            } else {
+                s.yellow("!")
+            };
+            println!(
+                "  {mark} {} {}",
+                r.id,
+                s.dim(&format!(
+                    "({} of {} facts proven necessary)",
+                    ms.len() - alive.len(),
+                    ms.len()
+                ))
+            );
+            for m in &ms {
+                match &m.killed_by {
+                    None => println!(
+                        "      {} without `{}` every check still passes: add a counterexample that needs it",
+                        s.yellow("survived"),
+                        m.fact
+                    ),
+                    Some(by) if verbose => println!("      {} `{}` (by: {by})", s.green("killed"), m.fact),
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    println!(
+        "\n{} of {} facts are proven necessary by an example or counterexample · {} unproven",
+        total - survived,
+        total,
+        survived
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+fn lock_cmd(path: &Path, check: bool) -> Result<ExitCode> {
+    use codemosis_engine::lock::{Lock, LOCK_FILE};
+    let root = canonical(path)?;
+    let (cfg, _) = config::Config::load(&root)?;
+    let packs = cfg.load_packs(&root, &[])?;
+    let fresh = Lock::of(&packs);
+    if check {
+        return match Lock::load(&root).map_err(|e| anyhow!(e))? {
+            None => bail!(
+                "{} has no {LOCK_FILE}; run `codemosis lock` to create it",
+                root.display()
+            ),
+            Some(l) => {
+                let problems = l.verify(&packs);
+                if problems.is_empty() {
+                    println!("{LOCK_FILE} matches all {} pack(s).", packs.len());
+                    Ok(ExitCode::SUCCESS)
+                } else {
+                    for p in problems {
+                        println!("  - {p}");
+                    }
+                    Ok(ExitCode::from(1))
+                }
+            }
+        };
+    }
+    codemosis_engine::fsguard::write_confined(&root, Path::new(LOCK_FILE), fresh.to_toml().as_bytes())?;
+    println!("Pinned {} pack(s) in {LOCK_FILE}. Commit it.", fresh.packs.len());
     Ok(ExitCode::SUCCESS)
 }
 

@@ -354,3 +354,49 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
         checks,
     }
 }
+
+/// One mutant of a rule: the rule with one of its facts removed.
+#[derive(Clone, Debug)]
+pub struct Mutant {
+    pub rule: String,
+    /// The fact that was removed.
+    pub fact: String,
+    /// The first check that failed without the fact, if any. `None` means
+    /// the mutant survived: no example or counterexample needs the fact.
+    pub killed_by: Option<String>,
+}
+
+impl Mutant {
+    pub fn survived(&self) -> bool {
+        self.killed_by.is_none()
+    }
+}
+
+/// Mutation testing: for each `where` fact of the rule, compile the rule
+/// without it and run the self-test (without executing examples). A fact
+/// whose removal no check notices is unproven: either it is unnecessary, or
+/// a counterexample showing why it is needed is missing.
+pub fn mutants(rule: &CompiledRule) -> Vec<Mutant> {
+    let mut out = Vec::new();
+    for i in 0..rule.spec.facts.len() {
+        let mut spec = rule.spec.clone();
+        let fact = spec.facts.remove(i);
+        let killed_by = match CompiledRule::compile(&rule.pack, spec, &rule.languages, rule.tables.clone()) {
+            Err(errs) => Some(format!("the rule no longer compiles: {}", errs.join("; "))),
+            Ok(mutant) => {
+                let report = test_rule(&mutant, &Options { run: false });
+                report
+                    .checks
+                    .iter()
+                    .find(|c| matches!(c.outcome, Outcome::Fail(_)))
+                    .map(|c| c.name.clone())
+            }
+        };
+        out.push(Mutant {
+            rule: rule.id.clone(),
+            fact,
+            killed_by,
+        });
+    }
+    out
+}

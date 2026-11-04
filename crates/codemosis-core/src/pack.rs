@@ -251,6 +251,31 @@ pub struct Pack {
     pub languages: Vec<&'static dyn Language>,
     pub rules: Vec<CompiledRule>,
     pub tables: Arc<Tables>,
+    /// SHA-256 of the pack's files (manifest, rules and tables, by name), so
+    /// a lockfile can pin exactly what was reviewed.
+    pub digest: String,
+}
+
+impl PackSource {
+    /// SHA-256 over every file of the pack, in a fixed order, with names.
+    pub fn digest(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        let mut feed = |name: &str, text: &str| {
+            h.update((name.len() as u64).to_le_bytes());
+            h.update(name.as_bytes());
+            let text = text.replace("\r\n", "\n");
+            h.update((text.len() as u64).to_le_bytes());
+            h.update(text.as_bytes());
+        };
+        feed("pack.toml", &self.manifest);
+        let mut files: Vec<&(String, String)> = self.rules.iter().chain(self.tables.iter()).collect();
+        files.sort();
+        for (name, text) in files {
+            feed(name, text);
+        }
+        h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    }
 }
 
 impl Pack {
@@ -441,6 +466,7 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
         languages,
         rules,
         tables,
+        digest: src.digest(),
     })
 }
 

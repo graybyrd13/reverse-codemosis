@@ -9,6 +9,7 @@ pub mod answers;
 pub mod ci;
 pub mod config;
 pub mod fsguard;
+pub mod lock;
 pub mod oracle;
 pub mod policy;
 pub mod report;
@@ -52,6 +53,16 @@ impl Workspace {
         let answers = Answers::load(root).map_err(EngineError::Answers)?;
         let project = Project::load(root, &config.filter())?;
         let policy = config.policy()?;
+        if let Some(lock) = lock::Lock::load(root).map_err(|e| EngineError::Config(ConfigError::Other(e)))? {
+            let problems = lock.verify(&packs);
+            if !problems.is_empty() {
+                return Err(EngineError::Config(ConfigError::Other(format!(
+                    "the packs do not match {}:\n  - {}\nReview the pack changes, then run `codemosis lock` to pin them again.",
+                    lock::LOCK_FILE,
+                    problems.join("\n  - ")
+                ))));
+            }
+        }
         let known = |name: &str| {
             packs
                 .iter()

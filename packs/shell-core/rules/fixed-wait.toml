@@ -15,7 +15,7 @@ answers, the file exists, the process is up) with a time limit.
 shape = '''
 (command
   name: (command_name (word) @command)
-  argument: [(number) (word)] @delay
+  argument: [(number) (word)] @_delay
   (#eq? @command "sleep")) @stmt
 '''
 focus = "@stmt"

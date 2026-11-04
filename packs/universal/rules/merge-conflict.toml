@@ -15,7 +15,7 @@ in order. If the markers are meant to be there, as in documentation that
 shows a conflict, answer keep. Markers inside strings or comments are not
 reported.
 """
-pattern = '(?m)^<{7}(?: (?P<ours_label>[^\n]*))?\n(?P<ours>(?:[^\n]*\n)*?)(?:\|{7}[^\n]*\n(?:[^\n]*\n)*?)?={7}\n(?P<theirs>(?:[^\n]*\n)*?)>{7}(?: (?P<theirs_label>[^\n]*))?(?:\n|$)'
+pattern = '(?m)^<{7}(?: (?:[^\n]*))?\n(?P<ours>(?:[^\n]*\n)*?)(?:\|{7}[^\n]*\n(?:[^\n]*\n)*?)?={7}\n(?P<theirs>(?:[^\n]*\n)*?)>{7}(?: (?:[^\n]*))?(?:\n|$)'
 within = "any"
 focus = "@match"
 where = [

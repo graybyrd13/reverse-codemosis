@@ -5,7 +5,10 @@ semantics = "preserved"
 summary = "This `return` is the last statement of a function with no results; it does nothing."
 explain = """
 A function with no results returns when it reaches its end. A bare `return`
-as its very last statement changes nothing.
+as its very last statement changes nothing: there are no result parameters
+for it to set, and deferred calls run the same either way. Deleting it is
+the form `go vet` and most Go style guides expect. The rule only applies to
+functions without results, where a bare return cannot carry a value.
 """
 shape = '''
 (function_declaration

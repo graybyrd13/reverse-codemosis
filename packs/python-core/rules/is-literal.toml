@@ -20,13 +20,13 @@ singletons and are never touched.
 shape = '''
 [
   (comparison_operator
-    (_) @left
+    (_) @_left
     operators: ["is" "is not"] @op
-    [(integer) (float) (string) (concatenated_string)] @literal)
+    [(integer) (float) (string) (concatenated_string)] @_literal)
   (comparison_operator
-    [(integer) (float) (string) (concatenated_string)] @literal
+    [(integer) (float) (string) (concatenated_string)] @_literal
     operators: ["is" "is not"] @op
-    (_) @right)
+    (_) @_right)
 ] @cmp
 '''
 focus = "@cmp"

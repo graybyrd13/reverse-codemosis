@@ -12,7 +12,7 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. k
 shape = '''
 (call
   method: (identifier) @method
-  arguments: (argument_list . [(integer) (float)] @delay .)
+  arguments: (argument_list . [(integer) (float)] @_delay .)
   (#eq? @method "sleep")) @stmt
 '''
 focus = "@stmt"

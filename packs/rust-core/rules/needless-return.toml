@@ -16,7 +16,7 @@ leading construct as a statement of its own.
 shape = '''
 (function_item
   body: (block
-    (expression_statement (return_expression (_) @value)) @ret .)) @fn
+    (expression_statement (return_expression (_) @value)) @ret .)) @_fn
 '''
 focus = "@ret"
 where = [

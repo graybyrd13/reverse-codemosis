@@ -25,7 +25,7 @@ shape = '''
           parameter: (identifier) @resolve
           body: (call_expression
             function: (identifier) @timer
-            arguments: (arguments . (identifier) @callback . (_) @delay .)))))) @call
+            arguments: (arguments . (identifier) @callback . (_) @_delay .)))))) @call
   (#eq? @promise "Promise")
   (#eq? @timer "setTimeout")
   (#eq? @resolve @callback)) @stmt
@@ -39,7 +39,7 @@ shape = '''
           parameters: (formal_parameters . (_) @resolve .)
           body: (call_expression
             function: (identifier) @timer
-            arguments: (arguments . (identifier) @callback . (_) @delay .)))))) @call
+            arguments: (arguments . (identifier) @callback . (_) @_delay .)))))) @call
   (#eq? @promise "Promise")
   (#eq? @timer "setTimeout")
   (#eq? @resolve @callback)) @stmt
@@ -48,13 +48,13 @@ shape = '''
   (await_expression
     (call_expression
       function: (member_expression property: (property_identifier) @method)
-      arguments: (arguments . (number) @delay .))) @call
+      arguments: (arguments . (number) @_delay .))) @call
   (#any-of? @method "waitForTimeout" "pause")) @stmt
 
 (expression_statement
   (call_expression
     function: (member_expression object: (identifier) @object property: (property_identifier) @method)
-    arguments: (arguments . (number) @delay .)) @call
+    arguments: (arguments . (number) @_delay .)) @call
   (#eq? @object "cy")
   (#eq? @method "wait")) @stmt
 
@@ -62,7 +62,7 @@ shape = '''
   (await_expression
     (call_expression
       function: (identifier) @helper
-      arguments: (arguments . (number) @delay .))) @call
+      arguments: (arguments . (number) @_delay .))) @call
   (#any-of? @helper "sleep" "delay" "wait" "pause")) @stmt
 '''
 focus = "@stmt"

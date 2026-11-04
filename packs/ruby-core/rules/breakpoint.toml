@@ -31,6 +31,7 @@ question = "Remove this breakpoint?"
 edits = [{ delete_lines = "@stmt" }]
 
 [[example]]
+name = "binding.pry"
 run = false
 before = '''
 def total(items)
@@ -42,6 +43,23 @@ after = '''
 def total(items)
   items.sum
 end
+'''
+
+[[example]]
+name = "byebug without the gem crashes the program"
+output = "6\n"
+before = '''
+def total(items)
+  byebug
+  items.sum
+end
+puts total([1, 2, 3])
+'''
+after = '''
+def total(items)
+  items.sum
+end
+puts total([1, 2, 3])
 '''
 
 [[counterexample]]

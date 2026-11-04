@@ -11,7 +11,7 @@ shape = '''
 (function_item
   parameters: (parameters) @params @sig
   "->" @sig
-  return_type: (unit_type) @sig) @fn
+  return_type: (unit_type) @sig) @_fn
 '''
 focus = "@sig"
 

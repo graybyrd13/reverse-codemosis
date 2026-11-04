@@ -23,7 +23,7 @@ shape = '''
       (default_parameter name: (identifier) @param value: [(list) (dictionary) (set)] @value)
       (typed_default_parameter name: (identifier) @param value: [(list) (dictionary) (set)] @value)
     ])
-  body: (block) @body) @def
+  body: (block) @body) @_def
 '''
 focus = "@value"
 where = [

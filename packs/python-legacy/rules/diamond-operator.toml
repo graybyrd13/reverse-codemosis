@@ -4,7 +4,10 @@ category = "broken"
 semantics = "repaired"
 summary = "`<>` is Python 2's spelling of `!=`; Python 3 does not compile it."
 explain = """
-Python 2 accepted `<>` as a synonym for `!=`. Python 3 removed it.
+Python 2 accepted `<>` as a synonym for `!=`. Python 3 removed it, so the
+file does not even compile under Python 3. Both operators call the same
+`__ne__` method in Python 2, so replacing `<>` with `!=` is the only repair
+and it changes nothing about what the comparison means.
 """
 shape = '(comparison_operator operators: "<>" @op) @cmp'
 focus = "@cmp"

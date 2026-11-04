@@ -15,6 +15,7 @@ pub mod expr;
 pub mod lang;
 pub mod lex;
 pub mod linguist;
+pub mod lint;
 pub mod model;
 pub mod pack;
 pub mod process;

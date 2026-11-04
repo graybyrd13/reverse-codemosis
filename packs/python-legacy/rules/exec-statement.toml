@@ -4,8 +4,11 @@ category = "broken"
 semantics = "repaired"
 summary = "`${stmt}` is a Python 2 exec statement; Python 3 does not compile it."
 explain = """
-Python 3 made exec a function: `exec code` is `exec(code)`. The forms with
-`in globals, locals` are left alone.
+Python 3 made exec a function: `exec code` is `exec(code)`, and the
+statement form is a syntax error. With a single operand both forms run the
+code in the current scope, so the call is the only repair. The forms with
+`in globals, locals` are left alone, because Python 2 also accepted a tuple
+operand there and the translation depends on which was meant.
 """
 shape = "(exec_statement code: (_) @code) @stmt"
 where = ["count(children(@stmt)) == 1"]
