@@ -85,3 +85,10 @@ code = '''
 a = b = []
 print(a is b)
 '''
+
+[[counterexample]]
+name = "a chained comparison is not a single identity test"
+code = '''
+x = 3
+print(x is 3 < 4)
+'''

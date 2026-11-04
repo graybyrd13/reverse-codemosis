@@ -11,12 +11,12 @@ Every example is executed with Node (TypeScript with type stripping).
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
 | [`assignment-in-condition`](#assignment-in-condition) Assignment of a constant in a condition | contradiction | asks, corrects on yes (corrected) | 1 ex. · 1 counter |
-| [`console-log`](#console-log) console.log left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 1 counter |
+| [`console-log`](#console-log) console.log left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 2 counter |
 | [`debugger-statement`](#debugger-statement) debugger statement | waste | corrects (preserved) | 1 ex. · 1 counter |
 | [`duplicate-object-key`](#duplicate-object-key) Object key given twice | contradiction | explains | 1 ex. · 1 counter |
 | [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 1 counter |
 | [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 2 ex. · 2 counter |
-| [`nan-comparison`](#nan-comparison) Comparison with NaN | contradiction | corrects (corrected) | 1 ex. · 1 counter |
+| [`nan-comparison`](#nan-comparison) Comparison with NaN | contradiction | corrects (corrected) | 1 ex. · 3 counter |
 | [`return-bool-if`](#return-bool-if) if/else that returns true or false | simplification | corrects (preserved) | 1 ex. · 1 counter |
 | [`unreachable-code`](#unreachable-code) Unreachable code | waste | corrects (preserved) | 1 ex. · 2 counter |
 
@@ -119,6 +119,13 @@ it as intentional; remove deletes it.
 ```javascript
 console.error("failed");
 console.warn("careful");
+```
+
+**Counterexample: a local console is the program's own logger** (no finding)
+
+```javascript
+const console = { log: (...xs) => process.stdout.write(xs.join(" ") + "\\n") };
+console.log("report ready");
 ```
 
 
@@ -418,6 +425,20 @@ redefine `NaN` or `Number`.
 ```javascript
 const v = 1;
 console.log(Number.isNaN(v));
+```
+
+**Counterexample: a local NaN is an ordinary value** (no finding)
+
+```javascript
+const NaN = 0;
+console.log(1 === NaN);
+```
+
+**Counterexample: a local Number has no isNaN** (no finding)
+
+```javascript
+const Number = { parse: (s) => +s };
+console.log(Number.parse("1") === NaN);
 ```
 
 

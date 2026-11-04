@@ -1050,6 +1050,13 @@ impl CompiledRule {
             };
             out.push(edit);
         }
+        // Guard: never edit code a build cannot verify.
+        for e in &out {
+            let repairs = self.spec.semantics == Some(crate::model::Semantics::Repaired);
+            if let Some(reason) = crate::guards::unverifiable(ctx.file, e.start, e.end, repairs) {
+                return Ok(Err(reason));
+            }
+        }
         // Guard: a correction never silently deletes a comment.
         for e in &out {
             if e.start == e.end {

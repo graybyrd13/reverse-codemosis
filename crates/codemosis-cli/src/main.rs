@@ -621,6 +621,7 @@ fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: St
                 "distance": distance,
                 "fail_on_tripped": fails,
                 "findings": scan.findings.iter().map(|f| finding_json(f, &ws.policy, is_baselined(f))).collect::<Vec<_>>(),
+                "parse_hazards": ci::parse_hazards(&ws.project).iter().map(|(file, line)| serde_json::json!({"file": file, "line": line})).collect::<Vec<_>>(),
                 "rule_errors": scan.errors.iter().map(|e| e.to_string()).collect::<Vec<_>>(),
             });
             body = serde_json::to_string_pretty(&v)? + "\n";
@@ -707,6 +708,17 @@ fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: St
                 body,
                 "  findings  {fixable} provably fixable · {questions} need your decision · {other} explained"
             );
+            let hazards = ci::parse_hazards(&ws.project);
+            if !hazards.is_empty() {
+                let shown: Vec<String> = hazards.iter().take(5).map(|(f, l)| format!("{f}:{l}")).collect();
+                let _ = writeln!(
+                    body,
+                    "  unparsed  {} file(s) have code the grammar could not parse; no correction is made there: {}{}",
+                    hazards.len(),
+                    shown.join(", "),
+                    if hazards.len() > 5 { ", ..." } else { "" }
+                );
+            }
             let in_baseline = baselined.as_ref().map(|b| b.len()).unwrap_or(0);
             if !suppressed.is_empty() || baseline.is_some() {
                 let mut parts = Vec::new();

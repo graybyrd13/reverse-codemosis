@@ -62,3 +62,11 @@ code = '''
 name = "x"
 pattern = "{{name}} and {name}"
 '''
+
+[[counterexample]]
+name = "a docstring that shows a placeholder"
+code = '''
+def greet(name):
+    """Return "Hello, {name}"."""
+    return "Hello, " + name
+'''

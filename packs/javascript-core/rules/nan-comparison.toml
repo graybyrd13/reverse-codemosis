@@ -57,3 +57,17 @@ code = '''
 const v = 1;
 console.log(Number.isNaN(v));
 '''
+
+[[counterexample]]
+name = "a local NaN is an ordinary value"
+code = '''
+const NaN = 0;
+console.log(1 === NaN);
+'''
+
+[[counterexample]]
+name = "a local Number has no isNaN"
+code = '''
+const Number = { parse: (s) => +s };
+console.log(Number.parse("1") === NaN);
+'''

@@ -27,6 +27,16 @@ pub struct CheckOutput<'a> {
     pub policy: &'a Policy,
 }
 
+/// Places the grammar could not parse, where corrections are refused:
+/// (file, line). The first of each file's regions, files in order.
+pub fn parse_hazards(project: &Project) -> Vec<(String, usize)> {
+    project
+        .files
+        .iter()
+        .filter_map(|f| f.parse_damage().first().map(|(a, _)| (f.display_path(), f.line_of(*a))))
+        .collect()
+}
+
 impl CheckOutput<'_> {
     fn is_baselined(&self, f: &Finding) -> bool {
         self.baselined.is_some_and(|b| b.contains(&f.fingerprint()))
@@ -284,7 +294,17 @@ pub fn sarif(out: &CheckOutput, root_uri: Option<&str>) -> Value {
         },
         "results": results,
         "columnKind": "utf16CodeUnits",
-        "invocations": [{ "executionSuccessful": true }],
+        "invocations": [{
+            "executionSuccessful": true,
+            "toolExecutionNotifications": parse_hazards(out.project).iter().map(|(file, line)| json!({
+                "level": "warning",
+                "message": { "text": "The grammar could not parse this region; no correction is made in it." },
+                "locations": [{ "physicalLocation": {
+                    "artifactLocation": { "uri": file, "uriBaseId": "%SRCROOT%" },
+                    "region": { "startLine": line },
+                }}],
+            })).collect::<Vec<_>>(),
+        }],
     });
     if let Some(u) = root_uri {
         run["originalUriBaseIds"] = json!({ "%SRCROOT%": { "uri": u } });

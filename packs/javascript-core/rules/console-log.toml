@@ -58,3 +58,10 @@ code = '''
 console.error("failed");
 console.warn("careful");
 '''
+
+[[counterexample]]
+name = "a local console is the program's own logger"
+code = '''
+const console = { log: (...xs) => process.stdout.write(xs.join(" ") + "\\n") };
+console.log("report ready");
+'''

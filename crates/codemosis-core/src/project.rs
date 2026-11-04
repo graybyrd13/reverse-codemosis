@@ -194,6 +194,41 @@ impl SourceFile {
         self.root().map(count_errors).unwrap_or(0)
     }
 
+    /// The byte ranges whose structure the grammar could not establish: for
+    /// every ERROR or MISSING node, the construct that contains it (a
+    /// function with a broken header, say), or the node itself at the top
+    /// level of the file. In order.
+    pub fn parse_damage(&self) -> Vec<(usize, usize)> {
+        fn walk(n: tree_sitter::Node, out: &mut Vec<(usize, usize)>) {
+            if !n.has_error() {
+                return;
+            }
+            if n.is_error() || n.is_missing() {
+                // Climb to the construct around the damage (a missing `)`
+                // sits in a parameter list, inside a function definition),
+                // but never to the whole file.
+                let mut region = n;
+                for _ in 0..2 {
+                    match region.parent() {
+                        Some(p) if p.parent().is_some() => region = p,
+                        _ => break,
+                    }
+                }
+                out.push((region.start_byte(), region.end_byte()));
+                return;
+            }
+            let mut c = n.walk();
+            for child in n.children(&mut c) {
+                walk(child, out);
+            }
+        }
+        let mut out = Vec::new();
+        if let Some(root) = self.root() {
+            walk(root, &mut out);
+        }
+        out
+    }
+
     pub fn file_name(&self) -> String {
         self.path
             .file_name()

@@ -74,8 +74,25 @@ pub fn kinds(text: &str) -> Vec<&'static str> {
         .collect()
 }
 
-/// `text` with every secret masked.
+/// `text` with every secret masked. Idempotent: masking can expose a match
+/// a previous mask overlapped (a token pattern swallowing the `-----END` of a
+/// key block, say), so passes repeat until nothing changes. Each pass only
+/// turns characters into `*`, so this ends.
 pub fn redact(text: &str) -> Cow<'_, str> {
+    let mut current = match mask_once(text) {
+        None => return Cow::Borrowed(text),
+        Some(t) => t,
+    };
+    for _ in 0..8 {
+        match mask_once(&current) {
+            Some(next) if next != current => current = next,
+            _ => break,
+        }
+    }
+    Cow::Owned(current)
+}
+
+fn mask_once(text: &str) -> Option<String> {
     let mut ranges: Vec<(usize, usize)> = Vec::new();
     for (_, re) in compiled() {
         for c in re.captures_iter(text) {
@@ -85,7 +102,7 @@ pub fn redact(text: &str) -> Cow<'_, str> {
         }
     }
     if ranges.is_empty() {
-        return Cow::Borrowed(text);
+        return None;
     }
     ranges.sort_unstable();
     let mut out = String::with_capacity(text.len());
@@ -97,7 +114,7 @@ pub fn redact(text: &str) -> Cow<'_, str> {
         out.push(if keep { ch } else { '*' });
         line_start = ch == '\n';
     }
-    Cow::Owned(out)
+    Some(out)
 }
 
 #[cfg(test)]

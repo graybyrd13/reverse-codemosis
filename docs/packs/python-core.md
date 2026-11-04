@@ -14,15 +14,15 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 |---|---|---|---|
 | [`bare-except`](#bare-except) Bare except clause | hazard | asks, corrects on yes (corrected) | 1 ex. · 2 counter |
 | [`duplicate-dict-key`](#duplicate-dict-key) Dictionary key given twice | contradiction | explains | 1 ex. · 2 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 3 ex. · 2 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 3 ex. · 3 counter |
 | [`fstring-without-placeholders`](#fstring-without-placeholders) f-string without placeholders | waste | corrects (preserved) | 1 ex. · 1 counter |
-| [`is-literal`](#is-literal) Identity comparison with a literal | contradiction | corrects (corrected) | 2 ex. · 2 counter |
-| [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 3 counter |
+| [`is-literal`](#is-literal) Identity comparison with a literal | contradiction | corrects (corrected) | 2 ex. · 3 counter |
+| [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 4 counter |
 | [`missing-module-import`](#missing-module-import) Module used without being imported | broken | corrects (repaired) | 2 ex. · 3 counter |
 | [`missing-name-import`](#missing-name-import) Standard-library name used without being imported | broken | corrects (repaired) | 2 ex. · 2 counter |
 | [`mutable-default`](#mutable-default) Mutable default argument | hazard | asks, corrects on yes (corrected) | 2 ex. · 2 counter |
-| [`none-equality`](#none-equality) Equality comparison with None | hazard | asks, corrects on yes (preserved) | 1 ex. · 1 counter |
-| [`redundant-list-around-sorted`](#redundant-list-around-sorted) list() around sorted() | waste | corrects (preserved) | 1 ex. · 2 counter |
+| [`none-equality`](#none-equality) Equality comparison with None | hazard | asks, corrects on yes (preserved) | 1 ex. · 2 counter |
+| [`redundant-list-around-sorted`](#redundant-list-around-sorted) list() around sorted() | waste | corrects (preserved) | 1 ex. · 3 counter |
 | [`redundant-pass`](#redundant-pass) Redundant pass | waste | corrects (preserved) | 1 ex. · 1 counter |
 | [`return-bool-if-negated`](#return-bool-if-negated) if/else that returns False or True | simplification | corrects (preserved) | 1 ex. · 1 counter |
 | [`return-bool-if`](#return-bool-if) if/else that returns True or False | simplification | corrects (preserved) | 1 ex. · 2 counter |
@@ -259,6 +259,15 @@ def pause():
     time.sleep(1)
 ```
 
+**Counterexample: a wait that paces a polling loop** (no finding)
+
+```python
+import time
+
+for attempt in range(3):
+    time.sleep(1)
+```
+
 
 ## fstring-without-placeholders
 
@@ -382,6 +391,13 @@ a = b = []
 print(a is b)
 ```
 
+**Counterexample: a chained comparison is not a single identity test** (no finding)
+
+```python
+x = 3
+print(x is 3 < 4)
+```
+
 **References**
 
 - <https://docs.python.org/3/reference/expressions.html#is-not>
@@ -450,6 +466,14 @@ TEMPLATE = "Dear {customer}, your order {order_id} has shipped."
 ```python
 name = "x"
 pattern = "{{name}} and {name}"
+```
+
+**Counterexample: a docstring that shows a placeholder** (no finding)
+
+```python
+def greet(name):
+    """Return "Hello, {name}"."""
+    return "Hello, " + name
 ```
 
 
@@ -756,6 +780,13 @@ value = 1
 print(value is None)
 ```
 
+**Counterexample: a chained comparison** (no finding)
+
+```python
+x = None
+print(x == None == True)
+```
+
 
 ## redundant-list-around-sorted
 
@@ -809,6 +840,15 @@ def sorted(items):
     return items
 
 print(list(sorted((3, 1))))
+```
+
+**Counterexample: a local list() may do anything** (no finding)
+
+```python
+def list(xs):
+    return tuple(xs)
+
+print(list(sorted([3, 1])))
 ```
 
 

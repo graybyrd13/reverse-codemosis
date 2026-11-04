@@ -391,6 +391,24 @@ impl Session<'_> {
                 }
             }
         }
+        // Scope contract: no reference outside the edits changes its binding.
+        if reasons.is_empty() {
+            let repaired = batch.iter().all(|f| f.semantics == Some(Semantics::Repaired));
+            for (idx, old_text) in &snapshot {
+                let new_file = &self.project.files[*idx];
+                let Some(lang) = new_file.lang else { continue };
+                let old_file = new_file.with_text(old_text.clone());
+                let edits = &per_file[idx];
+                if let Some(changes) = lang.binding_changes(&old_file, new_file, edits, repaired) {
+                    reasons.extend(changes.into_iter().map(|c| {
+                        format!(
+                            "{}: the correction changes what a name means: {c}",
+                            new_file.display_path()
+                        )
+                    }));
+                }
+            }
+        }
         if !reasons.is_empty() {
             self.restore(&snapshot)?;
             return Ok(Err(reasons));

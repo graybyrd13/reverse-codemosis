@@ -12,6 +12,7 @@
 pub mod edit;
 pub mod eval;
 pub mod expr;
+pub mod guards;
 pub mod lang;
 pub mod lex;
 pub mod linguist;

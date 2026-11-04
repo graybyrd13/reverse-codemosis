@@ -51,3 +51,12 @@ def sorted(items):
 
 print(list(sorted((3, 1))))
 '''
+
+[[counterexample]]
+name = "a local list() may do anything"
+code = '''
+def list(xs):
+    return tuple(xs)
+
+print(list(sorted([3, 1])))
+'''

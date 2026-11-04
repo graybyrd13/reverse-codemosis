@@ -93,6 +93,36 @@ impl PyAnalysis {
         best
     }
 
+    /// The scope whose binding a reference resolves to, following Python's
+    /// rules (`global`, `nonlocal`, class bodies invisible to nested
+    /// scopes), or None when it resolves to a builtin or nothing.
+    pub fn resolve(&self, o: &Occurrence) -> Option<usize> {
+        let mut cur = Some(o.scope);
+        let mut first = true;
+        let mut functions_only = false;
+        while let Some(s) = cur {
+            let sc = &self.scopes[s];
+            if sc.globals.contains(&o.name) {
+                return self.bindings_of(&o.name).any(|b| b.scope == 0).then_some(0);
+            }
+            if sc.nonlocals.contains(&o.name) {
+                functions_only = true;
+            } else {
+                let visible = match sc.kind {
+                    ScopeKind::Class => first,
+                    ScopeKind::Module => !functions_only,
+                    _ => true,
+                };
+                if visible && self.bindings_of(&o.name).any(|b| b.scope == s) {
+                    return Some(s);
+                }
+            }
+            first = false;
+            cur = sc.parent;
+        }
+        None
+    }
+
     /// True when `name` is bound in `scope` or any scope enclosing it.
     pub fn visible_from(&self, scope: usize, name: &str) -> bool {
         let mut cur = Some(scope);

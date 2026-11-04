@@ -143,7 +143,21 @@ fn apply_to_fixpoint(rule: &CompiledRule, at: Place, text: &str, answer: Option<
         if chosen.is_empty() {
             return Ok(text);
         }
-        text = edit::apply(&text, &chosen).map_err(|e| e.to_string())?;
+        let new = edit::apply(&text, &chosen).map_err(|e| e.to_string())?;
+        let old_file = &project.files[0];
+        if let Some(lang) = old_file.lang {
+            let new_file = old_file.with_text(new.clone());
+            let repaired = rule.spec.semantics == Some(Semantics::Repaired);
+            if let Some(changes) = lang.binding_changes(old_file, &new_file, &chosen, repaired) {
+                if !changes.is_empty() {
+                    return Err(format!(
+                        "the correction changes what names mean: {}",
+                        changes.join("; ")
+                    ));
+                }
+            }
+        }
+        text = new;
     }
     Err("the rule keeps matching its own output (no fixpoint after 10 rounds)".to_string())
 }

@@ -200,6 +200,11 @@ impl Language for TreeSitterLanguage {
     fn definition_name(&self, node: &Node, text: &str) -> Option<String> {
         let (_, field) = self.definitions.iter().find(|(k, _)| *k == node.kind())?;
         let target = node.child_by_field_name(field)?;
+        // A leaf in the name field is the name, whatever the grammar calls
+        // it (Bash's `word`, for instance).
+        if target.named_child_count() == 0 {
+            return Some(text[target.byte_range()].to_string());
+        }
         first_identifier(target, text).map(|s| s.to_string())
     }
 

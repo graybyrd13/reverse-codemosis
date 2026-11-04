@@ -61,3 +61,10 @@ code = '''
 value = 1
 print(value is None)
 '''
+
+[[counterexample]]
+name = "a chained comparison"
+code = '''
+x = None
+print(x == None == True)
+'''

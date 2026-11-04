@@ -143,3 +143,12 @@ import time
 def pause():
     time.sleep(1)
 '''
+
+[[counterexample]]
+name = "a wait that paces a polling loop"
+code = '''
+import time
+
+for attempt in range(3):
+    time.sleep(1)
+'''

@@ -133,6 +133,36 @@ pub trait Language: Send + Sync + 'static {
     fn runner(&self) -> Option<&dyn Runner> {
         None
     }
+
+    /// References outside `edits` whose binding the edits change: each
+    /// message names the reference and the change. `repaired` allows a name
+    /// that resolved to nothing (or a builtin) to become bound, which is
+    /// what repairing a missing import does. `None` means the language has
+    /// no binding analysis, so nothing is checked.
+    fn binding_changes(
+        &self,
+        _old: &SourceFile,
+        _new: &SourceFile,
+        _edits: &[Edit],
+        _repaired: bool,
+    ) -> Option<Vec<String>> {
+        None
+    }
+}
+
+/// Where an old offset lands after `edits` (sorted, non-overlapping), or
+/// None when the offset is strictly inside replaced text. Text inserted at
+/// the offset itself goes before it, so it shifts the offset.
+pub fn map_offset(edits: &[Edit], pos: usize) -> Option<usize> {
+    let mut shift: isize = 0;
+    for e in edits {
+        if e.end <= pos {
+            shift += e.text.len() as isize - (e.end - e.start) as isize;
+        } else if e.start < pos && pos < e.end {
+            return None;
+        }
+    }
+    Some((pos as isize + shift) as usize)
 }
 
 pub fn detect_indent(text: &str) -> String {
@@ -248,5 +278,25 @@ mod version_tests {
             assert!(grammar_version(l.id()).is_some(), "no version for {}", l.id());
         }
         assert!(runtime_version().is_some());
+    }
+}
+
+#[cfg(test)]
+mod map_tests {
+    use super::*;
+
+    #[test]
+    fn offsets_move_with_the_edits_before_them() {
+        let e = |start, end, text: &str| Edit {
+            start,
+            end,
+            text: text.to_string(),
+        };
+        let edits = [e(0, 0, "import json\n"), e(10, 14, "x"), e(20, 20, "!!")];
+        assert_eq!(map_offset(&edits, 0), Some(12));
+        assert_eq!(map_offset(&edits, 5), Some(17));
+        assert_eq!(map_offset(&edits, 12), None);
+        assert_eq!(map_offset(&edits, 14), Some(23));
+        assert_eq!(map_offset(&edits, 20), Some(31));
     }
 }

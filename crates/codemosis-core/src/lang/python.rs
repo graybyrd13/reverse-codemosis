@@ -295,6 +295,16 @@ impl Language for Python {
     fn runner(&self) -> Option<&dyn Runner> {
         Some(&PythonRunner)
     }
+
+    fn binding_changes(
+        &self,
+        old: &SourceFile,
+        new: &SourceFile,
+        edits: &[Edit],
+        repaired: bool,
+    ) -> Option<Vec<String>> {
+        Some(binding_changes(old, new, edits, repaired))
+    }
 }
 
 fn analysis<'a>(ctx: &EvalCtx<'a>) -> &'a PyAnalysis {
@@ -1028,4 +1038,71 @@ impl Runner for PythonRunner {
     fn run(&self, code: &str) -> RunOutcome {
         self.exec(code, false)
     }
+}
+
+/// References outside the edits whose resolution the edits change.
+pub fn binding_changes(old: &SourceFile, new: &SourceFile, edits: &[Edit], repaired: bool) -> Vec<String> {
+    let edits = match crate::edit::normalize(edits) {
+        Ok(e) => e,
+        Err(e) => return vec![e.to_string()],
+    };
+    let a = analyze(old);
+    let b = analyze(new);
+    let touches = |s: usize, e: usize| {
+        edits
+            .iter()
+            .any(|x| (x.start < e && s < x.end) || (x.start == x.end && s < x.start && x.start < e))
+    };
+    let mut out = Vec::new();
+    for o in a.occurrences.iter().filter(|o| o.role == Role::Reference) {
+        if touches(o.start, o.end) {
+            continue;
+        }
+        let Some(at) = super::map_offset(&edits, o.start) else {
+            continue;
+        };
+        let Some(n) = b
+            .occurrences
+            .iter()
+            .find(|x| x.role == Role::Reference && x.start == at && x.name == o.name)
+        else {
+            continue;
+        };
+        let before = a.resolve(o);
+        let after = b.resolve(n);
+        let same = match (before, after) {
+            (None, None) => true,
+            (None, Some(_)) => repaired,
+            (Some(_), None) => false,
+            (Some(x), Some(y)) if a.scopes[x].kind == ScopeKind::Module => b.scopes[y].kind == ScopeKind::Module,
+            (Some(x), Some(y)) => match super::map_offset(&edits, a.scopes[x].start) {
+                Some(start) => b.scopes[y].start == start && b.scopes[y].kind == a.scopes[x].kind,
+                // The scope that held the binding was itself rewritten: its
+                // identity cannot be compared, and the rule's own facts decide.
+                None => true,
+            },
+        };
+        if !same {
+            let describe = |scopes: &[super::python_scope::Scope], s: Option<usize>| match s {
+                None => "a builtin or nothing".to_string(),
+                Some(i) if scopes[i].kind == ScopeKind::Module => "the module's binding".to_string(),
+                Some(i) => format!(
+                    "the binding in the {:?} scope at line {}",
+                    scopes[i].kind,
+                    old.line_of(scopes[i].start)
+                )
+                .to_lowercase(),
+            };
+            out.push(format!(
+                "`{}` on line {} would resolve to {} instead of {}",
+                o.name,
+                old.line_of(o.start),
+                describe(&b.scopes, after),
+                describe(&a.scopes, before)
+            ));
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
