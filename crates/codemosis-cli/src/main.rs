@@ -828,7 +828,7 @@ fn print_timings(
         ws.project.files.len() as f64 / scanned.as_secs_f64().max(1e-9)
     );
     let mut slowest: Vec<&(String, std::time::Duration)> = scan.timings.iter().collect();
-    slowest.sort_by(|a, b| b.1.cmp(&a.1));
+    slowest.sort_by_key(|x| std::cmp::Reverse(x.1));
     for (rule, t) in slowest.iter().take(8).filter(|(_, t)| !t.is_zero()) {
         eprintln!(
             "    {:>9.2?}  {:>4.1}%  {rule}",
