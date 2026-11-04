@@ -9,7 +9,7 @@ use std::path::PathBuf;
 ///
 /// The order is the order of priority: the engine always closes the most
 /// serious kind of distance first.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Category {
     /// Errors that break the build or make code fail every time it runs.
@@ -71,7 +71,7 @@ impl fmt::Display for Category {
 /// What a correction does to the behaviour of the program. Every rule that
 /// carries a fix must declare one, and the pack self-test checks the claim by
 /// running the rule's examples.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Semantics {
     /// Observable behaviour is identical before and after.

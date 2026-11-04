@@ -1,0 +1,110 @@
+name: Reverse Codemosis
+description: >-
+  Find where code falls short of its best form, prove what can be corrected,
+  and explain the rest: annotations, a job summary, SARIF for code scanning
+  and a CI gate. Never guesses.
+author: Reverse Codemosis contributors
+branding:
+  icon: check-circle
+  color: green
+
+inputs:
+  path:
+    description: Project root to check.
+    default: "."
+  fail-on:
+    description: >-
+      Fail when a new open finding reaches this threshold: error, warning,
+      note, any or never, or a category (broken, contradiction, hazard,
+      waste, simplification). Empty uses [policy] fail_on from codemosis.toml.
+    default: ""
+  baseline:
+    description: "A baseline file of accepted findings (relative to path); only new findings count."
+    default: ""
+  packs:
+    description: Extra pack directories, one per line.
+    default: ""
+  sarif:
+    description: "Also write SARIF and upload it to GitHub code scanning (needs `security-events: write`)."
+    default: "false"
+  sarif-file:
+    description: Where to write the SARIF report.
+    default: codemosis.sarif
+  review:
+    description: >-
+      On pull requests, post a review with a suggested change for every
+      proven correction (needs the pull-requests write permission).
+    default: "false"
+
+outputs:
+  sarif-file:
+    description: The SARIF report, when `sarif` is true.
+    value: ${{ steps.check.outputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    - name: Install the Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Install codemosis from this action's revision
+      shell: bash
+      run: |
+        if ! command -v codemosis >/dev/null || [ "$(codemosis --version)" != "codemosis $(sed -n 's/^version = "\(.*\)"/\1/p' "$GITHUB_ACTION_PATH/Cargo.toml" | head -1)" ]; then
+          cargo install --locked --quiet --path "$GITHUB_ACTION_PATH/crates/codemosis-cli"
+        fi
+        codemosis --version
+
+    - name: Check
+      id: check
+      shell: bash
+      env:
+        INPUT_PATH: ${{ inputs.path }}
+        INPUT_FAIL_ON: ${{ inputs.fail-on }}
+        INPUT_BASELINE: ${{ inputs.baseline }}
+        INPUT_PACKS: ${{ inputs.packs }}
+        INPUT_SARIF: ${{ inputs.sarif }}
+        INPUT_SARIF_FILE: ${{ inputs.sarif-file }}
+      run: |
+        set -euo pipefail
+        args=("$INPUT_PATH")
+        if [ -n "$INPUT_BASELINE" ]; then args+=(--baseline "$INPUT_PATH/$INPUT_BASELINE"); fi
+        while IFS= read -r p; do if [ -n "$p" ]; then args+=(--pack "$p"); fi; done <<< "$INPUT_PACKS"
+        gate=()
+        if [ -n "$INPUT_FAIL_ON" ]; then gate=(--fail-on "$INPUT_FAIL_ON"); fi
+        if [ "$INPUT_SARIF" = "true" ]; then
+          codemosis check "${args[@]}" --format sarif --output "$INPUT_SARIF_FILE" --fail-on never
+          echo "sarif-file=$INPUT_SARIF_FILE" >> "$GITHUB_OUTPUT"
+        fi
+        # Annotations on the diff, a summary on the job page, and the gate.
+        codemosis check "${args[@]}" "${gate[@]}" --format github
+
+    - name: Upload SARIF to code scanning
+      if: ${{ always() && inputs.sarif == 'true' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: codemosis
+
+    - name: Suggest the proven corrections on the pull request
+      if: ${{ always() && inputs.review == 'true' && github.event_name == 'pull_request' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        INPUT_PATH: ${{ inputs.path }}
+        PR: ${{ github.event.pull_request.number }}
+      run: |
+        codemosis check "$INPUT_PATH" --format review --fail-on never > codemosis-review.json
+        # Only lines in the pull request's diff can carry comments; keep those.
+        gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --paginate --jq '.[].filename' > changed.txt
+        python3 - <<'PY'
+        import json
+        review = json.load(open("codemosis-review.json"))
+        changed = set(open("changed.txt").read().split())
+        review["comments"] = [c for c in review["comments"] if c["path"] in changed]
+        json.dump(review, open("codemosis-review.json", "w"))
+        PY
+        if [ "$(python3 -c 'import json;print(len(json.load(open("codemosis-review.json"))["comments"]))')" != "0" ]; then
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$PR/reviews" --input codemosis-review.json >/dev/null \
+            || echo "::warning::Could not post every suggestion (a line may be outside the diff)."
+        fi

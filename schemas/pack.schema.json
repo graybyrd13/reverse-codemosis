@@ -1,0 +1,94 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "pack.toml",
+  "type": "object",
+  "properties": {
+    "pack": {
+      "$ref": "#/$defs/PackMeta"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "pack"
+  ],
+  "$defs": {
+    "PackMeta": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "language": {
+          "description": "A grammar id (`python`), or `*` for rules that read any text file.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "languages": {
+          "description": "Several grammar ids whose node kinds the rules share\n(`[\"javascript\", \"typescript\", \"tsx\"]`).",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "summary": {
+          "type": "string"
+        },
+        "description": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "authors": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "license": {
+          "type": "string"
+        },
+        "homepage": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "engine": {
+          "description": "The engine versions this pack works with, like \">=0.1, <0.3\".\nA pack whose requirement the running engine does not meet does not\nload, rather than silently misbehaving.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "deprecated": {
+          "description": "Set when the pack should no longer be used: why, and what instead.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "summary",
+        "license"
+      ]
+    }
+  },
+  "description": "A fix pack's manifest."
+}

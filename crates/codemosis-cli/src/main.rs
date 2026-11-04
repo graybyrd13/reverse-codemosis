@@ -2,12 +2,13 @@
 
 mod doctor;
 mod interactive;
+mod lsp;
 mod map;
 mod packdocs;
 mod scaffold;
 
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use codemosis_core::selftest::{self, Outcome};
 use codemosis_core::{lang, pack, Category, Finding, Pack, Status};
 use codemosis_engine::answers::Answer;
@@ -91,11 +92,11 @@ enum Command {
         rules: Vec<String>,
         /// Exit 1 when a new open finding reaches this threshold: error, warning,
         /// note, any or never, or a category (findings in it or more serious ones).
-        /// Default: [policy] fail_on, or any.
+        /// Default: `[policy] fail_on`, or any.
         #[arg(long, value_name = "THRESHOLD")]
         fail_on: Option<String>,
         /// Accept the findings recorded in this baseline; report and fail only on new ones.
-        /// Default: [policy] baseline, if set.
+        /// Default: `[policy] baseline`, if set.
         #[arg(long, value_name = "FILE")]
         baseline: Option<PathBuf>,
         /// Ignore any configured baseline.
@@ -227,6 +228,28 @@ enum Command {
     Doctor {
         #[arg(default_value = ".")]
         path: PathBuf,
+    },
+    /// Run the language server (LSP over standard input and output) for editors.
+    Lsp,
+    /// Print a shell completion script: bash, zsh, fish, powershell or elvish.
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+    /// Print the JSON Schema of a file format, for editor completion and validation:
+    /// config, pack, rule, lock, baseline or proof. With --output, write them all.
+    Schema {
+        /// Which schema (omit with --output to write all of them).
+        name: Option<String>,
+        /// Write every schema to this directory.
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+    },
+    /// Write man pages for codemosis and every subcommand.
+    Man {
+        /// Output directory.
+        #[arg(long, short, default_value = "man")]
+        output: PathBuf,
     },
     /// Work with proof certificates.
     Proof {
@@ -536,6 +559,21 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         Command::Facts { language } => facts(language.as_deref(), s),
         Command::Init { path } => init(&path),
         Command::Lock { path, check } => lock_cmd(&path, check),
+        Command::Lsp => {
+            lsp::serve()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Schema { name, output } => schema_cmd(name.as_deref(), output.as_deref()),
+        Command::Completions { shell } => {
+            clap_complete::generate(shell, &mut Cli::command(), "codemosis", &mut std::io::stdout());
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Man { output } => {
+            std::fs::create_dir_all(&output).with_context(|| format!("cannot create {}", output.display()))?;
+            let n = write_man_pages(&Cli::command(), "codemosis", &output)?;
+            println!("Wrote {n} man page(s) to {}.", output.display());
+            Ok(ExitCode::SUCCESS)
+        }
         Command::Doctor { path } => {
             let root = canonical(&path)?;
             Ok(if doctor::run(&root, s) {
@@ -1027,6 +1065,109 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         );
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// The JSON Schemas of every file format: (name, file it describes, schema).
+fn schemas() -> Vec<(&'static str, &'static str, serde_json::Value)> {
+    fn of<T: schemars::JsonSchema>(title: &str, description: &str) -> serde_json::Value {
+        let mut v = serde_json::to_value(schemars::schema_for!(T)).expect("schemas serialize");
+        if let Some(o) = v.as_object_mut() {
+            o.insert("title".into(), serde_json::json!(title));
+            o.insert("description".into(), serde_json::json!(description));
+        }
+        v
+    }
+    vec![
+        (
+            "config",
+            "codemosis.toml",
+            of::<config::Config>("codemosis.toml", "Reverse Codemosis project configuration."),
+        ),
+        (
+            "pack",
+            "pack.toml",
+            of::<pack::ManifestFile>("pack.toml", "A fix pack's manifest."),
+        ),
+        (
+            "rule",
+            "rules/*.toml",
+            of::<pack::RuleSpec>(
+                "Fix pack rule",
+                "One rule of a fix pack: a shape or pattern, facts, a correction or question, and its proof.",
+            ),
+        ),
+        (
+            "lock",
+            "codemosis.lock",
+            of::<codemosis_engine::lock::Lock>(
+                "codemosis.lock",
+                "The packs a project was reviewed against, pinned by content.",
+            ),
+        ),
+        (
+            "baseline",
+            ".codemosis/baseline.json",
+            of::<codemosis_engine::policy::Baseline>(
+                "Baseline",
+                "Findings accepted for now; checks fail only on new ones.",
+            ),
+        ),
+        (
+            "proof",
+            ".codemosis/proofs/*.json",
+            of::<codemosis_engine::proof::Certificate>(
+                "Proof certificate",
+                "What justified each correction, replayable by `codemosis proof verify`.",
+            ),
+        ),
+    ]
+}
+
+fn schema_cmd(name: Option<&str>, output: Option<&Path>) -> Result<ExitCode> {
+    let all = schemas();
+    match (name, output) {
+        (_, Some(dir)) => {
+            std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+            for (n, _, v) in all.iter().filter(|(n, _, _)| name.is_none_or(|x| x == *n)) {
+                std::fs::write(
+                    dir.join(format!("{n}.schema.json")),
+                    serde_json::to_string_pretty(v)? + "\n",
+                )?;
+            }
+            println!("Wrote the schemas to {}.", dir.display());
+        }
+        (Some(n), None) => {
+            let (_, _, v) = all.iter().find(|(x, _, _)| *x == n).ok_or_else(|| {
+                anyhow!(
+                    "no schema named '{n}'; the schemas are: {}",
+                    all.iter()
+                        .map(|(x, f, _)| format!("{x} ({f})"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            println!("{}", serde_json::to_string_pretty(v)?);
+        }
+        (None, None) => {
+            for (n, f, _) in &all {
+                println!("{n:<10} {f}");
+            }
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// codemosis.1, codemosis-check.1, codemosis-pack-test.1... for a command tree.
+fn write_man_pages(cmd: &clap::Command, name: &str, dir: &Path) -> Result<usize> {
+    let cmd = cmd.clone().name(name.to_string());
+    let mut buf = Vec::new();
+    clap_mangen::Man::new(cmd.clone()).render(&mut buf)?;
+    std::fs::write(dir.join(format!("{name}.1")), buf)?;
+    let mut n = 1;
+    for sub in cmd.get_subcommands().filter(|s| s.get_name() != "help") {
+        n += write_man_pages(sub, &format!("{name}-{}", sub.get_name()), dir)?;
+    }
+    Ok(n)
 }
 
 /// The fix report as JSON (schema codemosis/fix/v1).

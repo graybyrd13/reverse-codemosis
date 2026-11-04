@@ -432,3 +432,28 @@ fn built_in_packs_are_lint_clean() {
         .unwrap();
     assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stdout));
 }
+
+#[test]
+fn json_schemas_are_current() {
+    let tmp = tempfile::tempdir().unwrap();
+    let out = Command::new(env!("CARGO_BIN_EXE_codemosis"))
+        .args(["schema", "--output"])
+        .arg(tmp.path())
+        .output()
+        .unwrap();
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let update = std::env::var("UPDATE_GOLDEN").is_ok_and(|v| v == "1");
+    for entry in fs::read_dir(tmp.path()).unwrap().flatten() {
+        let fresh = fs::read_to_string(entry.path()).unwrap();
+        let path = workspace().join("schemas").join(entry.file_name());
+        if update {
+            fs::write(&path, &fresh).unwrap();
+        }
+        assert_eq!(
+            fs::read_to_string(&path).unwrap_or_default(),
+            fresh,
+            "schemas/{} is stale; run `codemosis schema --output schemas`",
+            entry.file_name().to_string_lossy()
+        );
+    }
+}

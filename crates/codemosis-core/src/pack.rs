@@ -20,7 +20,7 @@ use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackMeta {
     pub id: String,
@@ -50,13 +50,13 @@ pub struct PackMeta {
     pub deprecated: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-struct ManifestFile {
-    pack: PackMeta,
+pub struct ManifestFile {
+    pub pack: PackMeta,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RuleSpec {
     pub id: String,
@@ -87,6 +87,7 @@ pub struct RuleSpec {
     pub facts: Vec<String>,
     /// Derived captures, evaluated in order: `name = "expression"`.
     #[serde(default, rename = "let")]
+    #[schemars(with = "std::collections::BTreeMap<String, String>")]
     pub lets: toml::Table,
     /// The capture reported as the finding's location.
     #[serde(default)]
@@ -121,20 +122,20 @@ pub struct RuleSpec {
     pub counterexamples: Vec<CounterexampleSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceSpec {
     pub at: String,
     pub label: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FixSpec {
     pub edits: Vec<EditSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AskSpec {
     /// Without options, phrased so that "yes" applies the `fix`.
@@ -144,7 +145,7 @@ pub struct AskSpec {
     pub options: Vec<OptionSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct OptionSpec {
     pub answer: String,
@@ -154,7 +155,7 @@ pub struct OptionSpec {
     pub edits: Vec<EditSpec>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EditSpec {
     pub replace: Option<String>,
@@ -169,7 +170,7 @@ pub struct EditSpec {
     pub with: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ExampleSpec {
     #[serde(default)]
@@ -200,7 +201,7 @@ pub struct ExampleSpec {
     pub language: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CounterexampleSpec {
     #[serde(default)]

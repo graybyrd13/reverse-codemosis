@@ -1,0 +1,51 @@
+# GitLab CI/CD component. In .gitlab-ci.yml:
+#
+#   include:
+#     - component: $CI_SERVER_FQDN/<group>/reverse-codemosis/codemosis@<version>
+#       inputs:
+#         fail-on: warning
+#
+# Or copy this file and `include: local:` it. The job reports findings in
+# the merge request's Code Quality widget and keeps a SARIF artifact.
+spec:
+  inputs:
+    stage:
+      default: test
+    path:
+      default: "."
+    fail-on:
+      description: error, warning, note, any or never, or a category
+      default: any
+    baseline:
+      description: A baseline file of accepted findings, relative to path
+      default: ""
+    image:
+      default: rust:1-slim
+    version:
+      description: The codemosis revision to install (tag, branch or commit)
+      default: main
+---
+codemosis:
+  stage: $[[ inputs.stage ]]
+  image: $[[ inputs.image ]]
+  variables:
+    CODEMOSIS_PATH: $[[ inputs.path ]]
+    CODEMOSIS_FAIL_ON: $[[ inputs.fail-on ]]
+    CODEMOSIS_BASELINE: $[[ inputs.baseline ]]
+  cache:
+    key: codemosis-$[[ inputs.version ]]
+    paths: [.cargo-home/]
+  before_script:
+    - export CARGO_HOME="$CI_PROJECT_DIR/.cargo-home" PATH="$CI_PROJECT_DIR/.cargo-home/bin:$PATH"
+    - apt-get update -qq && apt-get install -y -qq git >/dev/null
+    - command -v codemosis || cargo install --locked --git https://github.com/graybyrd13/reverse-codemosis --rev $[[ inputs.version ]] codemosis-cli
+  script:
+    - BASE=""; if [ -n "$CODEMOSIS_BASELINE" ]; then BASE="--baseline $CODEMOSIS_PATH/$CODEMOSIS_BASELINE"; fi
+    - codemosis check "$CODEMOSIS_PATH" $BASE --format gitlab --output gl-code-quality-report.json --fail-on never
+    - codemosis check "$CODEMOSIS_PATH" $BASE --format sarif --output codemosis.sarif --fail-on never
+    - codemosis check "$CODEMOSIS_PATH" $BASE --fail-on "$CODEMOSIS_FAIL_ON"
+  artifacts:
+    when: always
+    reports:
+      codequality: gl-code-quality-report.json
+    paths: [codemosis.sarif]

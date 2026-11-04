@@ -40,7 +40,7 @@ use thiserror::Error;
 
 pub const FILE_NAME: &str = "codemosis.toml";
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
     pub project: ProjectSection,
@@ -52,14 +52,14 @@ pub struct Config {
     pub suppress: Vec<crate::policy::SuppressEntry>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct ProjectSection {
     pub include: Vec<PathBuf>,
     pub exclude: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct OracleSection {
     pub build: Option<String>,
@@ -68,14 +68,14 @@ pub struct OracleSection {
     pub env: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct PacksSection {
     pub builtin: Option<Vec<String>>,
     pub paths: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct RulesSection {
     pub disable: Vec<String>,

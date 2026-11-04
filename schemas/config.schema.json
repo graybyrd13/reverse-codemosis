@@ -1,0 +1,190 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "codemosis.toml",
+  "type": "object",
+  "properties": {
+    "project": {
+      "$ref": "#/$defs/ProjectSection"
+    },
+    "oracle": {
+      "$ref": "#/$defs/OracleSection"
+    },
+    "packs": {
+      "$ref": "#/$defs/PacksSection"
+    },
+    "rules": {
+      "$ref": "#/$defs/RulesSection"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicySection"
+    },
+    "severity": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "suppress": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SuppressEntry"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ProjectSection": {
+      "type": "object",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "OracleSection": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "test": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "timeout": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "PacksSection": {
+      "type": "object",
+      "properties": {
+        "builtin": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": null
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "RulesSection": {
+      "type": "object",
+      "properties": {
+        "disable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "PolicySection": {
+      "type": "object",
+      "properties": {
+        "fail_on": {
+          "description": "The threshold `codemosis check` fails on (default: any open finding).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "baseline": {
+          "description": "A baseline file of accepted findings, relative to the project root.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "SuppressEntry": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "reason": {
+          "type": "string"
+        },
+        "until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "reason"
+      ]
+    }
+  },
+  "description": "Reverse Codemosis project configuration."
+}

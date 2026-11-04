@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Fix pack rule",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string"
+    },
+    "title": {
+      "type": "string"
+    },
+    "category": {
+      "$ref": "#/$defs/Category"
+    },
+    "semantics": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Semantics"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "summary": {
+      "description": "One sentence, rendered with captures, shown for each finding.",
+      "type": "string"
+    },
+    "explain": {
+      "description": "The plain-language explanation shown by `codemosis explain`.",
+      "type": "string"
+    },
+    "shape": {
+      "description": "A tree-sitter query. Captures name the parts the rule talks about.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "pattern": {
+      "description": "A regular expression matched against the text, for rules that work\non any language. Named groups become captures; `@match` is the whole match.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "patterns": {
+      "description": "The name of a table mapping GitHub language names to regular\nexpressions: the rule uses the patterns of each file's language.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "within": {
+      "description": "Where a text match must start: \"code\" (default), \"comment\", \"string\" or \"any\".",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "where": {
+      "description": "Facts that must all hold.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "let": {
+      "description": "Derived captures, evaluated in order: `name = \"expression\"`.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "focus": {
+      "description": "The capture reported as the finding's location.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "anchor": {
+      "description": "Templates that identify a finding; matches with equal anchors merge.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/EvidenceSpec"
+      }
+    },
+    "fix": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/FixSpec"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ask": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/AskSpec"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "tags": {
+      "description": "Free-form labels for filtering and reports (\"performance\", \"async\").",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "cwe": {
+      "description": "Common Weakness Enumeration ids the rule addresses (\"CWE-396\").",
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "deprecated": {
+      "description": "Set when the rule should no longer be used: why, and what instead.\nA deprecated rule still runs; its findings and `explain` say so.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "replaced_by": {
+      "description": "The rule that replaces this one, as a qualified id.",
+      "type": [
+        "string",
+        "null"
+      ],
+      "default": null
+    },
+    "example": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ExampleSpec"
+      }
+    },
+    "counterexample": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/CounterexampleSpec"
+      }
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "category",
+    "summary",
+    "explain"
+  ],
+  "$defs": {
+    "Category": {
+      "description": "The kinds of distance between code and the best version of itself.\n\nThe order is the order of priority: the engine always closes the most\nserious kind of distance first.",
+      "oneOf": [
+        {
+          "description": "Errors that break the build or make code fail every time it runs.",
+          "type": "string",
+          "const": "broken"
+        },
+        {
+          "description": "Logic that contradicts itself.",
+          "type": "string",
+          "const": "contradiction"
+        },
+        {
+          "description": "Unsafe patterns with known safe forms.",
+          "type": "string",
+          "const": "hazard"
+        },
+        {
+          "description": "Dead paths and wasted work.",
+          "type": "string",
+          "const": "waste"
+        },
+        {
+          "description": "Structures that a simpler structure provably replaces.",
+          "type": "string",
+          "const": "simplification"
+        }
+      ]
+    },
+    "Semantics": {
+      "description": "What a correction does to the behaviour of the program. Every rule that\ncarries a fix must declare one, and the pack self-test checks the claim by\nrunning the rule's examples.",
+      "oneOf": [
+        {
+          "description": "Observable behaviour is identical before and after.",
+          "type": "string",
+          "const": "preserved"
+        },
+        {
+          "description": "Behaviour changes from something self-contradictory to the only\nmeaning the code can have had.",
+          "type": "string",
+          "const": "corrected"
+        },
+        {
+          "description": "Code that cannot run as written (does not compile, or fails every time\nthe line is reached) now runs, through the only possible repair.",
+          "type": "string",
+          "const": "repaired"
+        }
+      ]
+    },
+    "EvidenceSpec": {
+      "type": "object",
+      "properties": {
+        "at": {
+          "type": "string"
+        },
+        "label": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "at",
+        "label"
+      ]
+    },
+    "FixSpec": {
+      "type": "object",
+      "properties": {
+        "edits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EditSpec"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "edits"
+      ]
+    },
+    "EditSpec": {
+      "type": "object",
+      "properties": {
+        "replace": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delete": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delete_lines": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "delete_item": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "insert_before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "insert_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "insert_lines_before": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "insert_lines_after": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "add_import": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "with": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "AskSpec": {
+      "type": "object",
+      "properties": {
+        "question": {
+          "description": "Without options, phrased so that \"yes\" applies the `fix`.",
+          "type": "string"
+        },
+        "option": {
+          "description": "Named answers, each with its own edits (none means keep the code).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/OptionSpec"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "question"
+      ]
+    },
+    "OptionSpec": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "type": "string"
+        },
+        "means": {
+          "description": "What choosing this answer means, in a few words.",
+          "type": "string"
+        },
+        "edits": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EditSpec"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "answer",
+        "means"
+      ]
+    },
+    "ExampleSpec": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "path": {
+          "description": "File path for the example (defaults to the language's example file).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "before": {
+          "type": "string"
+        },
+        "after": {
+          "description": "Expected result of applying the rule until it no longer matches.\nRequired for rules with a fix, forbidden for explain-only rules.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "output": {
+          "description": "Expected standard output when `after` runs.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "output_before": {
+          "description": "Expected standard output when `before` runs.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "run": {
+          "description": "Set to false when the example cannot be executed on its own.",
+          "type": [
+            "boolean",
+            "null"
+          ],
+          "default": null
+        },
+        "answer": {
+          "description": "The answer to the rule's question in this example (default: \"yes\",\nor the first option that changes code).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "language": {
+          "description": "For packs with several grammars: which one this example is in.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "before"
+      ]
+    },
+    "CounterexampleSpec": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "path": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "code": {
+          "type": "string"
+        },
+        "language": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "code"
+      ]
+    }
+  },
+  "description": "One rule of a fix pack: a shape or pattern, facts, a correction or question, and its proof."
+}

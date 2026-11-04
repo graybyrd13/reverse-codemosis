@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Baseline",
+  "description": "Findings accepted for now; checks fail only on new ones.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string"
+    },
+    "created": {
+      "type": "string"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BaselineEntry"
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "created",
+    "findings"
+  ],
+  "$defs": {
+    "BaselineEntry": {
+      "type": "object",
+      "properties": {
+        "fingerprint": {
+          "type": "string"
+        },
+        "rule": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "fingerprint",
+        "rule",
+        "file",
+        "message"
+      ]
+    }
+  }
+}

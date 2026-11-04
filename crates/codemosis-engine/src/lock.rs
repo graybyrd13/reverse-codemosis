@@ -13,7 +13,7 @@ use std::path::Path;
 
 pub const LOCK_FILE: &str = "codemosis.lock";
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct Lock {
     pub version: u32,
@@ -23,7 +23,7 @@ pub struct Lock {
     pub packs: Vec<LockedPack>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct LockedPack {
     pub id: String,

@@ -15,7 +15,12 @@ codemosis-core = { path = "crates/codemosis-core", version = "0.1.0" }
 codemosis-engine = { path = "crates/codemosis-engine", version = "0.1.0" }
 anyhow = "1"
 globset = "0.4"
-clap = { version = "4", features = ["derive"] }
+clap = { version = "4", features = ["derive", "string"] }
+clap_complete = "4"
+clap_mangen = "0.2"
+lsp-server = "0.7"
+lsp-types = "=0.95.1"
+schemars = "1"
 ignore = "0.4"
 regex = "1"
 serde = { version = "1", features = ["derive"] }

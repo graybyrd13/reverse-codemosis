@@ -27,7 +27,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::path::Path;
 
 /// How loudly a finding is reported, in the SARIF sense.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, schemars::JsonSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum Level {
     Note,
@@ -101,7 +101,7 @@ impl FailOn {
     }
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct PolicySection {
     /// The threshold `codemosis check` fails on (default: any open finding).
@@ -110,7 +110,7 @@ pub struct PolicySection {
     pub baseline: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct SuppressEntry {
     pub rule: String,
@@ -276,14 +276,14 @@ impl Policy {
 /// Accepted findings: a check reports and fails only on findings that are
 /// not in it, so a team can adopt the tool on an existing codebase and hold
 /// the line from today.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, schemars::JsonSchema)]
 pub struct Baseline {
     pub schema: String,
     pub created: String,
     pub findings: Vec<BaselineEntry>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, schemars::JsonSchema)]
 pub struct BaselineEntry {
     pub fingerprint: String,
     pub rule: String,

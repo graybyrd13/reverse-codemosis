@@ -43,7 +43,7 @@ pub fn now_utc() -> String {
     format!("{day}T{:02}:{:02}:{:02}Z", s / 3600, s / 60 % 60, s % 60)
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct Certificate {
     pub schema: String,
     pub created: String,
@@ -63,7 +63,7 @@ pub struct Certificate {
     pub digest: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct EngineInfo {
     pub version: String,
     pub tree_sitter: Option<String>,
@@ -71,7 +71,7 @@ pub struct EngineInfo {
     pub grammars: BTreeMap<String, String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct Environment {
     pub os: String,
     pub arch: String,
@@ -79,14 +79,14 @@ pub struct Environment {
     pub commit: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct PackRef {
     pub id: String,
     pub version: String,
     pub sha256: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct OracleSummary {
     pub build_ok: Option<bool>,
     pub passed: usize,
@@ -103,7 +103,7 @@ impl OracleSummary {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct OracleRecord {
     pub build: Option<String>,
     pub test: Option<String>,
@@ -111,7 +111,7 @@ pub struct OracleRecord {
     pub after: Option<OracleSummary>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct FindingRef {
     pub fingerprint: String,
     pub file: String,
@@ -121,14 +121,14 @@ pub struct FindingRef {
     pub question: Option<String>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct FileRecord {
     pub path: String,
     pub before_sha256: String,
     pub after_sha256: String,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct StepRecord {
     pub number: usize,
     pub rule: String,
@@ -141,7 +141,7 @@ pub struct StepRecord {
     pub oracle: Option<StepOracleRecord>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
 pub struct StepOracleRecord {
     pub build_ok: Option<bool>,
     pub passed_before: usize,
