@@ -1,0 +1,81 @@
+id = "manual-assert"
+title = "if !condition { panic!(..) }"
+category = "simplification"
+semantics = "preserved"
+summary = "This `if` only panics when `${cond}` is false; it is `assert!(${cond|strip_parens}, ...)`."
+explain = """
+`assert!(cond, args..)` is defined as `if !cond { panic!(args..) }`, with
+the same message formatting. Writing the assertion says what the code
+checks rather than how it fails.
+"""
+shape = '''
+(expression_statement
+  (if_expression
+    condition: (unary_expression "!" (_) @cond)
+    consequence: (block .
+      [
+        (expression_statement (macro_invocation macro: (identifier) @mac (token_tree) @args))
+        (macro_invocation macro: (identifier) @mac (token_tree) @args)
+      ] .)
+    !alternative)) @stmt
+'''
+focus = "@stmt"
+where = [
+  "text(@mac) == 'panic'",
+  "text(@args) != '()'",
+  "starts_with(text(@args), '(')",
+]
+
+[fix]
+edits = [{ replace = "@stmt", with = "assert!(${cond|strip_parens}, ${args|strip_parens});" }]
+
+[[example]]
+before = '''
+fn withdraw(balance: u32, amount: u32) -> u32 {
+    if !(amount <= balance) {
+        panic!("insufficient funds: {} > {}", amount, balance);
+    }
+    balance - amount
+}
+
+fn main() {
+    println!("{}", withdraw(10, 3));
+    let refused = std::panic::catch_unwind(|| withdraw(1, 5)).is_err();
+    println!("refused: {}", refused);
+}
+'''
+after = '''
+fn withdraw(balance: u32, amount: u32) -> u32 {
+    assert!(amount <= balance, "insufficient funds: {} > {}", amount, balance);
+    balance - amount
+}
+
+fn main() {
+    println!("{}", withdraw(10, 3));
+    let refused = std::panic::catch_unwind(|| withdraw(1, 5)).is_err();
+    println!("refused: {}", refused);
+}
+'''
+
+[[counterexample]]
+name = "an else branch"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        panic!("bad");
+    } else {
+        println!("good");
+    }
+}
+'''
+
+[[counterexample]]
+name = "more than a panic"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        eprintln!("about to fail");
+        panic!("bad");
+    }
+}
+'''

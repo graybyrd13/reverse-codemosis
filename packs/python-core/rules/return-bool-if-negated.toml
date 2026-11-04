@@ -1,0 +1,71 @@
+id = "return-bool-if-negated"
+title = "if/else that returns False or True"
+category = "simplification"
+semantics = "preserved"
+summary = "This if/else returns the opposite truth value of its condition; it is `return ${cond|py.negate}`."
+explain = """
+`if c: return False else: return True` returns `not c`. `not` always yields a
+real bool and evaluates `c` once, so the two are identical. Where Python
+defines a direct opposite (`not (a in b)` is `a not in b`, `not (a is b)` is
+`a is not b`), the opposite operator is used.
+"""
+shape = '''
+[
+  (if_statement
+    condition: (_) @cond
+    consequence: (block . (return_statement (false)) .)
+    alternative: (else_clause body: (block . (return_statement (true)) .))) @whole
+  (block
+    (if_statement
+      condition: (_) @cond
+      consequence: (block . (return_statement (false)) .)
+      !alternative) @whole
+    .
+    (return_statement (true)) @whole)
+]
+'''
+focus = "@whole"
+where = ["occupies_lines(@whole)"]
+
+[fix]
+edits = [{ replace = "@whole", with = "return ${cond|py.negate}" }]
+
+[[example]]
+before = '''
+def is_allowed(user, banned):
+    if user in banned:
+        return False
+    else:
+        return True
+
+
+def is_small(n):
+    if n > 100 or n < -100:
+        return False
+    return True
+
+
+print(is_allowed("ada", {"bob"}), is_allowed("bob", {"bob"}))
+print(is_small(5), is_small(500))
+'''
+after = '''
+def is_allowed(user, banned):
+    return user not in banned
+
+
+def is_small(n):
+    return not (n > 100 or n < -100)
+
+
+print(is_allowed("ada", {"bob"}), is_allowed("bob", {"bob"}))
+print(is_small(5), is_small(500))
+'''
+
+[[counterexample]]
+name = "returns values other than booleans"
+code = '''
+def f(n):
+    if n:
+        return 0
+    return 1
+'''

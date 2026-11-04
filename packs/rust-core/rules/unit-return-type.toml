@@ -1,0 +1,47 @@
+id = "unit-return-type"
+title = "Explicit unit return type"
+category = "simplification"
+semantics = "preserved"
+summary = "`-> ()` is what a function returns when no return type is written."
+explain = """
+A function with no return type returns `()`. Writing `-> ()` adds nothing
+and makes the reader check whether something is returned.
+"""
+shape = '''
+(function_item
+  parameters: (parameters) @params @sig
+  "->" @sig
+  return_type: (unit_type) @sig) @fn
+'''
+focus = "@sig"
+
+[fix]
+edits = [{ replace = "@sig", with = "${params}" }]
+
+[[example]]
+before = '''
+fn greet(name: &str) -> () {
+    println!("hello, {}", name);
+}
+
+fn main() {
+    greet("ada");
+}
+'''
+after = '''
+fn greet(name: &str) {
+    println!("hello, {}", name);
+}
+
+fn main() {
+    greet("ada");
+}
+'''
+
+[[counterexample]]
+name = "a real return type"
+code = '''
+fn one() -> i32 {
+    1
+}
+'''

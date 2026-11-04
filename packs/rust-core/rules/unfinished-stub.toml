@@ -1,0 +1,31 @@
+id = "unfinished-stub"
+title = "todo!() or unimplemented!() left in code"
+category = "hazard"
+summary = "`${mac}!` panics when it is reached: this code path is unfinished."
+explain = """
+`todo!()` and `unimplemented!()` compile anywhere and panic at run time.
+They are placeholders, and AI tools leave them behind in code that otherwise
+looks complete. Nothing can be corrected automatically: the missing code is
+a design decision. The finding marks exactly where it is missing.
+"""
+shape = '''
+(macro_invocation
+  macro: (identifier) @mac
+  (#any-of? @mac "todo" "unimplemented")) @call
+'''
+focus = "@call"
+
+[[example]]
+before = '''
+fn area(radius: f64) -> f64 {
+    todo!()
+}
+'''
+
+[[counterexample]]
+name = "an implemented function"
+code = '''
+fn area(radius: f64) -> f64 {
+    std::f64::consts::PI * radius * radius
+}
+'''

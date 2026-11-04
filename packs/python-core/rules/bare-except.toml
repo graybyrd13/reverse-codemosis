@@ -1,0 +1,82 @@
+id = "bare-except"
+title = "Bare except clause"
+category = "hazard"
+semantics = "corrected"
+summary = "A bare `except:` also catches KeyboardInterrupt and SystemExit, so Ctrl-C and sys.exit() cannot stop the program here."
+explain = """
+`except:` with no exception type catches everything that derives from
+BaseException, including KeyboardInterrupt (Ctrl-C), SystemExit
+(sys.exit()) and GeneratorExit. A handler written to recover from ordinary
+errors then also swallows the user's request to stop.
+
+`except Exception:` catches every ordinary error and lets those three pass.
+Whether this handler should let them pass is a decision about intent, so the
+correction is applied only after you answer yes. Handlers that re-raise are
+not reported: catching everything and re-raising is a legitimate cleanup
+pattern.
+"""
+shape = '(except_clause "except" @keyword !value) @clause'
+focus = "@keyword"
+where = ["!contains(@clause, 'raise_statement')"]
+
+[ask]
+question = "Should this handler let KeyboardInterrupt (Ctrl-C) and SystemExit (sys.exit()) pass through, catching only ordinary errors?"
+
+[fix]
+edits = [{ insert_after = "@keyword", with = " Exception" }]
+
+[[example]]
+before = '''
+import sys
+
+
+def shutdown():
+    try:
+        sys.exit("stopping")
+    except:
+        print("ignored the request to stop")
+
+
+try:
+    shutdown()
+except SystemExit as stop:
+    print("stopped:", stop)
+'''
+after = '''
+import sys
+
+
+def shutdown():
+    try:
+        sys.exit("stopping")
+    except Exception:
+        print("ignored the request to stop")
+
+
+try:
+    shutdown()
+except SystemExit as stop:
+    print("stopped:", stop)
+'''
+output = "stopped: stopping\n"
+output_before = "ignored the request to stop\n"
+
+[[counterexample]]
+name = "a typed handler"
+code = '''
+try:
+    pass
+except Exception:
+    pass
+'''
+
+[[counterexample]]
+name = "cleanup that re-raises"
+code = '''
+def run(job):
+    try:
+        job()
+    except:
+        print("cleaning up")
+        raise
+'''

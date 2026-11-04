@@ -1,0 +1,51 @@
+id = "redundant-pass"
+title = "Redundant pass"
+category = "waste"
+semantics = "preserved"
+summary = "This `pass` does nothing: the block already has other statements."
+explain = """
+`pass` exists only to fill a block that would otherwise be empty. In a block
+that already has a statement (a docstring counts) it does nothing, and it
+usually marks a placeholder that was never cleaned up.
+"""
+shape = "(block (pass_statement) @pass)"
+where = [
+  "count(children(parent(@pass))) > 1",
+  "occupies_lines(@pass)",
+]
+
+[fix]
+edits = [{ delete_lines = "@pass" }]
+
+[[example]]
+before = '''
+class Config:
+    """Settings."""
+    pass
+
+
+def run():
+    print("running")
+    pass
+
+
+run()
+'''
+after = '''
+class Config:
+    """Settings."""
+
+
+def run():
+    print("running")
+
+
+run()
+'''
+
+[[counterexample]]
+name = "the only statement of a block"
+code = '''
+def stub():
+    pass
+'''

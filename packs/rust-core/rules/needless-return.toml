@@ -1,0 +1,71 @@
+id = "needless-return"
+title = "return as the last statement of a function"
+category = "simplification"
+semantics = "preserved"
+summary = "`${ret}` is the last statement of the function; the value can simply be its tail expression."
+explain = """
+A function body's final expression is its return value. `return value;` as
+the very last statement does exactly what `value` as the tail expression
+does, and is the form `cargo clippy` also recommends.
+
+One case is excluded: an expression that begins with a block-like construct
+(`if`, `match`, `loop`, a block...) and continues after it, such as
+`return match x { .. } + 1;`, because in tail position Rust would parse the
+leading construct as a statement of its own.
+"""
+shape = '''
+(function_item
+  body: (block
+    (expression_statement (return_expression (_) @value)) @ret .)) @fn
+'''
+focus = "@ret"
+where = [
+  "kind(@value) in ['if_expression', 'match_expression', 'block', 'loop_expression', 'unsafe_block'] || !matches(text(@value), '^((if|match|loop|while|for|unsafe|async)([^A-Za-z0-9_]|$)|[{])')",
+]
+
+[fix]
+edits = [{ replace = "@ret", with = "${value}" }]
+
+[[example]]
+before = '''
+fn double(x: i32) -> i32 {
+    let y = x * 2;
+    return y;
+}
+
+fn main() {
+    println!("{}", double(21));
+}
+'''
+after = '''
+fn double(x: i32) -> i32 {
+    let y = x * 2;
+    y
+}
+
+fn main() {
+    println!("{}", double(21));
+}
+'''
+
+[[counterexample]]
+name = "an early return"
+code = '''
+fn first_even(v: &[i32]) -> Option<i32> {
+    for x in v {
+        if x % 2 == 0 {
+            return Some(*x);
+        }
+    }
+    None
+}
+'''
+
+[[counterexample]]
+name = "a return followed by a comment"
+code = '''
+fn one() -> i32 {
+    return 1;
+    // done
+}
+'''

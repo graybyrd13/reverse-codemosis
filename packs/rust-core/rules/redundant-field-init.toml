@@ -1,0 +1,58 @@
+id = "redundant-field-init"
+title = "Redundant field name in struct initializer"
+category = "simplification"
+semantics = "preserved"
+summary = "`${init}` can be written `${field}`: the field is initialised from a variable of the same name."
+explain = """
+In a struct expression, `Point { x: x }` and `Point { x }` are the same
+expression by definition (field init shorthand, Rust Reference §8.2.8).
+"""
+shape = '''
+(field_initializer
+  field: (field_identifier) @field
+  value: (identifier) @value
+  (#eq? @field @value)) @init
+'''
+focus = "@init"
+
+[fix]
+edits = [{ replace = "@init", with = "${field}" }]
+
+[[example]]
+before = '''
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    let x = 1;
+    let y = 2;
+    let p = Point { x: x, y: y };
+    println!("{} {}", p.x, p.y);
+}
+'''
+after = '''
+struct Point {
+    x: i32,
+    y: i32,
+}
+
+fn main() {
+    let x = 1;
+    let y = 2;
+    let p = Point { x, y };
+    println!("{} {}", p.x, p.y);
+}
+'''
+
+[[counterexample]]
+name = "fields from other names"
+code = '''
+struct Point { x: i32, y: i32 }
+
+fn swap(p: Point) -> Point {
+    let (x, y) = (p.x, p.y);
+    Point { x: y, y: x }
+}
+'''

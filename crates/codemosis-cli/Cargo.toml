@@ -1,0 +1,27 @@
+[package]
+name = "codemosis-cli"
+description = "The `codemosis` command: correct code the way a proof corrects an argument."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[[bin]]
+name = "codemosis"
+path = "src/main.rs"
+
+[dependencies]
+codemosis-core.workspace = true
+codemosis-engine.workspace = true
+anyhow.workspace = true
+clap.workspace = true
+serde_json.workspace = true
+toml.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+tempfile.workspace = true

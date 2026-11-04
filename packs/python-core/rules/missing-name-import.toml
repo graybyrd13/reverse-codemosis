@@ -1,0 +1,99 @@
+id = "missing-name-import"
+title = "Standard-library name used without being imported"
+category = "broken"
+semantics = "repaired"
+summary = "`${name}` is used but never imported; it can only be `${module}.${name}`."
+explain = """
+The file reads a name that nothing in the file defines, so Python raises
+NameError when the line runs (or when the module is imported, if the line is
+at module level or in an annotation).
+
+The repair is applied only when exactly one standard-library module exports
+that name (the pack's `stdlib_names` table lists only such names: `Path`
+from pathlib, `Optional` from typing, `dataclass` from dataclasses...), the
+file cannot create names at run time, and no other file in the project
+defines the name. Then `from module import name` is the only repair. When the
+file already imports other names from that module on one line, the name is
+added to that line.
+"""
+shape = "(identifier) @name"
+anchor = ["${name}"]
+where = [
+  "in_table('stdlib_names', text(@name))",
+  "py.is_reference(@name)",
+  "!py.bound(text(@name))",
+  "!py.builtin(text(@name))",
+  "!py.dynamic_names()",
+  "!py.defined_in_project(text(@name), lookup('stdlib_names', text(@name)))",
+]
+
+[let]
+module = "lookup('stdlib_names', text(@name))"
+
+[fix]
+edits = [{ add_import = "from ${module} import ${name}" }]
+
+[[example]]
+name = "adds a from-import"
+before = '''
+import json
+
+
+def config_dir(home):
+    return Path(home) / ".config"
+
+
+print(config_dir("/home/ada").as_posix())
+'''
+after = '''
+import json
+from pathlib import Path
+
+
+def config_dir(home):
+    return Path(home) / ".config"
+
+
+print(config_dir("/home/ada").as_posix())
+'''
+output = "/home/ada/.config\n"
+
+[[example]]
+name = "joins an existing from-import"
+before = '''
+from typing import List
+
+
+def first(items: List[int]) -> Optional[int]:
+    return items[0] if items else None
+
+
+print(first([]), first([7]))
+'''
+after = '''
+from typing import List, Optional
+
+
+def first(items: List[int]) -> Optional[int]:
+    return items[0] if items else None
+
+
+print(first([]), first([7]))
+'''
+output = "None 7\n"
+
+[[counterexample]]
+name = "the name is defined in the file"
+code = '''
+class Path:
+    pass
+
+print(Path())
+'''
+
+[[counterexample]]
+name = "the name is ambiguous in the standard library"
+code = '''
+def wait():
+    sleep(1)
+'''

@@ -1,0 +1,38 @@
+id = "fstring-without-placeholders"
+title = "f-string without placeholders"
+category = "waste"
+semantics = "preserved"
+summary = "${s} is an f-string with nothing to fill in."
+explain = """
+An f-string with no `{...}` placeholders is just a string with a misleading
+prefix: readers look for the interpolation that is not there. Removing the
+`f` gives an identical value, provided escaped braces are unescaped: in an
+f-string `{{` means one brace, in a plain string it means two.
+"""
+shape = "(string) @s"
+where = [
+  "matches(py.string_prefix(@s), 'f')",
+  "!contains(@s, 'interpolation')",
+]
+
+[fix]
+edits = [{ replace = "@s", with = "${s|drop_string_prefix:f|unescape_braces}" }]
+
+[[example]]
+before = '''
+print(f"Hello, world")
+print(f'{{literal}} braces')
+print(rf"C:\\temp")
+'''
+after = '''
+print("Hello, world")
+print('{literal} braces')
+print(r"C:\\temp")
+'''
+
+[[counterexample]]
+name = "an f-string with a placeholder"
+code = '''
+name = "Ada"
+print(f"Hello, {name}")
+'''

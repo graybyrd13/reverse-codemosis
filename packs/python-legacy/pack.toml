@@ -1,0 +1,15 @@
+[pack]
+id = "python-legacy"
+version = "0.1.0"
+language = "python"
+summary = "Python 2 constructs that have exactly one Python 3 equivalent."
+description = """
+Code copied from old answers and old repositories still carries Python 2
+syntax that Python 3 rejects or misreads. Each rule here repairs one such
+construct to its exact Python 3 form. Constructs whose Python 3 form is not
+exact (a print statement with a trailing comma, which relied on the removed
+soft-space mechanism) are left alone.
+"""
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

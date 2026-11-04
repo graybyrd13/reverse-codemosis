@@ -1,0 +1,53 @@
+id = "redundant-list-around-sorted"
+title = "list() around sorted()"
+category = "waste"
+semantics = "preserved"
+summary = "`${call}` copies a list that sorted() has just created."
+explain = """
+`sorted()` always returns a new list, so wrapping it in `list()` copies that
+list once more for nothing. The rule applies only when neither `list` nor
+`sorted` is redefined in the file.
+"""
+shape = '''
+(call
+  function: (identifier) @outer
+  arguments: (argument_list . (call function: (identifier) @inner_name) @inner .)
+  (#eq? @outer "list")
+  (#eq? @inner_name "sorted")) @call
+'''
+focus = "@call"
+where = [
+  "!py.bound('list')",
+  "!py.bound('sorted')",
+  "!py.dynamic_names()",
+]
+
+[fix]
+edits = [{ replace = "@call", with = "${inner}" }]
+
+[[example]]
+before = '''
+names = ["bob", "ada", "cy"]
+print(list(sorted(names)))
+print(list(sorted(names, key=len, reverse=True))[0])
+'''
+after = '''
+names = ["bob", "ada", "cy"]
+print(sorted(names))
+print(sorted(names, key=len, reverse=True)[0])
+'''
+
+[[counterexample]]
+name = "list() around something else"
+code = '''
+print(list(reversed([1, 2])))
+'''
+
+[[counterexample]]
+name = "sorted is redefined"
+code = '''
+def sorted(items):
+    return items
+
+print(list(sorted((3, 1))))
+'''

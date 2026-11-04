@@ -1,0 +1,38 @@
+id = "print-chevron"
+title = "Python 2 print to a file"
+category = "broken"
+semantics = "repaired"
+summary = "`${stmt}` is a Python 2 print statement writing to `${dest}`; Python 3 does not compile it."
+explain = """
+`print >>stream, a, b` writes to `stream`; in Python 3 that is
+`print(a, b, file=stream)`.
+"""
+shape = "(print_statement (chevron (_) @dest)) @stmt"
+where = [
+  "exists(@args)",
+  "!ends_with(text(@stmt), ',')",
+]
+
+[let]
+args = "field(@stmt, 'argument')"
+
+[fix]
+edits = [{ replace = "@stmt", with = "print(${args}, file=${dest})" }]
+
+[[example]]
+before = '''
+import sys
+print >>sys.stdout, "to", "stdout"
+'''
+after = '''
+import sys
+print("to", "stdout", file=sys.stdout)
+'''
+output = "to stdout\n"
+
+[[counterexample]]
+name = "Python 3 print to a file"
+code = '''
+import sys
+print("x", file=sys.stderr)
+'''

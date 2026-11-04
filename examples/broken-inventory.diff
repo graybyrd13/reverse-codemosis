@@ -1,0 +1,105 @@
+diff --git a/inventory/models.py b/inventory/models.py
+--- a/inventory/models.py
++++ b/inventory/models.py
+@@ -5,7 +5,6 @@
+ 
+ class InventoryError(Exception):
+     """Raised when an inventory operation is invalid."""
+-    pass
+ 
+ 
+ @dataclass
+@@ -28,7 +27,7 @@
+ 
+     @property
+     def discontinued(self):
+-        return self.status is "discontinued"
++        return self.status == "discontinued"
+ 
+     @property
+     def value(self):
+diff --git a/inventory/pricing.py b/inventory/pricing.py
+--- a/inventory/pricing.py
++++ b/inventory/pricing.py
+@@ -1,7 +1,5 @@
+ """Pricing rules for inventory items."""
+ 
+-import math
+-
+ DISCOUNTS = {
+     "bulk": 0.10,
+     "member": 0.05,
+@@ -13,7 +11,7 @@
+ def parse_rate(text):
+     try:
+         return float(text.strip().rstrip("%")) / 100
+-    except ValueError, error:
++    except ValueError as error:
+         raise ValueError("not a rate: %r" % text) from error
+ 
+ 
+diff --git a/inventory/report.py b/inventory/report.py
+--- a/inventory/report.py
++++ b/inventory/report.py
+@@ -1,6 +1,8 @@
+ """Reports over the inventory."""
+ 
++import csv
+ import io
++import json
+ 
+ from inventory.pricing import line_total
+ 
+@@ -24,7 +26,7 @@
+ 
+ def summary(store):
+     discontinued = [item for item in store.items() if item.discontinued]
+-    lines = [f"Inventory summary"]
++    lines = ["Inventory summary"]
+     lines.append(f"{len(store)} items, {len(discontinued)} discontinued")
+     return "\n".join(lines)
+ 
+diff --git a/inventory/store.py b/inventory/store.py
+--- a/inventory/store.py
++++ b/inventory/store.py
+@@ -1,8 +1,6 @@
+ """In-memory inventory store."""
+ 
+-import os
+-import sys
+-from typing import List
++from typing import List, Optional
+ 
+ from inventory.models import Item
+ 
+@@ -21,27 +19,23 @@
+         return list(self._items.values())
+ 
+     def add(self, item: Item) -> None:
+-        assert (item.quantity >= 0, "quantity must not be negative")
++        assert item.quantity >= 0, "quantity must not be negative"
+         self._items[item.sku] = item
+ 
+     def get(self, sku: str) -> Optional[Item]:
+         return self._items.get(sku)
+ 
+     def has_sku(self, sku: str) -> bool:
+-        if sku in self._items:
+-            return True
+-        else:
+-            return False
++        return sku in self._items
+ 
+     def remove(self, sku: str) -> Item:
+         if not self.has_sku(sku):
+             raise KeyError(sku)
+         return self._items.pop(sku)
+-        self._removed += 1
+ 
+     def low_stock(self, threshold: int = 5) -> List[Item]:
+         low = [item for item in self._items.values() if item.quantity < threshold]
+-        return list(sorted(low, key=lambda item: item.sku))
++        return sorted(low, key=lambda item: item.sku)
+ 
+     def restock(self, sku: str, amount: int, history=[]):
+         self._items[sku].quantity += amount

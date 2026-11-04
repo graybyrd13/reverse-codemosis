@@ -1,0 +1,86 @@
+id = "is-literal"
+title = "Identity comparison with a literal"
+category = "contradiction"
+semantics = "corrected"
+summary = "`${cmp}` asks whether two objects are the same object in memory, not whether they are equal."
+explain = """
+`is` compares object identity. Whether two equal numbers or strings are the
+same object is an accident of the interpreter: CPython caches small integers
+and interns some strings, so `x is 5` or `name is "admin"` can appear to work
+in a quick test and then fail for a value read from a file, parsed from
+input or built by string operations. CPython itself warns about it
+(SyntaxWarning: "is" with a literal).
+
+A literal has no identity anyone else can hold, so the only meaning the
+comparison can portably have is equality. The correction replaces `is` with
+`==` and `is not` with `!=`. `None`, `True`, `False` and `...` are
+singletons and are never touched.
+"""
+shape = '''
+[
+  (comparison_operator
+    (_) @left
+    operators: ["is" "is not"] @op
+    [(integer) (float) (string) (concatenated_string)] @literal)
+  (comparison_operator
+    [(integer) (float) (string) (concatenated_string)] @literal
+    operators: ["is" "is not"] @op
+    (_) @right)
+] @cmp
+'''
+focus = "@cmp"
+where = ["field_count(@cmp, 'operators') == 1"]
+references = ["https://docs.python.org/3/reference/expressions.html#is-not"]
+
+[let]
+replacement = "choose(text(@op) == 'is', '==', '!=')"
+
+[fix]
+edits = [{ replace = "@op", with = "${replacement}" }]
+
+[[example]]
+name = "a string built at run time"
+before = '''
+status = "".join(["act", "ive"])
+print(status is "active")
+print(status is not "active")
+'''
+after = '''
+status = "".join(["act", "ive"])
+print(status == "active")
+print(status != "active")
+'''
+output = "True\nFalse\n"
+output_before = "False\nTrue\n"
+
+[[example]]
+name = "a number parsed from text"
+before = '''
+count = int("1000")
+if 1000 is count:
+    print("match")
+else:
+    print("no match")
+'''
+after = '''
+count = int("1000")
+if 1000 == count:
+    print("match")
+else:
+    print("no match")
+'''
+output = "match\n"
+
+[[counterexample]]
+name = "singletons are compared by identity"
+code = '''
+value = None
+print(value is None, value is not True)
+'''
+
+[[counterexample]]
+name = "comparing two names is a real identity test"
+code = '''
+a = b = []
+print(a is b)
+'''

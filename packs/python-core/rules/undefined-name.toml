@@ -1,0 +1,51 @@
+id = "undefined-name"
+title = "Name that is never defined"
+category = "broken"
+summary = "`${name}` is not defined anywhere in this file; this line raises NameError when it runs."
+explain = """
+Nothing in the file binds this name: no import, assignment, parameter,
+function, class, loop variable or global declaration, and it is not a
+Python builtin. The file cannot create names at run time either. So every
+execution that reaches this line fails with NameError.
+
+No correction is applied because the fix depends on what was meant: a missing
+import from your own code, a typo for another name, or a variable that should
+have been assigned first. Reverse Codemosis imports standard-library names
+on its own only when exactly one module can provide them (see
+python-core/missing-module-import and python-core/missing-name-import).
+"""
+shape = "(identifier) @name"
+where = [
+  "py.is_reference(@name)",
+  "!py.bound(text(@name))",
+  "!py.builtin(text(@name))",
+  "!py.dynamic_names()",
+  "!(in_table('stdlib_names', text(@name)) && !py.defined_in_project(text(@name), lookup('stdlib_names', text(@name))))",
+  "!(in_table('stdlib_modules', text(@name)) && subset(py.attributes(text(@name)), table('stdlib_modules', text(@name))) && !py.defined_in_project(text(@name), text(@name)))",
+]
+
+[[example]]
+before = '''
+def total(prices):
+    return sum(prices) * (1 + tax_rate)
+'''
+
+[[example]]
+name = "a helper that was never imported"
+before = '''
+def report(rows):
+    return format_table(rows)
+'''
+
+[[counterexample]]
+name = "comprehension variables are bound"
+code = '''
+def total(prices):
+    return sum(price for price in prices)
+'''
+
+[[counterexample]]
+name = "fixable imports are left to the import rules"
+code = '''
+print(json.dumps({}))
+'''
