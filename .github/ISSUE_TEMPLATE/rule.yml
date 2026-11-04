@@ -1,0 +1,28 @@
+name: Rule proposal
+description: Propose a rule for a built-in pack.
+labels: ["rule"]
+body:
+  - type: input
+    id: pack
+    attributes:
+      label: Pack
+      placeholder: javascript-core
+  - type: textarea
+    id: bad
+    attributes:
+      label: The code it finds
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: fix
+    attributes:
+      label: The correction, if one can be proven
+      description: And the facts that make it safe. If intent decides, say what the rule should ask.
+  - type: textarea
+    id: counter
+    attributes:
+      label: Where it must stop
+      description: Code that looks similar but must not be changed.
+    validations:
+      required: true

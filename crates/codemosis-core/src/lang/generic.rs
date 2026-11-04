@@ -86,7 +86,8 @@ impl CommandRunner {
 
 impl Runner for CommandRunner {
     fn describe(&self) -> String {
-        self.run.last().and_then(|s| s.first()).unwrap_or(&"?").to_string()
+        // The compiler or interpreter: the first program the steps start.
+        self.run.first().and_then(|s| s.first()).unwrap_or(&"?").to_string()
     }
 
     fn compile(&self, code: &str) -> RunOutcome {

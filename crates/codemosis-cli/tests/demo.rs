@@ -457,3 +457,61 @@ fn json_schemas_are_current() {
         );
     }
 }
+
+#[test]
+fn language_matrix_is_current() {
+    let out = Command::new(env!("CARGO_BIN_EXE_codemosis"))
+        .args(["languages", "--format", "markdown"])
+        .output()
+        .unwrap();
+    assert!(out.status.success());
+    let fresh = String::from_utf8(out.stdout).unwrap();
+    let path = workspace().join("docs/LANGUAGES.md");
+    if std::env::var("UPDATE_GOLDEN").is_ok_and(|v| v == "1") {
+        fs::write(&path, &fresh).unwrap();
+    }
+    assert_eq!(
+        fs::read_to_string(&path).unwrap_or_default(),
+        fresh,
+        "docs/LANGUAGES.md is stale; run `codemosis languages --format markdown > docs/LANGUAGES.md`"
+    );
+    let json = Command::new(env!("CARGO_BIN_EXE_codemosis"))
+        .args(["languages", "--format", "json"])
+        .output()
+        .unwrap();
+    let v: Value = serde_json::from_slice(&json.stdout).unwrap();
+    assert_eq!(v["schema"], "codemosis/languages/v1");
+    let python = v["languages"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|l| l["name"] == "Python")
+        .unwrap();
+    assert_eq!(python["tier"], "deep");
+    assert!(python["grammar"]["version"].is_string());
+}
+
+#[test]
+fn every_new_pack_template_passes_its_proofs_and_the_linter() {
+    let tmp = tempfile::tempdir().unwrap();
+    let mut languages: Vec<String> = codemosis_core::lang::all().iter().map(|l| l.id().to_string()).collect();
+    languages.push("*".into());
+    for lang in languages {
+        let id = format!("p-{}", if lang == "*" { "text" } else { &lang });
+        let dir = tmp.path().join(&id);
+        let run = |args: &[&str]| {
+            Command::new(env!("CARGO_BIN_EXE_codemosis"))
+                .args(args)
+                .args(["--color", "never"])
+                .output()
+                .unwrap()
+        };
+        let d = dir.to_str().unwrap();
+        let out = run(&["pack", "new", d, "--id", &id, "--language", &lang]);
+        assert!(out.status.success(), "{lang}: {}", String::from_utf8_lossy(&out.stderr));
+        let out = run(&["pack", "test", d]);
+        assert!(out.status.success(), "{lang}: {}", String::from_utf8_lossy(&out.stdout));
+        let out = run(&["pack", "lint", d, "--deny-warnings"]);
+        assert!(out.status.success(), "{lang}: {}", String::from_utf8_lossy(&out.stdout));
+    }
+}

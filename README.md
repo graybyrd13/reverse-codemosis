@@ -243,6 +243,12 @@ bisects to find the one at fault, rejects that one with its evidence, and
 keeps the rest. Rule proofs cover what the rule's semantic model covers; the
 oracle covers everything else, such as a test that reads source text.
 
+Whatever a rule says, the engine also refuses to delete a comment, to change
+what a name refers to anywhere outside the edit (Python), and to touch code
+a build cannot verify: inside `#if` blocks, behind a Rust `#[cfg(...)]`, in
+macro bodies, or where the grammar could not parse the code. Each of these
+guards has an adversarial case in the [soundness suite](crates/codemosis-engine/tests/soundness.rs).
+
 ### Refusing to guess
 
 Where a correction cannot be proven, the tool does not improvise. It reports
@@ -262,6 +268,51 @@ examples of what that means in practice:
   Python 3.14 that is valid code catching two exception types.
 - `go-core/fixed-wait` only asks about a `time.Sleep` when removing it would
   not leave the `time` import unused, which Go refuses to compile.
+
+## Proof you can check
+
+Every `codemosis fix` that changes code writes a certificate to
+`.codemosis/proofs/`: the packs (by content hash) and the answers each step
+relied on, each step's exact patch, and the build and test results.
+
+```console
+$ codemosis proof verify .codemosis/proofs/2026-11-04-343c7cc839d8.json
+  ✓ the certificate is intact (its digest matches its content)
+  ✓ inventory/store.py is as the correction left it
+  ✓ inventory/store.py: the original is recovered from the patch
+  ✓ step 1 (python-core/missing-module-import) reproduces exactly
+  ...
+  ✓ step 11 (python-core/return-bool-if) reproduces exactly
+
+Verified: the change is exactly what the pinned rules prove.
+```
+
+Verification trusts nothing in the certificate: it recovers the original
+code from the patch and replays every step with the pinned rules, byte for
+byte. Reviewers no longer have to take the tool's word for a diff.
+
+## In CI and in your editor
+
+```yaml
+- uses: graybyrd13/reverse-codemosis@main
+  with:
+    fail-on: warning     # the gate
+    sarif: true          # GitHub code scanning
+    review: true         # proven corrections as suggested changes on the PR
+```
+
+- **CI**: SARIF 2.1.0, GitLab Code Quality, GitHub annotations and job
+  summaries, pull-request suggestions, pre-commit hooks, and JSON with
+  versioned schemas. Every finding has a stable fingerprint.
+- **Adoption**: `codemosis baseline` accepts today's findings so only new
+  ones fail; `# codemosis: ignore[rule] reason until=2027-01-31` and
+  `[[suppress]]` entries accept one with a reason and an expiry date;
+  `[severity]` and `--fail-on` set the bar; `codemosis lock` pins packs.
+- **Editors**: `codemosis lsp` publishes findings as you type, explains
+  them on hover, offers proven corrections as quick fixes, and records your
+  answers to questions.
+
+See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
 
 ## What it refuses to do
 
@@ -293,11 +344,23 @@ $ git diff                                    # read it
 | `codemosis languages` | Every language GitHub knows, with how deeply each is understood. |
 | `codemosis explain RULE` | What a rule finds, why, the facts it needs and its proof. |
 | `codemosis rules` | List the rules of every pack. |
-| `codemosis pack test [DIR]` | Run a pack's self-tests (the built-in packs by default). |
-| `codemosis pack new DIR --id ID` | Start a pack from a working template. |
+| `codemosis baseline [PATH]` | Accept today's findings; `check --baseline` then fails only on new ones. |
+| `codemosis lock [PATH]` | Pin every pack by content hash in `codemosis.lock`. |
+| `codemosis proof verify CERT` | Re-derive a recorded change by replaying it with the pinned rules. |
+| `codemosis doctor [PATH]` | Check configuration, packs, lockfile, oracle and toolchains. |
+| `codemosis lsp` | The language server, for editors. |
+| `codemosis pack test [DIR]` | Run a pack's proofs (the built-in packs by default); `--mutations` finds unproven facts. |
+| `codemosis pack lint [DIR]` | Find weaknesses in packs that still load. |
+| `codemosis pack docs [DIR]` | Generate reference pages from the rules and their proofs. |
+| `codemosis pack new DIR --id ID` | Start a pack from a working template, for any grammar or `"*"`. |
 | `codemosis tree FILE` | Print a file's syntax tree, to help write shapes. |
 | `codemosis facts` | The fact vocabulary, template filters and edit operations. |
+| `codemosis schema [NAME]` | JSON Schemas for every file format. |
 | `codemosis init` | Write a `codemosis.toml` with the detected build and test commands. |
+
+`check` takes `--format text|json|markdown|sarif|gitlab|github|review`,
+`--fail-on`, `--baseline`, `--diff` (the proven corrections, unverified) and
+`--timings`. Every command takes `--log debug|trace`.
 
 `fix` works in place, so by default it refuses to run on a dirty working
 tree: `git diff` then shows exactly what Reverse Codemosis did, and
@@ -305,7 +368,8 @@ tree: `git diff` then shows exactly what Reverse Codemosis did, and
 
 ## Built-in packs
 
-16 packs, 62 rules, 365 self-test checks.
+16 packs, 62 rules, 377 self-test checks. Each pack has a generated
+reference page in [docs/packs](docs/packs/README.md).
 
 | Pack | Covers |
 |---|---|
@@ -336,16 +400,24 @@ tree: `git diff` then shows exactly what Reverse Codemosis did, and
 
 ## Project status
 
-This is the foundation: the engine, the pack format and its proof system,
-the verification loop, language identification for everything GitHub knows,
-17 deep languages, 16 packs and two demonstrations. See
-[docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
+The engine, the pack format and its proof system, the verification loop,
+every language GitHub knows (17 deep), 16 packs, CI and editor
+integrations, proof certificates, soundness guards and two demonstrations.
+Before 1.0, minor releases may break compatibility, always with a
+changelog entry and a migration ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)).
+See [docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md): how the engine is put together
-- [docs/PACK_FORMAT.md](docs/PACK_FORMAT.md): how to write a fix pack
-- [docs/SEMANTICS.md](docs/SEMANTICS.md): what "proven" means here, precisely
-- [docs/FACTS.md](docs/FACTS.md): the fact vocabulary reference
-- [CONTRIBUTING.md](CONTRIBUTING.md): how to contribute rules and code
+| To... | Read |
+|---|---|
+| write your first rule | [docs/TUTORIAL.md](docs/TUTORIAL.md), then [docs/PACK_FORMAT.md](docs/PACK_FORMAT.md) |
+| set up CI, editors, shells | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
+| know what "proven" means, precisely | [docs/SEMANTICS.md](docs/SEMANTICS.md) |
+| see what each language gets | [docs/LANGUAGES.md](docs/LANGUAGES.md) |
+| look up a fact or a rule | [docs/FACTS.md](docs/FACTS.md), [docs/packs](docs/packs/README.md) |
+| understand the code | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| assess the risks | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), [SECURITY.md](SECURITY.md) |
+| contribute or take part | [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md), [rfcs](rfcs/README.md) |
+| cut a release | [docs/RELEASING.md](docs/RELEASING.md), [CHANGELOG.md](CHANGELOG.md) |
 
 ## Why it matters
 

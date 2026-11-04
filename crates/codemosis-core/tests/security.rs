@@ -56,6 +56,7 @@ fn pack_example_paths_cannot_escape() {
 
 #[test]
 fn findings_never_print_a_secret() {
+    // codemosis: ignore[universal/private-key] a test fixture for redaction, not a key
     let key = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQ\n-----END OPENSSH PRIVATE KEY-----\n";
     let project = Project::in_memory(vec![SourceFile::new("deploy/key.txt", key.to_string())]);
     let packs = pack::builtin().unwrap();

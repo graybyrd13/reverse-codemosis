@@ -5,8 +5,10 @@ shape appears and these facts hold, this correction is safe, and here is the
 proof*. Packs are plain TOML; no Rust is needed to write one.
 
 ```console
-$ codemosis pack new my-pack --id my-pack --language python
-$ codemosis pack test my-pack
+$ codemosis pack new my-pack --id my-pack --language python   # any grammar, or "*"
+$ codemosis pack test my-pack            # run every proof
+$ codemosis pack lint my-pack            # find weak spots
+$ codemosis pack test my-pack --mutations
 $ codemosis check --pack my-pack path/to/project
 ```
 
@@ -34,7 +36,13 @@ description = "Optional longer text."
 authors = ["Ada <ada@example.com>"]
 license = "MIT OR Apache-2.0"
 homepage = "https://example.com"   # optional
+engine = "^0.1"                # the engine versions this pack works with
+# deprecated = "superseded by better-pack"   # optional
 ```
+
+`engine` takes comparators such as `^0.1`, `>=0.1, <0.3` or `=0.2.1`. An
+engine outside the range refuses the pack with a message instead of
+misreading it.
 
 Rule ids are qualified by the pack id: `my-pack/double-negation`.
 
@@ -99,6 +107,10 @@ print(not [])
 | `fix` | no | The correction: `edits = [...]`. Without it the rule only explains. |
 | `ask` | no | `question = "template"`: the correction needs a fact only a human has. Phrase it so that "yes" applies the correction, or give named [options](#questions). |
 | `references` | no | Links to documentation backing the rule. |
+| `tags` | no | Free-form labels (`"timing"`, `"readability"`), shown in reports and SARIF. |
+| `cwe` | no | Common Weakness Enumeration ids the rule addresses (`["CWE-396"]`); SARIF consumers use them for security views. |
+| `deprecated` | no | Why the rule should no longer be used. It still runs; `explain`, `rules`, SARIF and pack docs say so. |
+| `replaced_by` | no | The qualified id of the rule that replaces a deprecated one. |
 | `example` | yes, at least one | Proof that the rule does what it says (below). |
 | `counterexample` | yes, at least one | Proof of where the rule stops. |
 
@@ -337,6 +349,28 @@ Use them with `in_table('name', key)`, `table('name', key)` (a list) and
 `lookup('name', key)` (the first string). Every entry is a claim the engine
 trusts, so every entry must be exact. Leaving something out is always safe.
 
+## Checking a pack
+
+Loading a pack rejects anything that would make a rule wrong or
+unrunnable. Three commands go further:
+
+- `codemosis pack test` runs every proof (above).
+- `codemosis pack lint` reports what makes a rule weak: captures nobody
+  reads (often a forgotten fact; prefix structural ones with `_`), unused
+  `let` values and tables, two rules with the same shape, semantics no
+  example runs, a `corrected` rule without an expected output, explanations
+  under 120 characters, questions with no way to keep the code, missing
+  `engine` ranges. `--deny-warnings` makes warnings fail.
+- `codemosis pack test --mutations` removes each `where` fact in turn and
+  reruns the proofs. A fact whose removal no check notices is unproven: add
+  the counterexample that needs it, or remove the fact.
+- `codemosis pack docs --output DIR` writes a reference page per pack,
+  generated from the rules and their proofs (the built-in ones are in
+  [docs/packs](packs/README.md)).
+
+Editors with a TOML language server can validate rules as you type with
+`schemas/rule.schema.json` and `schemas/pack.schema.json`.
+
 ## Using a pack
 
 ```console
@@ -350,6 +384,12 @@ or permanently, in the project's `codemosis.toml`:
 [packs]
 paths = ["../my-pack"]
 ```
+
+`codemosis lock` pins every pack the project uses by SHA-256 in
+`codemosis.lock`; from then on a pack whose files changed does not load
+until the change is reviewed and `codemosis lock` is run again. Built-in
+packs are pinned too, so an engine upgrade that changes them is a visible,
+reviewed change.
 
 ## The bar for a rule
 

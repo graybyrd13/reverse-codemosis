@@ -1,0 +1,37 @@
+name: A correction made code worse
+description: Reverse Codemosis applied or proposed a change that is wrong. This is the most serious kind of bug.
+labels: ["soundness", "bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you. A wrong correction breaks the project's core promise, so these reports come first.
+        If the change has security consequences, report it privately instead (see SECURITY.md).
+  - type: input
+    id: rule
+    attributes:
+      label: Rule
+      placeholder: python-core/unreachable-code
+    validations:
+      required: true
+  - type: textarea
+    id: before
+    attributes:
+      label: The code before
+      description: The smallest code that reproduces it.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: after
+    attributes:
+      label: The correction, and why it is wrong
+      description: The diff, and what behaves differently.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: codemosis --version
+    validations:
+      required: true

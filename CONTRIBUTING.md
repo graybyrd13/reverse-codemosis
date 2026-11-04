@@ -7,8 +7,11 @@ guide covers rules (the most valuable contribution) and engine code.
 
 ```console
 $ cargo build
-$ cargo test --workspace          # unit tests, the demo proof, pack self-tests
+$ cargo test --workspace          # unit, soundness, conformance, property, LSP and demo tests
 $ cargo run -q -- pack test       # the built-in packs' proofs, in detail
+$ cargo run -q -- pack lint --deny-warnings
+$ cargo run -q -- pack test --mutations   # which facts the proofs actually need
+$ cargo run -q -- doctor          # what is installed and what is missing
 $ scripts/demo.sh                 # the proof, end to end
 ```
 
@@ -77,7 +80,21 @@ The language list itself comes from Linguist; see
 
 - Keep the acceptance contract intact (see
   [docs/SEMANTICS.md](docs/SEMANTICS.md)). A change that could let a step
-  through that makes the code worse needs a test proving it cannot.
+  through that makes the code worse needs a test proving it cannot, in the
+  soundness suite (`crates/codemosis-engine/tests/soundness.rs`): an
+  adversarial rule or input that must be refused, pinned to the guard that
+  refuses it.
+- New grammars must pass the conformance suite
+  (`crates/codemosis-core/tests/conformance.rs`) with a corpus in
+  `crates/codemosis-core/tests/corpus/<id>/`.
+- Parsers and text machinery have property tests
+  (`crates/codemosis-core/tests/properties.rs`); run them harder with
+  `CODEMOSIS_PROPTEST_CASES=50000`.
+- Changes to formats, schemas, fingerprints or the fact vocabulary's
+  guarantees need an RFC ([GOVERNANCE.md](GOVERNANCE.md)) and must follow
+  [docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+- Generated files (docs/FACTS.md, docs/LANGUAGES.md, docs/packs/, schemas/)
+  are checked by tests; regenerate them with `UPDATE_GOLDEN=1` as below.
 - If a change alters a demo's output, review `examples/broken-inventory.diff`
   and `examples/flaky-checkout.diff` line by line and regenerate them with
   `UPDATE_GOLDEN=1 cargo test -p codemosis-cli --test demo`.

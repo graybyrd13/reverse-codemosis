@@ -1,25 +1,31 @@
 # Architecture
 
 ```text
-            ┌───────────────────────── codemosis-cli ─────────────────────────┐
-            │ check · fix · ask · answer · explain · map · languages · rules  │
-            │ pack test/new · tree · facts · init                             │
-            └───────────────┬─────────────────────────────────┬───────────────┘
-                            │                                 │
-            ┌───────── codemosis-engine ─────────┐   ┌── codemosis-core ─────────────┐
-            │ Workspace   config, packs, answers │   │ model    findings, distance   │
-            │ Session     the correction loop    │──▶│ pack     manifest + rules     │
-            │ Oracle      build + test commands  │   │ rule     compile, match, edit │
-            │ testparse   per-test results       │   │ expr     the fact language    │
-            │ answers     the human-facts ledger │   │ eval     fact vocabulary      │
-            │ report      text, markdown, json   │   │ template rewrite templates    │
-            │ vcs         clean-tree check       │   │ lang     17 grammars          │
-            └────────────────────────────────────┘   │ linguist 845 languages        │
-                                                     │ lex      code/comment/string  │
-                                                     │ project  every source file    │
-                                                     │ selftest pack proofs          │
-                                                     └───────────────────────────────┘
-                                     packs/  (embedded at build time by build.rs)
+ ┌──────────────────────────────── codemosis-cli ─────────────────────────────────┐
+ │ check · fix · ask · answer · explain · map · languages · rules · baseline      │
+ │ lock · proof verify · doctor · lsp · pack test/lint/docs/new · schema · tree   │
+ │ facts · init · completions · man          (lsp.rs, doctor.rs, packdocs.rs ...) │
+ └───────────────┬──────────────────────────────────────────────┬─────────────────┘
+                 │                                              │
+ ┌──────── codemosis-engine ───────────┐   ┌────────── codemosis-core ─────────────┐
+ │ Workspace  config, packs, policy    │   │ model     findings, status, distance  │
+ │ Session    the correction loop      │──▶│ pack      manifest, rules, digests    │
+ │ Oracle     build + test commands    │   │ rule      compile, match, edit, scan  │
+ │ testparse  per-test results         │   │ expr/eval the fact language           │
+ │ policy     suppress, severity, gate │   │ template  rewrite templates           │
+ │ ci         SARIF, GitLab, GitHub    │   │ lang      17 grammars, bindings       │
+ │ proof      certificates + replay    │   │ linguist  845 languages, detection    │
+ │ patch      exact unified diffs      │   │ lex       code/comment/string         │
+ │ lock       pinned packs             │   │ guards    unverifiable regions        │
+ │ audit      decision log             │   │ suppress  inline ignores, dates       │
+ │ fsguard    confined writes          │   │ redact    secrets out of output       │
+ │ answers    the human-facts ledger   │   │ selftest  proofs, mutation testing    │
+ │ report     text, markdown           │   │ lint      pack weaknesses             │
+ │ vcs        clean-tree check         │   │ parallel  ordered multi-core map      │
+ └─────────────────────────────────────┘   │ project   every file, tier, role      │
+                                           │ version   engine ranges · log         │
+                                           └───────────────────────────────────────┘
+                  packs/  (embedded at build time by build.rs, with data/linguist)
 ```
 
 ## codemosis-core
@@ -74,8 +80,20 @@ changing anything on disk.
   definition kinds, import convention and a `CommandRunner` for its
   toolchain.
 - **`selftest`**: the pack proofs: rewrite to a fixpoint, compare with
-  `after`, check idempotence, run before and after with the language runner
-  to check the semantics claim, and check counterexamples.
+  `after`, check idempotence and binding preservation, run before and after
+  with the language runner to check the semantics claim, and check
+  counterexamples. `mutants()` removes each fact in turn for mutation
+  testing.
+- **`guards`**: regions no edit may touch: conditional compilation, Rust
+  `#[cfg]` items and macro bodies, constructs with parse errors.
+- **`suppress`**: inline `codemosis: ignore[...]` markers, with reasons,
+  owners and expiry dates, applied in every scan.
+- **`redact`**: masks credentials in every message, excerpt and report diff.
+- **`lint`**: what makes a rule weak although it loads.
+- **`parallel`**: a dependency-free work queue; files are read, parsed and
+  matched on every core and results keep input order.
+- **`version`**: engine version requirements for packs. **`log`**: the
+  `--log debug|trace` diagnostics.
 
 ## codemosis-engine
 
@@ -113,6 +131,15 @@ changing anything on disk.
   of the rule's options.
 - **`report`**: terminal output (compiler-style findings), Markdown (for a
   pull request) and JSON (the whole `Report`, serialised).
+- **`policy`**: `[[suppress]]`, `[severity]`, `[policy] fail_on` and
+  baselines. **`ci`**: SARIF 2.1.0, GitLab Code Quality, GitHub annotations,
+  job summaries and pull-request reviews with suggested changes.
+- **`proof`**: certificates written by `fix` and verified by replay;
+  **`patch`** writes and reverses exact unified diffs; **`lock`** pins packs
+  by content; **`audit`** appends every decision to `.codemosis/log.jsonl`;
+  **`fsguard`** confines every write to the project.
+- The `Workspace` reads the project first and compiles only the packs for
+  the grammars it contains (plus text packs), so start-up stays fast.
 
 ## codemosis-cli
 
@@ -124,7 +151,10 @@ changing anything on disk.
 - **`map`**: `codemosis map` is the project as the engine sees it: every
   language with its tier and file count, the oracle it detected, and the
   distance per category.
-- **`scaffold`**: `codemosis pack new` and `codemosis init`.
+- **`scaffold`**: `codemosis pack new` (a working starter rule for every
+  grammar and for text packs) and `codemosis init`.
+- **`lsp`**: the language server. **`doctor`**: the environment check.
+  **`packdocs`**: generated pack reference pages.
 
 ## Adding a language
 

@@ -138,8 +138,10 @@ mod tests {
 
     #[test]
     fn masks_private_key_bodies_in_diffs() {
+        // codemosis: ignore[universal/private-key] a test fixture for redaction, not a key
         let diff = "+-----BEGIN RSA PRIVATE KEY-----\n+MIIEowIBAAKCAQEA+xyz\n+-----END RSA PRIVATE KEY-----\n";
         let r = redact(diff);
+        // codemosis: ignore[universal/private-key] a test fixture for redaction, not a key
         assert!(r.contains("+-----BEGIN RSA PRIVATE KEY-----"), "{r}");
         assert!(r.contains("\n+********************\n"), "{r}");
         assert!(!r.contains("MIIE"), "{r}");

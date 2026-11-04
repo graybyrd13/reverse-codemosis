@@ -1,0 +1,26 @@
+name: Language support
+description: Ask for a language to be understood more deeply (lexical or deep tier), or report a misdetection.
+labels: ["language"]
+body:
+  - type: input
+    id: language
+    attributes:
+      label: Language (as GitHub names it)
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Request
+      options:
+        - Comment and string syntax (lexical tier)
+        - A grammar (deep tier)
+        - A file is detected as the wrong language
+        - A wait idiom or other table entry
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: Sample files, the grammar crate if one exists, the misdetected file name and content.

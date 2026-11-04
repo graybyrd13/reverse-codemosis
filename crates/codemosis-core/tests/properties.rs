@@ -130,6 +130,7 @@ fn redaction_keeps_shape_and_is_idempotent() {
         " = ",
         "\"",
         "'",
+        // codemosis: ignore[universal/private-key] a test fixture for redaction, not a key
         "-----BEGIN RSA PRIVATE KEY-----",
         "-----END RSA PRIVATE KEY-----",
         "\n",

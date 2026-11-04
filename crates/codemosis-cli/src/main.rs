@@ -214,6 +214,9 @@ enum Command {
         /// Only languages understood at this depth: deep, lexical or recognized.
         #[arg(long)]
         tier: Option<String>,
+        /// text, or the full compatibility matrix as json or markdown.
+        #[arg(long, default_value = "text", value_parser = ["text", "json", "markdown"])]
+        format: String,
     },
     /// Print the syntax tree of a file, to help write rule shapes.
     Tree { file: PathBuf },
@@ -494,8 +497,12 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             print!("{}", map::render(&ws, &display_root(&root), s));
             Ok(ExitCode::SUCCESS)
         }
-        Command::Languages { search, tier } => {
-            print!("{}", map::languages(search.as_deref(), tier.as_deref(), s)?);
+        Command::Languages { search, tier, format } => {
+            match format.as_str() {
+                "json" => print!("{}", map::languages_json()?),
+                "markdown" => print!("{}", map::languages_markdown()?),
+                _ => print!("{}", map::languages(search.as_deref(), tier.as_deref(), s)?),
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Answer { id, answer, path, note } => answer_cmd(&id, &answer, &path, note, s),

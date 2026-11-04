@@ -132,7 +132,52 @@ A step on a real project is kept only if:
 5. no test that passed before stops passing, is skipped, or disappears.
 
 The engine also refuses any correction that would overlap another or delete
-a comment.
+a comment, and three more, whatever a rule says:
+
+- **Binding preservation** (Python, which has a full scope analysis): every
+  reference outside the edited text must resolve to the same binding after
+  the correction as before. Deleting the only local assignment of a name,
+  inserting a definition that shadows a builtin, or removing an import that
+  something still reads is refused. A name that resolved to nothing may
+  become bound only by a `repaired` rule, which is what adding a missing
+  import does. The check runs in every correction step and in every pack
+  self-test.
+- **Code a build cannot see.** A build checks one configuration, so the
+  engine does not edit inside `#if`/`#ifdef` blocks (C, C++, C#,
+  Objective-C, Swift; include guards excepted), items behind a Rust
+  `#[cfg(...)]` other than `cfg(test)`, or macro bodies, whose token trees
+  are not parsed as code. Such a correction could never be verified.
+- **Code the grammar could not parse.** No edit touches a construct that
+  contains a parse error, because its structure is unknown; `check` lists
+  those places. `repaired` rules are the exception: their purpose is to fix
+  code that does not parse, and the step must still leave no new error.
+
+Each guard has a case in the soundness regression suite
+(`crates/codemosis-engine/tests/soundness.rs`): a rule or input built to
+trick the engine, which must be refused.
+
+## Proof certificates
+
+Every `codemosis fix` that changes code writes a certificate to
+`.codemosis/proofs/`: the packs (by content hash) and human answers each
+step relied on, each step's exact patch, every file's hash before and
+after, and the oracle's results. `codemosis proof verify` checks it without
+trusting its author: it recovers the original code from the current files
+and the patch, replays every step with the pinned rules, and checks that
+each reproduces the recorded change byte for byte. A verified certificate
+says the diff is exactly what those reviewed rules prove, given those
+recorded answers. What it cannot re-establish is the oracle's verdict; the
+recorded test counts are evidence to re-run, not a proof.
+
+## Human decisions about findings
+
+People can also decide that a finding should not be reported: an inline
+`codemosis: ignore[rule] reason` comment, or a `[[suppress]]` entry with a
+mandatory reason. Both can carry an expiry date (`until=`), after which the
+finding comes back with a note. A baseline accepts today's findings so that
+only new ones fail a check. None of these hides a finding from the record:
+SARIF reports suppressed findings as suppressed, with the justification,
+and `check --show-suppressed` lists them with who decided and why.
 
 ## What is not claimed
 

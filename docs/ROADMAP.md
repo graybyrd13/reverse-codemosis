@@ -1,39 +1,43 @@
 # Roadmap
 
-The foundation is in place: the engine, the pack format and its proof system,
-the verification loop, every language GitHub knows in three tiers, questions
-with named answers, and two demonstrations. What follows is ordered by how
-much it strengthens correction, which comes before anything else.
+The engine, the pack format and its proof system, the verification loop,
+every language GitHub knows in three tiers, questions with named answers,
+CI and editor integrations, proof certificates and the soundness guards are
+in place. What follows is ordered by how much it strengthens correction,
+which comes before everything else.
 
 ## Next
 
+- **Prove more facts necessary.** `codemosis pack test --mutations`
+  reports 52 of 140 facts in the built-in packs as proven necessary by a
+  counterexample. Every unproven fact gets a counterexample or is removed;
+  releases may not lower the number.
+- **Binding analysis beyond Python.** JavaScript/TypeScript, Go, Java and
+  Rust scope graphs, so their packs can prove removals and renames and the
+  binding-preservation guard covers them.
 - **Compiler diagnostics as facts.** Read `rustc --error-format=json`,
-  `tsc`, `mypy` and friends. A machine-applicable suggestion with a unique
-  resolution becomes a proven correction; a suggestion the compiler itself
-  marks uncertain becomes a question. Packs can then match on diagnostics as
-  well as on shapes.
-- **Deeper facts for the new grammars.** JavaScript, Go, Java and the
-  others have shapes and runners; scope analysis like Python's would let
-  their packs prove removals and renames, not only local rewrites.
-- **Type-aware facts.** Many corrections are blocked only because a fact
-  such as "this operand is a str" cannot be established syntactically.
-  Facts backed by a type checker would unlock them while staying
-  conservative.
-- **Multi-file examples.** Let pack examples describe several files, so
-  cross-file facts (`py.imported_elsewhere`, `py.defined_in_project`) are
-  proven in packs, not only in engine tests.
-- **CI mode.** `codemosis check --fail-on contradiction` and SARIF output, so
-  the distance can be held at zero in a pipeline.
+  `tsc`, `mypy` and friends; a machine-applicable suggestion with a unique
+  resolution becomes a proven correction, an uncertain one a question.
+- **Type-aware facts**, backed by a type checker, to unlock corrections
+  that are blocked only because a type cannot be established syntactically.
+- **Multi-file examples** in packs, so cross-file facts are proven in packs
+  and not only in engine tests.
 
 ## Later
 
-- **Pack registry.** Discover, version, sign and share packs; pin pack
-  versions in `codemosis.toml`.
-- **Incremental scans** for large repositories, re-analysing only what a
-  step touched.
-- **Editor integration** through the Language Server Protocol: findings,
-  questions and proven corrections where the code is written.
-- **Structural corrections** across files: moving a definition, splitting a
+- **Incremental analysis and a content-addressed cache** keyed by file
+  hash, grammar, pack digest and engine version, for monorepos and for a
+  `codemosis watch` daemon that keeps findings current between commands.
+- **Pack registry**: discovery, signed releases (the lockfile already pins
+  content), compatibility checks against engine ranges, security review.
+- **Constraint checking with an SMT solver** for facts that are arithmetic
+  or boolean in nature, with counterexamples reported like any other
+  refusal.
+- **Out-of-tree grammars** through a stable plugin interface (WebAssembly,
+  with no host access), so the deep tier can grow without rebuilding.
+- **A playground** in the browser: paste code, pick packs, see facts,
+  findings and proofs.
+- **Structural corrections across files**: moving a definition, splitting a
   module, each step still verified.
 
 ## Much later
