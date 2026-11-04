@@ -6,12 +6,15 @@
 //! step that would make the code worse.
 
 pub mod answers;
+pub mod audit;
 pub mod ci;
 pub mod config;
 pub mod fsguard;
 pub mod lock;
 pub mod oracle;
+pub mod patch;
 pub mod policy;
+pub mod proof;
 pub mod report;
 pub mod session;
 pub mod testparse;

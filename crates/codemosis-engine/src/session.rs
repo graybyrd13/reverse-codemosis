@@ -59,6 +59,17 @@ pub struct Step {
     pub files: Vec<String>,
     pub diff: String,
     pub oracle: Option<StepOracle>,
+    /// Each touched file before and after the step, exactly (unredacted),
+    /// for proof certificates.
+    #[serde(skip)]
+    pub changes: Vec<FileChange>,
+}
+
+#[derive(Clone, Debug)]
+pub struct FileChange {
+    pub path: String,
+    pub before: String,
+    pub after: String,
 }
 
 /// A correction that failed the acceptance contract, with the evidence.
@@ -125,16 +136,83 @@ fn non_overlapping(group: Vec<Finding>) -> Vec<Finding> {
     chosen
 }
 
+/// A git-style unified diff with three lines of context.
+///
+/// Hunk headers are computed by counting the lines actually emitted, so the
+/// diff always applies with `git apply` and with [`crate::patch`].
 pub fn unified_diff(path: &str, old: &str, new: &str) -> String {
+    use similar::ChangeTag;
+    use std::fmt::Write as _;
     if old == new {
         return String::new();
     }
-    let body = similar::TextDiff::from_lines(old, new)
-        .unified_diff()
-        .context_radius(3)
-        .header(&format!("a/{path}"), &format!("b/{path}"))
-        .to_string();
-    format!("diff --git a/{path} b/{path}\n{body}")
+    const CONTEXT: usize = 3;
+    let diff = similar::TextDiff::from_lines(old, new);
+    let changes: Vec<(char, &str)> = diff
+        .iter_all_changes()
+        .map(|c| {
+            let tag = match c.tag() {
+                ChangeTag::Equal => ' ',
+                ChangeTag::Delete => '-',
+                ChangeTag::Insert => '+',
+            };
+            (tag, c.value())
+        })
+        .collect();
+    // Line numbers (1-based) on each side before each change.
+    let mut old_no = Vec::with_capacity(changes.len());
+    let mut new_no = Vec::with_capacity(changes.len());
+    let (mut o, mut n) = (1usize, 1usize);
+    for (tag, _) in &changes {
+        old_no.push(o);
+        new_no.push(n);
+        match tag {
+            ' ' => {
+                o += 1;
+                n += 1;
+            }
+            '-' => o += 1,
+            _ => n += 1,
+        }
+    }
+    let changed: Vec<usize> = (0..changes.len()).filter(|i| changes[*i].0 != ' ').collect();
+    let mut out = format!("diff --git a/{path} b/{path}\n--- a/{path}\n+++ b/{path}\n");
+    let mut k = 0;
+    while k < changed.len() {
+        let start = changed[k].saturating_sub(CONTEXT);
+        let mut end = changed[k];
+        while k + 1 < changed.len() && changed[k + 1] <= end + 2 * CONTEXT + 1 {
+            k += 1;
+            end = changed[k];
+        }
+        let end = (end + CONTEXT).min(changes.len() - 1);
+        let hunk = &changes[start..=end];
+        let old_len = hunk.iter().filter(|(t, _)| *t != '+').count();
+        let new_len = hunk.iter().filter(|(t, _)| *t != '-').count();
+        let side = |first: usize, len: usize| {
+            let first = if len == 0 { first - 1 } else { first };
+            if len == 1 {
+                format!("{first}")
+            } else {
+                format!("{first},{len}")
+            }
+        };
+        let _ = writeln!(
+            out,
+            "@@ -{} +{} @@",
+            side(old_no[start], old_len),
+            side(new_no[start], new_len)
+        );
+        for (tag, value) in hunk {
+            out.push(*tag);
+            out.push_str(value);
+            if !value.ends_with('\n') {
+                out.push_str("\n\\ No newline at end of file\n");
+            }
+        }
+        k += 1;
+    }
+    out
 }
 
 impl Session<'_> {
@@ -380,6 +458,7 @@ impl Session<'_> {
 
         let mut diff = String::new();
         let mut files = Vec::new();
+        let mut changes = Vec::new();
         for (idx, old) in &snapshot {
             let f = &self.project.files[*idx];
             diff.push_str(&codemosis_core::redact::redact(&unified_diff(
@@ -388,6 +467,11 @@ impl Session<'_> {
                 &f.text,
             )));
             files.push(f.display_path());
+            changes.push(FileChange {
+                path: f.display_path(),
+                before: old.clone(),
+                after: f.text.clone(),
+            });
         }
         let first = &batch[0];
         Ok(Ok(Step {
@@ -400,6 +484,7 @@ impl Session<'_> {
             files,
             diff,
             oracle: step_oracle,
+            changes,
         }))
     }
 }

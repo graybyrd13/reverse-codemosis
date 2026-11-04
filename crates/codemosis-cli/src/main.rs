@@ -147,6 +147,9 @@ enum Command {
         /// Ask every open question first, then correct with your answers.
         #[arg(long, short)]
         interactive: bool,
+        /// Do not write a proof certificate to .codemosis/proofs.
+        #[arg(long)]
+        no_proof: bool,
     },
     /// Ask the open questions one by one and record your answers.
     Ask {
@@ -211,6 +214,11 @@ enum Command {
         #[arg(long)]
         language: Option<String>,
     },
+    /// Work with proof certificates.
+    Proof {
+        #[command(subcommand)]
+        command: ProofCommand,
+    },
     /// Pin the packs a project uses by content hash in codemosis.lock.
     Lock {
         #[arg(default_value = ".")]
@@ -222,6 +230,19 @@ enum Command {
     /// Write a codemosis.toml for a project, with the build and test commands detected.
     Init {
         #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProofCommand {
+    /// Re-derive a recorded change: recover the original code from the patch and
+    /// replay every step with the pinned rules, checking each reproduces exactly.
+    Verify {
+        /// The certificate (a .json file in .codemosis/proofs).
+        certificate: PathBuf,
+        /// Project root.
+        #[arg(long, default_value = ".")]
         path: PathBuf,
     },
 }
@@ -375,6 +396,7 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             rules,
             max_steps,
             interactive,
+            no_proof,
         } => {
             let root = canonical(&path)?;
             if !dry_run {
@@ -404,6 +426,7 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
                     format,
                     max_steps,
                     interactive,
+                    proof: !no_proof,
                 },
                 &packs,
                 &rules,
@@ -492,6 +515,9 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         Command::Facts { language } => facts(language.as_deref(), s),
         Command::Init { path } => init(&path),
         Command::Lock { path, check } => lock_cmd(&path, check),
+        Command::Proof {
+            command: ProofCommand::Verify { certificate, path },
+        } => proof_verify(&certificate, &path, s),
     }
 }
 
@@ -751,6 +777,11 @@ fn baseline_cmd(path: &Path, output: &Path) -> Result<ExitCode> {
     let rel = output.strip_prefix(&root).unwrap_or(output);
     codemosis_engine::fsguard::write_confined(&root, rel, b.to_json().as_bytes())
         .with_context(|| format!("cannot write {}", output.display()))?;
+    let _ = codemosis_engine::audit::record(
+        &root,
+        "baseline",
+        serde_json::json!({"file": rel.display().to_string(), "findings": b.findings.len()}),
+    );
     println!(
         "Recorded {} open finding(s) in {}.\n`codemosis check --baseline {}` now fails only on new findings; commit the file.",
         b.findings.len(),
@@ -768,6 +799,7 @@ struct FixOptions<'a> {
     format: Format,
     max_steps: usize,
     interactive: bool,
+    proof: bool,
 }
 
 fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style, e: Style) -> Result<ExitCode> {
@@ -779,6 +811,7 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         format,
         max_steps,
         interactive,
+        proof,
     } = o;
     let mut ws = Workspace::open(root, extra)?;
     if interactive {
@@ -849,6 +882,40 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
             Event::Rejected(r) => eprintln!("{}", e.dim(&format!("  ✗ {} rejected", r.finding.rule))),
         }
     })?;
+    let mut certificate_path = None;
+    if !dry_run && !report.steps.is_empty() {
+        let cert = codemosis_engine::proof::Certificate::of(
+            &report,
+            root,
+            &ws.project,
+            &ws.packs,
+            &ws.answers,
+            oracle.as_ref().map(|_| (&section.build, &section.test)),
+        );
+        if let Some(cert) = cert.filter(|_| proof) {
+            let rel = cert.file_name();
+            match codemosis_engine::fsguard::write_confined(root, &rel, cert.to_json().as_bytes()) {
+                Ok(()) => certificate_path = Some(rel),
+                Err(err) => eprintln!("{} cannot write the proof certificate: {err}", e.yellow("warning:")),
+            }
+        }
+        let logged = codemosis_engine::audit::record(
+            root,
+            "fix",
+            serde_json::json!({
+                "steps": report.steps.len(),
+                "rejected": report.rejected.len(),
+                "files": report.files_changed,
+                "distance_before": report.distance_before,
+                "distance_after": report.distance_after,
+                "verified": report.verified,
+                "proof": certificate_path.as_ref().map(|p| p.display().to_string()),
+            }),
+        );
+        if let Err(err) = logged {
+            eprintln!("{} cannot write the audit log: {err}", e.yellow("warning:"));
+        }
+    }
     match format {
         Format::Json => println!("{}", fix_json(&report)?),
         Format::Markdown => println!("{}", report::session_markdown(&report, &display_root(root), &shown)),
@@ -867,6 +934,13 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         if text {
             println!("Report written to {}", p.display());
         }
+    }
+    if let (Some(p), true) = (&certificate_path, text) {
+        println!(
+            "Proof certificate: {}\nAnyone can re-derive this change from it with `codemosis proof verify {}`.",
+            p.display(),
+            p.display()
+        );
     }
     Ok(ExitCode::SUCCESS)
 }
@@ -921,6 +995,11 @@ fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Styl
         note,
     });
     ws.answers.save(&root).map_err(|e| anyhow!(e))?;
+    let _ = codemosis_engine::audit::record(
+        &root,
+        "answer",
+        serde_json::json!({"id": q.id, "rule": finding.rule, "answer": answer}),
+    );
     println!(
         "Recorded {} to {} in {}.",
         s.bold(answer),
@@ -1171,6 +1250,56 @@ fn pack_mutations(dirs: &[PathBuf], filter: Option<&str>, verbose: bool, s: Styl
     Ok(ExitCode::SUCCESS)
 }
 
+fn proof_verify(certificate: &Path, path: &Path, s: Style) -> Result<ExitCode> {
+    use codemosis_engine::proof::{verify, Certificate};
+    let root = canonical(path)?;
+    let cert_path = if certificate.is_relative() && !certificate.exists() {
+        root.join(certificate)
+    } else {
+        certificate.to_path_buf()
+    };
+    let cert = Certificate::load(&cert_path).map_err(|e| anyhow!(e))?;
+    let (cfg, _) = config::Config::load(&root)?;
+    let packs = cfg.load_packs(&root, &[])?;
+    let mut project = codemosis_core::Project::load(&root, &cfg.filter())?;
+    println!(
+        "{} {} ({} step(s), {} file(s), engine {}, created {})",
+        s.bold("Verifying"),
+        cert_path.display(),
+        cert.steps.len(),
+        cert.files.len(),
+        cert.engine.version,
+        cert.created
+    );
+    let v = verify(&cert, &root, &mut project, &packs);
+    for (name, r) in &v.checks {
+        match r {
+            Ok(()) => println!("  {} {name}", s.green("✓")),
+            Err(why) => println!("  {} {name}: {why}", s.red("✗")),
+        }
+    }
+    if v.ok() {
+        let answers = if cert.answers.is_empty() {
+            String::new()
+        } else {
+            format!(", given {} recorded answer(s)", cert.answers.len())
+        };
+        println!("\nVerified: the change is exactly what the pinned rules prove{answers}.");
+        if let Some(o) = &cert.oracle {
+            if let (Some(b), Some(a)) = (&o.before, &o.after) {
+                println!(
+                    "Recorded oracle: tests passing {} -> {}, failing {} -> {} (re-run your test suite to confirm it).",
+                    b.passed, a.passed, b.failed, a.failed
+                );
+            }
+        }
+        Ok(ExitCode::SUCCESS)
+    } else {
+        println!("\nNot verified.");
+        Ok(ExitCode::from(1))
+    }
+}
+
 fn lock_cmd(path: &Path, check: bool) -> Result<ExitCode> {
     use codemosis_engine::lock::{Lock, LOCK_FILE};
     let root = canonical(path)?;
@@ -1198,6 +1327,11 @@ fn lock_cmd(path: &Path, check: bool) -> Result<ExitCode> {
         };
     }
     codemosis_engine::fsguard::write_confined(&root, Path::new(LOCK_FILE), fresh.to_toml().as_bytes())?;
+    let _ = codemosis_engine::audit::record(
+        &root,
+        "lock",
+        serde_json::json!({"packs": fresh.packs.iter().map(|p| format!("{}@{}", p.id, &p.sha256[..12])).collect::<Vec<_>>()}),
+    );
     println!("Pinned {} pack(s) in {LOCK_FILE}. Commit it.", fresh.packs.len());
     Ok(ExitCode::SUCCESS)
 }

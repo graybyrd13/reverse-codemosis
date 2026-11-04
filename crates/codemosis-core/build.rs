@@ -86,9 +86,40 @@ fn linguist(manifest_dir: &Path) {
     fs::write(dest, out).unwrap();
 }
 
+/// The exact versions of the tree-sitter crates this build links, read from
+/// the workspace's Cargo.lock (empty when built outside the workspace).
+fn grammar_versions(manifest_dir: &std::path::Path) {
+    let lock = manifest_dir.join("../../Cargo.lock");
+    println!("cargo:rerun-if-changed={}", lock.display());
+    let text = fs::read_to_string(&lock).unwrap_or_default();
+    let mut found: Vec<(String, String)> = Vec::new();
+    let mut name: Option<String> = None;
+    for line in text.lines() {
+        if let Some(n) = line.strip_prefix("name = \"") {
+            name = Some(n.trim_end_matches('"').to_string());
+        } else if let Some(v) = line.strip_prefix("version = \"") {
+            if let Some(n) = name.take() {
+                if n.starts_with("tree-sitter") {
+                    found.push((n, v.trim_end_matches('"').to_string()));
+                }
+            }
+        }
+    }
+    found.sort();
+    found.dedup();
+    let mut out = String::from("/// (crate, version) of every tree-sitter crate linked into this build.\npub static GRAMMAR_VERSIONS: &[(&str, &str)] = &[\n");
+    for (n, v) in found {
+        let _ = writeln!(out, "    ({n:?}, {v:?}),");
+    }
+    out.push_str("];\n");
+    let dest = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("grammar_versions.rs");
+    fs::write(dest, out).unwrap();
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     linguist(&manifest_dir);
+    grammar_versions(&manifest_dir);
     let packs = manifest_dir.join("../../packs");
     println!("cargo:rerun-if-changed={}", packs.display());
 

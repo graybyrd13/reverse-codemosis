@@ -195,3 +195,58 @@ pub fn by_id(id: &str) -> Option<&'static dyn Language> {
 pub fn for_linguist(name: &str) -> Option<&'static dyn Language> {
     all().into_iter().find(|l| l.linguist_names().contains(&name))
 }
+
+include!(concat!(env!("OUT_DIR"), "/grammar_versions.rs"));
+
+/// The crate that provides a grammar.
+pub fn grammar_crate(id: &str) -> &'static str {
+    match id {
+        "python" => "tree-sitter-python",
+        "rust" => "tree-sitter-rust",
+        "javascript" => "tree-sitter-javascript",
+        "typescript" | "tsx" => "tree-sitter-typescript",
+        "go" => "tree-sitter-go",
+        "java" => "tree-sitter-java",
+        "c" => "tree-sitter-c",
+        "cpp" => "tree-sitter-cpp",
+        "csharp" => "tree-sitter-c-sharp",
+        "ruby" => "tree-sitter-ruby",
+        "php" => "tree-sitter-php",
+        "bash" => "tree-sitter-bash",
+        "kotlin" => "tree-sitter-kotlin-ng",
+        "scala" => "tree-sitter-scala",
+        "lua" => "tree-sitter-lua",
+        "swift" => "tree-sitter-swift",
+        _ => "",
+    }
+}
+
+/// The exact version of a grammar's crate in this build, when known.
+pub fn grammar_version(id: &str) -> Option<&'static str> {
+    let krate = grammar_crate(id);
+    GRAMMAR_VERSIONS.iter().find(|(n, _)| *n == krate).map(|(_, v)| *v)
+}
+
+/// The tree-sitter runtime version in this build, when known.
+pub fn runtime_version() -> Option<&'static str> {
+    GRAMMAR_VERSIONS
+        .iter()
+        .find(|(n, _)| *n == "tree-sitter")
+        .map(|(_, v)| *v)
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    #[test]
+    fn every_grammar_has_a_pinned_version() {
+        if GRAMMAR_VERSIONS.is_empty() {
+            return; // built outside the workspace, without its Cargo.lock
+        }
+        for l in all() {
+            assert!(grammar_version(l.id()).is_some(), "no version for {}", l.id());
+        }
+        assert!(runtime_version().is_some());
+    }
+}
