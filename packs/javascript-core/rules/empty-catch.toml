@@ -1,0 +1,34 @@
+id = "empty-catch"
+title = "Empty catch block"
+category = "hazard"
+summary = "This catch block swallows the error without a trace."
+explain = """
+An empty `catch` hides every error raised in its `try`, including the ones
+nobody anticipated. When ignoring is right, a comment saying why makes it a
+decision rather than an accident (and the rule then stays quiet). Otherwise
+the error should be handled, logged or rethrown. Which one is a design
+question, so nothing is changed.
+"""
+shape = "(catch_clause body: (statement_block) @body) @clause"
+focus = "@clause"
+where = [
+  "count(children(@body)) == 0",
+  "!has_comment(@body)",
+]
+
+[[example]]
+before = '''
+try {
+  JSON.parse(input);
+} catch (e) {}
+'''
+
+[[counterexample]]
+name = "a comment explains why"
+code = '''
+try {
+  JSON.parse(input);
+} catch (e) {
+  // invalid input is reported by the caller
+}
+'''

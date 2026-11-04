@@ -1,9 +1,10 @@
 //! Pack self-tests: the proof that each rule does what it claims.
 //!
 //! For every example the rule must match `before`, rewrite it to exactly
-//! `after` when applied until it stops matching, leave `after` free of syntax
-//! errors and of further matches, and, when the language has a runner, behave
-//! as its declared semantics promise:
+//! `after` when applied until it stops matching (answering its question with
+//! the example's `answer`), leave `after` free of syntax errors and of further
+//! corrections, and, when the language has a runner, behave as its declared
+//! semantics promise:
 //!
 //! * `preserved`: before and after produce the same output and exit status;
 //! * `corrected`: after produces the declared `output`, and before does not;
@@ -12,7 +13,7 @@
 //! Every counterexample must produce no finding at all.
 
 use crate::edit;
-use crate::lang::RunStatus;
+use crate::lang::{Language, RunStatus};
 use crate::model::{Edit, Semantics, Status};
 use crate::pack::Pack;
 use crate::project::{Project, SourceFile};
@@ -81,11 +82,28 @@ pub fn test_pack(pack: &Pack, opts: &Options) -> PackReport {
     }
 }
 
-fn single_file(rule: &CompiledRule, path: Option<&str>, text: &str) -> Result<Project, String> {
-    let path = path.unwrap_or(rule.language.example_file());
-    SourceFile::parse(path, rule.language, text.to_string())
-        .map(|f| Project::in_memory(vec![f]))
-        .map_err(|e| e.to_string())
+/// Where an example lives: its grammar (for deep rules) and file name.
+#[derive(Clone, Copy)]
+struct Place<'s> {
+    lang: Option<&'static dyn Language>,
+    path: &'s str,
+}
+
+fn place<'s>(rule: &CompiledRule, language: Option<&str>, path: Option<&'s str>) -> Place<'s> {
+    let lang = match language {
+        Some(id) => rule.languages.iter().copied().find(|l| l.id() == id),
+        None => rule.languages.first().copied(),
+    };
+    let path = path.unwrap_or_else(|| lang.map(|l| l.example_file()).unwrap_or("example.txt"));
+    Place { lang, path }
+}
+
+fn single_file(at: Place, text: &str) -> Project {
+    let file = match at.lang {
+        Some(l) => SourceFile::with_language(at.path, l, text.to_string()),
+        None => SourceFile::new(at.path, text.to_string()),
+    };
+    Project::in_memory(vec![file])
 }
 
 fn diff(expected: &str, actual: &str) -> String {
@@ -95,14 +113,15 @@ fn diff(expected: &str, actual: &str) -> String {
         .to_string()
 }
 
-/// Apply every fixable finding of `rule` (answering every question "yes")
-/// until the rule no longer has anything to fix.
-pub fn apply_to_fixpoint(rule: &CompiledRule, path: Option<&str>, text: &str) -> Result<String, String> {
+/// Apply every fixable finding of `rule`, answering its questions with
+/// `answer`, until the rule no longer has anything to fix.
+fn apply_to_fixpoint(rule: &CompiledRule, at: Place, text: &str, answer: Option<&str>) -> Result<String, String> {
+    let answers = |_: &str| answer.map(|a| a.to_string());
     let mut text = text.to_string();
     for round in 0..10 {
-        let project = single_file(rule, path, &text)?;
+        let project = single_file(at, &text);
         let findings = rule
-            .find(&project.files[0], &project, &|_| Some(true))
+            .find(&project.files[0], &project, &answers)
             .map_err(|e| e.message)?;
         if round == 0 && findings.is_empty() {
             return Err("the rule does not match `before`".to_string());
@@ -112,7 +131,7 @@ pub fn apply_to_fixpoint(rule: &CompiledRule, path: Option<&str>, text: &str) ->
                 Status::Refused { reason } => Some(reason.clone()),
                 _ => None,
             }) {
-                return Err(format!("a guard refused the fix: {reason}"));
+                return Err(format!("a guard refused the correction: {reason}"));
             }
         }
         let mut chosen: Vec<Edit> = Vec::new();
@@ -133,19 +152,29 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
     let mut checks = Vec::new();
     let mut push = |name: String, outcome: Outcome| checks.push(Check { name, outcome });
     let semantics = rule.spec.semantics;
-    let runner = rule.language.runner();
 
     for (i, ex) in rule.spec.examples.iter().enumerate() {
         let label = ex.name.clone().unwrap_or_else(|| format!("example {}", i + 1));
-        let path = ex.path.as_deref();
-        let before_project = match single_file(rule, path, &ex.before) {
-            Ok(p) => p,
-            Err(e) => {
-                push(format!("{label}: parses"), Outcome::Fail(e));
-                continue;
-            }
-        };
-        if semantics != Some(Semantics::Repaired) && before_project.files[0].syntax_errors() > 0 {
+        let at = place(rule, ex.language.as_deref(), ex.path.as_deref());
+        let before_project = single_file(at, &ex.before);
+        let file = &before_project.files[0];
+        if !rule.applies_to(file) {
+            push(
+                format!("{label}: the rule applies to `before`"),
+                Outcome::Fail(format!(
+                    "the rule does not apply to {} ({}, {} tier, detected as {})",
+                    at.path,
+                    file.language_name(),
+                    file.tier().as_str(),
+                    file.detection.confidence.as_str()
+                )),
+            );
+            continue;
+        }
+        if semantics != Some(Semantics::Repaired)
+            && rule.spec.category != crate::model::Category::Broken
+            && file.syntax_errors() > 0
+        {
             push(
                 format!("{label}: `before` parses"),
                 Outcome::Fail("`before` has syntax errors".into()),
@@ -155,7 +184,7 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
 
         let Some(after) = &ex.after else {
             // Explain-only rule: it must report `before`.
-            let found = rule.find(&before_project.files[0], &before_project, &|_| None);
+            let found = rule.find(file, &before_project, &|_| None);
             push(
                 format!("{label}: reports `before`"),
                 match found {
@@ -167,7 +196,12 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
             continue;
         };
 
-        match apply_to_fixpoint(rule, path, &ex.before) {
+        let answer = ex.answer.clone().or_else(|| rule.default_answer());
+        let label = match &answer {
+            Some(a) if rule.asks() => format!("{label} (answer: {a})"),
+            _ => label,
+        };
+        match apply_to_fixpoint(rule, at, &ex.before, answer.as_deref()) {
             Ok(actual) if actual == *after => push(format!("{label}: rewrites to `after`"), Outcome::Pass),
             Ok(actual) => {
                 push(
@@ -182,37 +216,41 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
             }
         }
 
-        match single_file(rule, path, after) {
-            Ok(p) => {
-                let file = &p.files[0];
-                push(
-                    format!("{label}: `after` is free of syntax errors"),
-                    if file.syntax_errors() == 0 {
-                        Outcome::Pass
-                    } else {
-                        Outcome::Fail("`after` has syntax errors".into())
-                    },
-                );
-                let again = rule.find(file, &p, &|_| Some(true)).map(|f| f.len()).unwrap_or(0);
-                push(
-                    format!("{label}: rule is idempotent on `after`"),
-                    if again == 0 {
-                        Outcome::Pass
-                    } else {
-                        Outcome::Fail(format!("the rule still matches `after` {again} time(s)"))
-                    },
-                );
-            }
-            Err(e) => push(format!("{label}: `after` parses"), Outcome::Fail(e)),
-        }
+        let after_project = single_file(at, after);
+        let after_file = &after_project.files[0];
+        push(
+            format!("{label}: `after` has no new syntax errors"),
+            if after_file.syntax_errors() <= file.syntax_errors() {
+                Outcome::Pass
+            } else {
+                Outcome::Fail("`after` has syntax errors `before` did not have".into())
+            },
+        );
+        let answers = |_: &str| answer.clone();
+        let again = rule
+            .find(after_file, &after_project, &answers)
+            .map(|f| f.iter().filter(|f| f.is_fixable()).count())
+            .unwrap_or(0);
+        push(
+            format!("{label}: nothing left to correct in `after`"),
+            if again == 0 {
+                Outcome::Pass
+            } else {
+                Outcome::Fail(format!("the rule would still correct `after` {again} time(s)"))
+            },
+        );
 
         let name = format!("{label}: behaves as `{}`", semantics.map(|s| s.as_str()).unwrap_or("?"));
+        if ex.before == *after {
+            push(name, Outcome::Skip("this answer keeps the code as it is".into()));
+            continue;
+        }
         if !opts.run || ex.run == Some(false) {
             push(name, Outcome::Skip("not executed".into()));
             continue;
         }
-        let Some(runner) = runner else {
-            push(name, Outcome::Skip(format!("no runner for {}", rule.language.id())));
+        let Some(runner) = at.lang.or(file.lang).and_then(|l| l.runner()) else {
+            push(name, Outcome::Skip(format!("no runner for {}", file.language_name())));
             continue;
         };
         let b = runner.run(&ex.before);
@@ -249,11 +287,8 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
                 if a.status != RunStatus::Ok {
                     problems.push(format!("after {}", describe(&a)));
                 }
-                match &ex.output {
-                    None if rule.language.runner().is_some() => {
-                        problems.push("a `corrected` example must declare the `output` of `after`".into())
-                    }
-                    _ => {}
+                if ex.output.is_none() {
+                    problems.push("a `corrected` example must declare the `output` of `after`".into());
                 }
                 if a.stdout == b.stdout && a.status == b.status {
                     problems.push("before and after behave identically, so nothing was corrected".into());
@@ -297,17 +332,19 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
 
     for (i, cx) in rule.spec.counterexamples.iter().enumerate() {
         let label = cx.name.clone().unwrap_or_else(|| format!("counterexample {}", i + 1));
-        let outcome = match single_file(rule, cx.path.as_deref(), &cx.code) {
-            Err(e) => Outcome::Fail(e),
-            Ok(p) if p.files[0].syntax_errors() > 0 => Outcome::Fail("the code has syntax errors".into()),
-            Ok(p) => match rule.find(&p.files[0], &p, &|_| None) {
+        let at = place(rule, cx.language.as_deref(), cx.path.as_deref());
+        let p = single_file(at, &cx.code);
+        let outcome = if !rule.is_text_rule() && p.files[0].syntax_errors() > 0 {
+            Outcome::Fail("the code has syntax errors".into())
+        } else {
+            match rule.find(&p.files[0], &p, &|_| None) {
                 Ok(f) if f.is_empty() => Outcome::Pass,
                 Ok(f) => Outcome::Fail(format!(
                     "the rule matches at line {}: {}",
                     f[0].span.start.line, f[0].message
                 )),
                 Err(e) => Outcome::Fail(e.message),
-            },
+            }
         };
         push(format!("{label}: not matched"), outcome);
     }

@@ -96,7 +96,7 @@ pub enum Event<'e> {
 pub struct Session<'s> {
     pub project: &'s mut Project,
     pub rules: Vec<&'s CompiledRule>,
-    pub answers: &'s dyn Fn(&str) -> Option<bool>,
+    pub answers: &'s dyn Fn(&str) -> Option<String>,
     pub oracle: Option<&'s Oracle>,
     pub options: Options,
 }
@@ -258,9 +258,7 @@ impl Session<'_> {
 
     fn restore(&mut self, snapshot: &[(usize, String)]) -> std::io::Result<()> {
         for (idx, text) in snapshot {
-            self.project
-                .set_text(*idx, text.clone())
-                .expect("the original text parsed before");
+            self.project.set_text(*idx, text.clone());
             if self.options.write {
                 self.write(*idx)?;
             }
@@ -297,14 +295,7 @@ impl Session<'_> {
         for (idx, edits) in &per_file {
             let old = &self.project.files[*idx].text;
             match edit::apply(old, edits) {
-                Ok(new) => {
-                    if self.project.set_text(*idx, new).is_err() {
-                        reasons.push(format!(
-                            "{} could not be parsed after the correction",
-                            self.project.files[*idx].display_path()
-                        ));
-                    }
-                }
+                Ok(new) => self.project.set_text(*idx, new),
                 Err(e) => reasons.push(format!("the corrections conflict: {e}")),
             }
         }

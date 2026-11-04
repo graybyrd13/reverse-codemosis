@@ -24,10 +24,15 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      # Pack examples are executed, so the self-tests need Python.
+      # Pack examples are executed with each language's own toolchain.
+      # Python, Rust and Node are required; the runner images also carry Go,
+      # Java, C/C++, Ruby, PHP and Bash, and a missing one is a reported skip.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
@@ -49,6 +54,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - uses: Swatinem/rust-cache@v2
       - name: One broken repository, one command, a green test suite
         run: scripts/demo.sh

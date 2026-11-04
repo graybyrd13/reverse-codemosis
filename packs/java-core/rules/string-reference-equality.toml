@@ -1,0 +1,60 @@
+id = "string-reference-equality"
+title = "String compared with =="
+category = "contradiction"
+semantics = "corrected"
+summary = "`${cmp}` compares references, not text: two equal strings are often different objects."
+explain = """
+In Java `==` on objects asks whether both sides are the same object. String
+literals are interned, so `s == "admin"` can pass in a quick test and then
+fail for a string read from input, a file or a network call. The comparison
+can only have meant equal text: `"admin".equals(s)`, which is also false
+rather than throwing when `s` is null, exactly as `==` was.
+"""
+shape = '''
+(binary_expression
+  left: (_) @value
+  operator: ["==" "!="] @op
+  right: (string_literal) @literal) @cmp
+
+(binary_expression
+  left: (string_literal) @literal
+  operator: ["==" "!="] @op
+  right: (_) @value) @cmp
+'''
+focus = "@cmp"
+where = ["kind(@value) not in ['string_literal', 'null_literal']"]
+
+[let]
+check = "choose(text(@op) == '==', concat(text(@literal), '.equals(', text(@value), ')'), concat('!', text(@literal), '.equals(', text(@value), ')'))"
+
+[fix]
+edits = [{ replace = "@cmp", with = "${check}" }]
+
+[[example]]
+before = '''
+public class Snippet {
+    public static void main(String[] args) {
+        String role = new String("admin");
+        System.out.println(role == "admin");
+        System.out.println("admin" != role);
+    }
+}
+'''
+after = '''
+public class Snippet {
+    public static void main(String[] args) {
+        String role = new String("admin");
+        System.out.println("admin".equals(role));
+        System.out.println(!"admin".equals(role));
+    }
+}
+'''
+output = "true\nfalse\n"
+output_before = "false\ntrue\n"
+
+[[counterexample]]
+code = '''
+public class Snippet {
+    static boolean isAdmin(String role) { return "admin".equals(role); }
+}
+'''

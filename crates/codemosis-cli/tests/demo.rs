@@ -117,7 +117,7 @@ fn one_command_turns_the_broken_demo_green() {
 
     let diff = report["diff"].as_str().unwrap();
     let golden = workspace().join("examples/broken-inventory.diff");
-    if std::env::var_os("UPDATE_GOLDEN").is_some() {
+    if std::env::var("UPDATE_GOLDEN").is_ok_and(|v| v == "1") {
         fs::write(&golden, diff).unwrap();
     }
     let expected = fs::read_to_string(&golden).expect("examples/broken-inventory.diff");
@@ -257,7 +257,7 @@ fn facts_reference_is_current() {
         String::from_utf8_lossy(&out.stdout)
     );
     let path = workspace().join("docs/FACTS.md");
-    if std::env::var_os("UPDATE_GOLDEN").is_some() {
+    if std::env::var("UPDATE_GOLDEN").is_ok_and(|v| v == "1") {
         fs::write(&path, &expected).unwrap();
     }
     assert_eq!(
@@ -265,4 +265,135 @@ fn facts_reference_is_current() {
         expected,
         "docs/FACTS.md is stale"
     );
+}
+
+fn run_with_input(args: &[&str], dir: &Path, input: &str) -> Output {
+    use std::io::Write;
+    let mut child = Command::new(env!("CARGO_BIN_EXE_codemosis"))
+        .args(args)
+        .arg(dir)
+        .args(["--color", "never"])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("run codemosis");
+    child.stdin.take().unwrap().write_all(input.as_bytes()).unwrap();
+    child.wait_with_output().unwrap()
+}
+
+fn node_tests_pass(dir: &Path) -> bool {
+    Command::new("node")
+        .arg("--test")
+        .current_dir(dir)
+        .output()
+        .expect("run node")
+        .status
+        .success()
+}
+
+#[test]
+fn interactive_answers_drive_the_javascript_demo() {
+    if !have("node") || !have("npm") {
+        eprintln!("skipping: node and npm are not available");
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let demo = tmp.path().join("flaky-checkout");
+    copy_dir(&workspace().join("examples/flaky-checkout"), &demo);
+    assert!(!node_tests_pass(&demo), "the demo must start with a failing test");
+
+    // Three questions: two fixed waits, one console.log. An answer that is
+    // not one of the choices is asked again.
+    let out = run_with_input(
+        &["fix", "--interactive", "--allow-no-vcs", "--format", "json"],
+        &demo,
+        "remove\nremove\nmaybe\nremove\n",
+    );
+    let prompts = String::from_utf8_lossy(&out.stderr);
+    assert!(out.status.success(), "{prompts}");
+    assert!(prompts.contains("Keep this fixed wait?"), "{prompts}");
+    assert!(prompts.contains("please answer keep/remove"), "{prompts}");
+    let report: Value = serde_json::from_slice(&out.stdout).expect("JSON report");
+
+    assert!(node_tests_pass(&demo), "the suite must be green after the corrections");
+    assert!(report["rejected"].as_array().unwrap().is_empty());
+    assert_eq!(
+        statuses(&report, "needs_answer").len(),
+        0,
+        "every question was answered"
+    );
+    assert_eq!(
+        statuses(&report, "explained").len(),
+        1,
+        "the duplicate key is explained"
+    );
+    let ledger = fs::read_to_string(demo.join(".codemosis/answers.toml")).unwrap();
+    assert_eq!(ledger.matches("answer = \"remove\"").count(), 3);
+
+    let diff = report["diff"].as_str().unwrap();
+    let golden = workspace().join("examples/flaky-checkout.diff");
+    if std::env::var("UPDATE_GOLDEN").is_ok_and(|v| v == "1") {
+        fs::write(&golden, diff).unwrap();
+    }
+    let expected = fs::read_to_string(&golden).expect("examples/flaky-checkout.diff");
+    assert_eq!(
+        diff, expected,
+        "the diff changed; review it and run with UPDATE_GOLDEN=1 to accept"
+    );
+}
+
+#[test]
+fn keep_is_recorded_and_respected() {
+    if !have("node") {
+        eprintln!("skipping: node is not available");
+        return;
+    }
+    let tmp = tempfile::tempdir().unwrap();
+    let demo = tmp.path().join("flaky-checkout");
+    copy_dir(&workspace().join("examples/flaky-checkout"), &demo);
+    let out = run_with_input(&["ask"], &demo, "keep\nskip\nquit\n");
+    let text = String::from_utf8_lossy(&out.stdout);
+    assert!(out.status.success(), "{text}");
+    assert!(text.contains("1 answer recorded"), "{text}");
+
+    // The kept wait is no longer a question, and stays in the code.
+    let check = codemosis(&["check", "--format", "json"], &demo);
+    let report: Value = serde_json::from_slice(&check.stdout).unwrap();
+    let declined: Vec<_> = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|f| f["status"]["kind"] == "declined")
+        .collect();
+    assert_eq!(declined.len(), 1);
+    assert_eq!(declined[0]["status"]["answer"], "keep");
+    assert!(fs::read_to_string(demo.join("src/checkout.js"))
+        .unwrap()
+        .contains("setTimeout(resolve, 300)"));
+
+    // An answer that is not one of the choices is refused.
+    let id = report["findings"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["status"]["kind"] == "needs_answer")
+        .unwrap()["status"]["question"]["id"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let bad = codemosis(&["answer", &id, "perhaps"], &demo);
+    assert_eq!(bad.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&bad.stderr).contains("keep/remove"));
+}
+
+#[test]
+fn every_github_language_is_known() {
+    let out = Command::new(env!("CARGO_BIN_EXE_codemosis"))
+        .args(["languages", "--color", "never"])
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout);
+    let summary = text.lines().last().unwrap();
+    assert!(summary.starts_with("845 languages known to GitHub"), "{summary}");
 }

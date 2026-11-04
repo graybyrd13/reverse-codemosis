@@ -7,9 +7,9 @@
 use crate::eval::{EvalCtx, EvalError, FactDoc, Value};
 use crate::model::Edit;
 use crate::project::SourceFile;
-use std::path::Path;
 use tree_sitter::Node;
 
+pub mod generic;
 pub mod python;
 mod python_scope;
 pub mod rust;
@@ -70,13 +70,24 @@ pub trait Language: Send + Sync + 'static {
     fn id(&self) -> &'static str;
     /// Prefix of this language's facts and filters: `py`.
     fn prefix(&self) -> &'static str;
-    fn extensions(&self) -> &'static [&'static str];
+    /// The Linguist languages this grammar parses, e.g. `["Python"]`.
+    fn linguist_names(&self) -> &'static [&'static str];
     fn grammar(&self) -> tree_sitter::Language;
     /// File name used for single-file pack examples.
     fn example_file(&self) -> &'static str;
 
     fn is_comment(&self, node: &Node) -> bool {
         node.kind().contains("comment")
+    }
+
+    /// True for string and character literals (whose contents are not code).
+    fn is_string(&self, node: &Node) -> bool {
+        STRING_KINDS.contains(&node.kind())
+    }
+
+    /// Node kinds that define something, with the field holding the name.
+    fn definition_kinds(&self) -> &'static [(&'static str, &'static str)] {
+        &[]
     }
 
     /// The name of a definition node (function, class...), used to anchor
@@ -140,19 +151,47 @@ pub fn detect_indent(text: &str) -> String {
     "    ".to_string()
 }
 
+/// Node kinds that are string or character literals in the grammars here.
+pub const STRING_KINDS: &[&str] = &[
+    "string",
+    "string_literal",
+    "raw_string_literal",
+    "char_literal",
+    "character_literal",
+    "template_string",
+    "interpreted_string_literal",
+    "rune_literal",
+    "text_block",
+    "verbatim_string_literal",
+    "interpolated_string_expression",
+    "encapsed_string",
+    "heredoc",
+    "nowdoc",
+    "heredoc_body",
+    "raw_string",
+    "ansi_c_string",
+    "line_string_literal",
+    "multi_line_string_literal",
+    "regex",
+    "system_lib_string",
+    "concatenated_string",
+];
+
 static PYTHON: python::Python = python::Python;
 static RUST: rust::Rust = rust::Rust;
 
-/// Every language this build understands.
-pub fn all() -> [&'static dyn Language; 2] {
-    [&PYTHON, &RUST]
+/// Every language with a grammar in this build.
+pub fn all() -> Vec<&'static dyn Language> {
+    let mut v: Vec<&'static dyn Language> = vec![&PYTHON, &RUST];
+    v.extend(generic::LANGUAGES.iter().map(|l| l as &'static dyn Language));
+    v
 }
 
 pub fn by_id(id: &str) -> Option<&'static dyn Language> {
     all().into_iter().find(|l| l.id() == id)
 }
 
-pub fn for_path(path: &Path) -> Option<&'static dyn Language> {
-    let ext = path.extension()?.to_str()?;
-    all().into_iter().find(|l| l.extensions().contains(&ext))
+/// The grammar for a Linguist language, if this build has one.
+pub fn for_linguist(name: &str) -> Option<&'static dyn Language> {
+    all().into_iter().find(|l| l.linguist_names().contains(&name))
 }

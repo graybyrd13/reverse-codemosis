@@ -1,0 +1,16 @@
+[pack]
+id = "waits"
+version = "0.1.0"
+language = "*"
+summary = "Asks whether to keep fixed waits, in languages read at the lexical tier."
+description = """
+One rule and a table: for each language, the idioms that pause for a fixed
+time (Start-Sleep, Sys.sleep, WAITFOR DELAY, Process.sleep...). Matches
+count only where they start in code, never in comments or strings, so only
+languages whose comment syntax is known take part. Languages with a grammar
+have their own, more precise wait rules in their packs. Adding a language is
+one line in tables/waits.toml.
+"""
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

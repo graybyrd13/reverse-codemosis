@@ -107,7 +107,9 @@ impl PyAnalysis {
 }
 
 pub fn analyze(file: &SourceFile) -> PyAnalysis {
-    let root = file.tree.root_node();
+    let Some(root) = file.root() else {
+        return PyAnalysis::default();
+    };
     let mut w = Walker {
         text: &file.text,
         out: PyAnalysis::default(),

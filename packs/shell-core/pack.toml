@@ -1,0 +1,8 @@
+[pack]
+id = "shell-core"
+version = "0.1.0"
+language = "bash"
+summary = "Questions for shell scripts: fixed waits and unquoted deletions."
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

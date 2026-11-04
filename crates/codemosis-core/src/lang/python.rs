@@ -220,8 +220,12 @@ impl Language for Python {
         "py"
     }
 
-    fn extensions(&self) -> &'static [&'static str] {
-        &["py", "pyi"]
+    fn linguist_names(&self) -> &'static [&'static str] {
+        &["Python"]
+    }
+
+    fn definition_kinds(&self) -> &'static [(&'static str, &'static str)] {
+        &[("function_definition", "name"), ("class_definition", "name")]
     }
 
     fn grammar(&self) -> tree_sitter::Language {
@@ -592,13 +596,14 @@ fn imported_elsewhere(ctx: &EvalCtx<'_>, name: &str) -> bool {
     }
     let dotted = format!("{stem}.{name}");
     for other in &ctx.project.files {
-        if other.path == *path || other.lang.id() != "python" {
+        if other.path == *path || other.lang.map(|l| l.id()) != Some("python") {
             continue;
         }
         if other.text.contains(&dotted) {
             return true;
         }
-        let mut stack = vec![other.tree.root_node()];
+        let Some(other_root) = other.root() else { continue };
+        let mut stack = vec![other_root];
         while let Some(n) = stack.pop() {
             if n.kind() == "import_from_statement" {
                 let module = n
@@ -631,7 +636,7 @@ fn imported_elsewhere(ctx: &EvalCtx<'_>, name: &str) -> bool {
 /// True when the binding at `start..end` imports `name` from `module`:
 /// `import module` (when name == module) or `from module import name`.
 fn imports_from(file: &SourceFile, start: usize, end: usize, name: &str, module: &str) -> bool {
-    let Some(node) = file.tree.root_node().descendant_for_byte_range(start, end) else {
+    let Some(node) = file.root().and_then(|r| r.descendant_for_byte_range(start, end)) else {
         return false;
     };
     let mut cur = node.parent();
@@ -657,7 +662,7 @@ fn imports_from(file: &SourceFile, start: usize, end: usize, name: &str, module:
 
 fn defined_in_project(ctx: &EvalCtx<'_>, name: &str, module: Option<&str>) -> bool {
     for other in &ctx.project.files {
-        if other.path == ctx.file.path || other.lang.id() != "python" {
+        if other.path == ctx.file.path || other.lang.map(|l| l.id()) != Some("python") {
             continue;
         }
         let stem = other.path.file_stem().map(|s| s.to_string_lossy().into_owned());
@@ -804,7 +809,7 @@ fn is_relative(node: &Node) -> bool {
 
 fn add_import(file: &SourceFile, statement: &str) -> Result<Edit, String> {
     let text = &file.text;
-    let root = file.tree.root_node();
+    let root = file.root().ok_or("the file has no syntax tree")?;
     let top: Vec<Node> = children(&root);
 
     // `from m import n`: join an existing single-line import from m.

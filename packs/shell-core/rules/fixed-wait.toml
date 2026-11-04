@@ -1,0 +1,58 @@
+id = "fixed-wait"
+title = "Fixed wait"
+category = "hazard"
+semantics = "preserved"
+summary = "`${stmt}` pauses for a fixed time instead of waiting for what the script actually needs."
+explain = """
+A fixed sleep is a guess about timing: too short and the code is flaky (what it waited for is not ready yet), too long and every run is slow. The safe form waits for the condition itself: poll it with a timeout, wait for the process or the event.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
+
+In scripts the usual safe form is a loop that checks the condition (the port
+answers, the file exists, the process is up) with a time limit.
+"""
+shape = '''
+(command
+  name: (command_name (word) @command)
+  argument: [(number) (word)] @delay
+  (#eq? @command "sleep")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "count(field(@stmt, 'argument')) == 1",
+  "kind(parent(@stmt)) == 'program' || (kind(parent(@stmt)) == 'compound_statement' && count(children(parent(@stmt))) > 1)",
+  "!inside(@stmt, 'for_statement', 'while_statement', 'c_style_for_statement')",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+echo "starting the server"
+sleep 0.01
+echo "server started"
+'''
+after = '''
+echo "starting the server"
+echo "server started"
+'''
+
+[[counterexample]]
+name = "a polling loop"
+code = '''
+until curl -s localhost:8080 >/dev/null; do
+  sleep 1
+done
+'''

@@ -60,6 +60,12 @@ fn source_line(project: &Project, f: &Finding, line: usize) -> Option<String> {
 
 /// A finding, with the line it points at.
 pub fn finding(f: &Finding, project: &Project, s: Style) -> String {
+    finding_with(f, project, s, true)
+}
+
+/// A finding, optionally without its status line (for interactive asking,
+/// which shows the question itself).
+pub fn finding_with(f: &Finding, project: &Project, s: Style, show_status: bool) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -119,18 +125,36 @@ pub fn finding(f: &Finding, project: &Project, s: Style) -> String {
             ),
             None => s.green("proven correction available"),
         },
-        Status::NeedsAnswer { question } => format!(
-            "{} {}\n    {}\n    answer with: codemosis answer {} yes   (or no)",
-            s.yellow("question"),
-            s.bold(&question.id),
-            question.text,
-            question.id
-        ),
-        Status::Declined { question } => format!("kept as intentional (you answered no to {})", question.id),
+        Status::NeedsAnswer { question } => {
+            let mut text = format!(
+                "{} {}\n    {}",
+                s.yellow("question"),
+                s.bold(&question.id),
+                question.text
+            );
+            for o in &question.options {
+                let note = match &o.unavailable {
+                    Some(why) => format!("  {}", s.dim(&format!("(not possible here: {why})"))),
+                    None => String::new(),
+                };
+                text.push_str(&format!("\n      {:<8} {}{}", s.bold(&o.answer), o.means, note));
+            }
+            text.push_str(&format!(
+                "\n    answer with: codemosis answer {} <{}>   or run `codemosis ask`",
+                question.id,
+                question.choices()
+            ));
+            text
+        }
+        Status::Declined { question, answer } => {
+            format!("kept as intentional (you answered {answer} to {})", question.id)
+        }
         Status::Explained => "no correction can be proven here; the explanation is the result".to_string(),
         Status::Refused { reason } => format!("{} {}", s.red("correction refused:"), reason),
     };
-    let _ = writeln!(out, "  {} {}", s.blue("="), status);
+    if show_status {
+        let _ = writeln!(out, "  {} {}", s.blue("="), status);
+    }
     out
 }
 
@@ -191,7 +215,15 @@ pub fn oracle_summary(run: &OracleRun, s: Style) -> Vec<(String, String)> {
 pub fn packs_line(packs: &[&Pack]) -> String {
     packs
         .iter()
-        .map(|p| format!("{} {} ({} rules)", p.meta.id, p.meta.version, p.rules.len()))
+        .map(|p| {
+            let n = p.rules.len();
+            format!(
+                "{} {} ({n} rule{})",
+                p.meta.id,
+                p.meta.version,
+                if n == 1 { "" } else { "s" }
+            )
+        })
         .collect::<Vec<_>>()
         .join(" · ")
 }
@@ -458,13 +490,14 @@ pub fn session_markdown(r: &Report, root: &str, packs: &[&Pack]) -> String {
             if let Some(q) = f.question() {
                 let _ = writeln!(
                     out,
-                    "- `{}` at `{}:{}`: {}  \n  {}  \n  Answer with `codemosis answer {} yes` or `no`.",
+                    "- `{}` at `{}:{}`: {}  \n  {}  \n  Answer with `codemosis answer {} <{}>`, or run `codemosis ask`.",
                     q.id,
                     f.file.display(),
                     f.span.start.line,
                     f.message,
                     q.text,
-                    q.id
+                    q.id,
+                    q.choices()
                 );
             }
         }

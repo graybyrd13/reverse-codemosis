@@ -1,0 +1,13 @@
+[pack]
+id = "universal"
+version = "0.1.0"
+language = "*"
+summary = "Problems that look the same in every language: unresolved merge conflicts, committed private keys."
+description = """
+These rules read text, not syntax, so they apply to every file of every
+language GitHub knows, including the ones without a grammar or a known
+comment syntax. They never touch generated or vendored files.
+"""
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

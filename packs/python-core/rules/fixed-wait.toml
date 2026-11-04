@@ -1,0 +1,144 @@
+id = "fixed-wait"
+title = "Fixed wait"
+category = "hazard"
+semantics = "preserved"
+summary = "`${call}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed sleep is a guess about timing. Too short and the code is flaky (the
+thing it waited for is not ready yet); too long and it is slow, every run.
+AI-written code and quick fixes reach for one whenever something "needs a
+moment". The safe form waits for the condition itself: poll it with a
+timeout, await the event, join the thread or process.
+
+Some waits are deliberate: rate limits, back-off, pacing output for a person.
+Only you know which this is, so the engine asks. Answering keep records the
+wait as intentional; remove deletes it. Waits inside loops are polling
+intervals and are not reported.
+"""
+shape = '''
+(expression_statement
+  (call
+    function: (attribute object: (identifier) @module attribute: (identifier) @function)
+    arguments: (argument_list)) @call
+  (#eq? @module "time")
+  (#eq? @function "sleep")) @stmt
+
+(expression_statement
+  (await
+    (call
+      function: (attribute object: (identifier) @module attribute: (identifier) @function)
+      arguments: (argument_list)) @call)
+  (#any-of? @module "asyncio" "trio" "anyio")
+  (#eq? @function "sleep")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "!inside(@stmt, 'for_statement', 'while_statement')",
+  "occupies_lines(@stmt)",
+  "count(children(parent(@stmt))) > 1",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+name = "remove"
+answer = "remove"
+before = '''
+import time
+
+
+def fetch():
+    print("request sent")
+    time.sleep(0.01)
+    print("response read")
+
+
+fetch()
+'''
+after = '''
+import time
+
+
+def fetch():
+    print("request sent")
+    print("response read")
+
+
+fetch()
+'''
+
+[[example]]
+name = "keep"
+answer = "keep"
+before = '''
+import time
+
+print("pacing")
+time.sleep(0.01)
+print("done")
+'''
+after = '''
+import time
+
+print("pacing")
+time.sleep(0.01)
+print("done")
+'''
+
+[[example]]
+name = "an awaited asyncio sleep"
+answer = "remove"
+before = '''
+import asyncio
+
+
+async def main():
+    print("connecting")
+    await asyncio.sleep(0.01)
+    print("connected")
+
+
+asyncio.run(main())
+'''
+after = '''
+import asyncio
+
+
+async def main():
+    print("connecting")
+    print("connected")
+
+
+asyncio.run(main())
+'''
+
+[[counterexample]]
+name = "a polling interval inside a loop"
+code = '''
+import time
+
+
+def wait_until(ready):
+    while not ready():
+        time.sleep(0.1)
+'''
+
+[[counterexample]]
+name = "the only statement of a block"
+code = '''
+import time
+
+
+def pause():
+    time.sleep(1)
+'''

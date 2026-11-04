@@ -1,0 +1,76 @@
+id = "fixed-wait"
+title = "Fixed wait"
+category = "hazard"
+semantics = "preserved"
+summary = "`${call}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed sleep is a guess about timing: too short and the code is flaky (what it waited for is not ready yet), too long and every run is slow. The safe form waits for the condition itself: join the thread, wait on the channel or future, poll with a timeout.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
+
+A sleep inside a try block is not reported: removing it could leave a catch
+of InterruptedException that javac rejects as unreachable.
+"""
+shape = '''
+(expression_statement
+  (method_invocation object: (identifier) @class name: (identifier) @method) @call
+  (#eq? @class "Thread")
+  (#eq? @method "sleep")) @stmt
+
+(expression_statement
+  (method_invocation object: (field_access object: (identifier) @class) name: (identifier) @method) @call
+  (#eq? @class "TimeUnit")
+  (#eq? @method "sleep")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "!inside(@stmt, 'for_statement', 'enhanced_for_statement', 'while_statement', 'do_statement', 'lambda_expression')",
+  "!inside(@stmt, 'try_statement', 'try_with_resources_statement')",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+public class Snippet {
+    public static void main(String[] args) throws Exception {
+        System.out.println("start");
+        Thread.sleep(10);
+        System.out.println("done");
+    }
+}
+'''
+after = '''
+public class Snippet {
+    public static void main(String[] args) throws Exception {
+        System.out.println("start");
+        System.out.println("done");
+    }
+}
+'''
+
+[[counterexample]]
+name = "inside a try block"
+code = '''
+public class Snippet {
+    static void pause() {
+        try {
+            Thread.sleep(10);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+'''

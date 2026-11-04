@@ -1,19 +1,25 @@
 //! Compiled rules and matching.
 //!
-//! A rule is: a shape (tree-sitter query), facts that must hold (`where`),
-//! and optionally a correction (`fix`) and a question (`ask`). Matching a rule
-//! against a file yields findings; each finding carries the exact edits of its
-//! correction, already checked by the engine's structural guards.
+//! A rule is a shape, facts that must hold (`where`), and optionally a
+//! correction (`fix`) or a question (`ask`) whose answers may carry their own
+//! corrections. A shape is either a tree-sitter query, for languages with a
+//! grammar, or a regular expression over the text, for any language; text
+//! matches are only accepted where they start in code (unless the rule says
+//! otherwise), and only in files whose comments and strings can be told
+//! apart. Matching yields findings; each finding carries the exact edits of
+//! every correction it offers, already checked by the engine's guards.
 
 use crate::edit;
 use crate::eval::{self, comments_in, eval, eval_bool, line_end, line_start, Bindings, EvalCtx, Value};
 use crate::expr::{self, Expr};
 use crate::lang::Language;
-use crate::model::{Category, Edit, Evidence, Finding, Question, Span, Status};
-use crate::pack::RuleSpec;
+use crate::lex::SegKind;
+use crate::model::{Category, Edit, Evidence, Finding, Question, QuestionOption, Span, Status};
+use crate::pack::{EditSpec, RuleSpec};
 use crate::project::{Project, SourceFile};
-use crate::tables::Tables;
+use crate::tables::{Table, Tables};
 use crate::template::{self, Template};
+use regex::Regex;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt;
 use std::sync::Arc;
@@ -39,6 +45,28 @@ struct CompiledEdit {
     with: Option<Template>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Within {
+    Code,
+    Comment,
+    Str,
+    Any,
+}
+
+enum Shape {
+    /// One query per grammar the rule is written for.
+    Tree(Vec<(&'static str, Query)>),
+    Pattern(Regex),
+    /// Regular expressions per GitHub language name, from a pack table.
+    Table(BTreeMap<String, Vec<Regex>>),
+}
+
+struct CompiledOption {
+    answer: String,
+    means: String,
+    edits: Vec<CompiledEdit>,
+}
+
 /// A failure inside a rule while it was being evaluated: a bug in the rule
 /// or the engine, never in the code under examination.
 #[derive(Clone, Debug)]
@@ -59,12 +87,16 @@ pub struct CompiledRule {
     pub id: String,
     pub pack: String,
     pub spec: RuleSpec,
-    pub language: &'static dyn Language,
+    /// The grammars the rule is written for; empty for text rules of a text
+    /// pack, which read any file.
+    pub languages: Vec<&'static dyn Language>,
     pub tables: Arc<Tables>,
-    query: Query,
+    shape: Shape,
+    within: Within,
     lets: Vec<(String, Expr)>,
     facts: Vec<(String, Expr)>,
-    edits: Vec<CompiledEdit>,
+    fix: Option<Vec<CompiledEdit>>,
+    options: Vec<CompiledOption>,
     summary: Template,
     question: Option<Template>,
     anchor: Vec<Template>,
@@ -81,11 +113,14 @@ fn capture_name(s: &str) -> Option<&str> {
     s.strip_prefix('@').filter(|n| !n.is_empty())
 }
 
+const EDIT_OPS: &str =
+    "replace, delete, delete_lines, delete_item, insert_before, insert_after, insert_lines_before, insert_lines_after, add_import";
+
 impl CompiledRule {
     pub fn compile(
         pack: &str,
         spec: RuleSpec,
-        language: &'static dyn Language,
+        languages: &[&'static dyn Language],
         tables: Arc<Tables>,
     ) -> Result<CompiledRule, Vec<String>> {
         let mut problems = Vec::new();
@@ -95,20 +130,109 @@ impl CompiledRule {
                 spec.id
             ));
         }
-        let query = match Query::new(&language.grammar(), &spec.shape) {
-            Ok(q) => q,
-            Err(e) => {
-                problems.push(format!(
-                    "shape does not compile for {} (line {}, column {}): {}",
-                    language.id(),
-                    e.row + 1,
-                    e.column + 1,
-                    e.message.trim()
-                ));
+        let mut known: BTreeSet<String> = BTreeSet::new();
+
+        let shape = match (&spec.shape, &spec.pattern, &spec.patterns) {
+            (Some(q), None, None) => {
+                if languages.is_empty() {
+                    problems.push(
+                        "a `shape` needs a grammar: text packs (language = \"*\") use `pattern` or `patterns`".into(),
+                    );
+                    return Err(problems);
+                }
+                let mut queries = Vec::new();
+                for lang in languages {
+                    match Query::new(&lang.grammar(), q) {
+                        Ok(query) => {
+                            known.extend(query.capture_names().iter().map(|s| s.to_string()));
+                            queries.push((lang.id(), query));
+                        }
+                        Err(e) => problems.push(format!(
+                            "shape does not compile for {} (line {}, column {}): {}",
+                            lang.id(),
+                            e.row + 1,
+                            e.column + 1,
+                            e.message.trim()
+                        )),
+                    }
+                }
+                if !problems.is_empty() {
+                    return Err(problems);
+                }
+                Shape::Tree(queries)
+            }
+            (None, Some(p), None) => match Regex::new(p) {
+                Ok(re) => {
+                    known.insert("match".into());
+                    known.extend(re.capture_names().flatten().map(|s| s.to_string()));
+                    Shape::Pattern(re)
+                }
+                Err(e) => {
+                    problems.push(format!("pattern is not a valid regular expression: {e}"));
+                    return Err(problems);
+                }
+            },
+            (None, None, Some(table_name)) => {
+                let mut map = BTreeMap::new();
+                match tables.get(table_name) {
+                    Some(Table::Map(entries)) => {
+                        known.insert("match".into());
+                        for (lang_name, patterns) in entries {
+                            if crate::linguist::by_name(lang_name).is_none() {
+                                problems.push(format!(
+                                    "patterns table '{table_name}': '{lang_name}' is not a language GitHub knows"
+                                ));
+                            }
+                            let mut compiled = Vec::new();
+                            for p in patterns {
+                                match Regex::new(p) {
+                                    Ok(re) => {
+                                        known.extend(re.capture_names().flatten().map(|s| s.to_string()));
+                                        compiled.push(re);
+                                    }
+                                    Err(e) => problems.push(format!("patterns table '{table_name}', {lang_name}: {e}")),
+                                }
+                            }
+                            map.insert(lang_name.clone(), compiled);
+                        }
+                    }
+                    Some(Table::Set(_)) => {
+                        problems.push(format!("patterns: table '{table_name}' must map languages to patterns"))
+                    }
+                    None => problems.push(format!("patterns: the pack has no table named '{table_name}'")),
+                }
+                Shape::Table(map)
+            }
+            _ => {
+                problems.push("give exactly one of `shape` (a tree-sitter query), `pattern` or `patterns`".into());
                 return Err(problems);
             }
         };
-        let mut known: BTreeSet<String> = query.capture_names().iter().map(|s| s.to_string()).collect();
+        let within = match spec.within.as_deref() {
+            None | Some("code") => Within::Code,
+            Some("comment") => Within::Comment,
+            Some("string") => Within::Str,
+            Some("any") => Within::Any,
+            Some(other) => {
+                problems.push(format!("within: '{other}' must be code, comment, string or any"));
+                Within::Code
+            }
+        };
+        if spec.within.is_some() && matches!(shape, Shape::Tree(_)) {
+            problems.push("within only applies to text rules (pattern or patterns)".into());
+        }
+        if let (Shape::Table(map), true) = (&shape, within != Within::Any) {
+            for name in map.keys() {
+                let readable = crate::linguist::by_name(name).is_some_and(|l| {
+                    crate::lex::profile_for(l).is_some() || crate::lang::for_linguist(l.name).is_some()
+                });
+                if !readable {
+                    problems.push(format!(
+                        "patterns: {name} has no known comment syntax, so a match that must start in code can never be found there (add a lexical profile, or use within = \"any\")"
+                    ));
+                }
+            }
+        }
 
         let check_expr =
             |label: &str, src: &str, known: &BTreeSet<String>, problems: &mut Vec<String>| -> Option<Expr> {
@@ -124,7 +248,7 @@ impl CompiledRule {
                         let mut calls = Vec::new();
                         e.calls(&mut calls);
                         for c in calls {
-                            if !eval::is_known_fact(&c, language) {
+                            if !eval::is_known_fact(&c, languages) {
                                 problems.push(format!(
                                     "{label}: '{src}' calls unknown fact '{c}' (see `codemosis facts`)"
                                 ));
@@ -166,7 +290,7 @@ impl CompiledRule {
                         }
                     }
                     for f in t.filters() {
-                        if !template::is_known_filter(&f, language) {
+                        if !template::is_known_filter(&f, languages) {
                             problems.push(format!("{label}: unknown filter '{f}'"));
                         }
                     }
@@ -206,13 +330,10 @@ impl CompiledRule {
             }
         }
 
-        let mut edits = Vec::new();
-        if let Some(fix) = &spec.fix {
-            if fix.edits.is_empty() {
-                problems.push("fix.edits is empty".to_string());
-            }
-            for (i, e) in fix.edits.iter().enumerate() {
-                let label = format!("fix.edits[{i}]");
+        let compile_edits = |label: &str, specs: &[EditSpec], problems: &mut Vec<String>| -> Vec<CompiledEdit> {
+            let mut edits = Vec::new();
+            for (i, e) in specs.iter().enumerate() {
+                let label = format!("{label}[{i}]");
                 let ops: Vec<(EditOp, &Option<String>)> = vec![
                     (EditOp::Replace, &e.replace),
                     (EditOp::Delete, &e.delete),
@@ -229,7 +350,7 @@ impl CompiledRule {
                     .filter_map(|(op, v)| v.as_ref().map(|v| (op, v)))
                     .collect();
                 if set.len() != 1 {
-                    problems.push(format!("{label}: give exactly one operation (replace, delete, delete_lines, delete_item, insert_before, insert_after, insert_lines_before, insert_lines_after, add_import)"));
+                    problems.push(format!("{label}: give exactly one operation ({EDIT_OPS})"));
                     continue;
                 }
                 let (op, value) = set[0];
@@ -248,7 +369,7 @@ impl CompiledRule {
                     CompiledEdit {
                         op,
                         target: None,
-                        with: check_template(&label, value, &mut problems),
+                        with: check_template(&label, value, problems),
                     }
                 } else {
                     let target = match capture_name(value) {
@@ -259,7 +380,7 @@ impl CompiledRule {
                         }
                     };
                     let with = match (&e.with, needs_with) {
-                        (Some(w), true) => check_template(&label, w, &mut problems),
+                        (Some(w), true) => check_template(&label, w, problems),
                         (None, true) => {
                             problems.push(format!("{label}: this operation needs 'with'"));
                             None
@@ -274,27 +395,88 @@ impl CompiledRule {
                 };
                 edits.push(compiled);
             }
-        }
+            edits
+        };
 
-        match (&spec.fix, spec.semantics, &spec.ask) {
-            (Some(_), None, _) => problems.push(
-                "a rule with a fix must declare semantics = \"preserved\" | \"corrected\" | \"repaired\"".to_string(),
+        let fix = spec.fix.as_ref().map(|f| {
+            if f.edits.is_empty() {
+                problems.push("fix.edits is empty".into());
+            }
+            compile_edits("fix.edits", &f.edits, &mut problems)
+        });
+        let mut options = Vec::new();
+        if let Some(ask) = &spec.ask {
+            for (i, o) in ask.options.iter().enumerate() {
+                if o.answer.is_empty() || !o.answer.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
+                    problems.push(format!(
+                        "ask.option[{i}]: answer '{}' must be a lowercase word",
+                        o.answer
+                    ));
+                }
+                if ask.options.iter().filter(|p| p.answer == o.answer).count() > 1 {
+                    problems.push(format!("ask.option[{i}]: answer '{}' is given twice", o.answer));
+                }
+                options.push(CompiledOption {
+                    answer: o.answer.clone(),
+                    means: o.means.clone(),
+                    edits: compile_edits(&format!("ask.option[{i}].edits"), &o.edits, &mut problems),
+                });
+            }
+            if !ask.options.is_empty() {
+                if ask.options.len() < 2 {
+                    problems.push("ask: a question with options needs at least two".into());
+                }
+                if !ask.options.iter().any(|o| !o.edits.is_empty()) {
+                    problems.push("ask: at least one option must change the code".into());
+                }
+                if fix.is_some() {
+                    problems.push("ask: options carry their own edits; remove [fix]".into());
+                }
+            }
+        }
+        let changes = fix.is_some() || options.iter().any(|o| !o.edits.is_empty());
+
+        match (changes, spec.semantics, &spec.ask) {
+            (true, None, _) => problems.push(
+                "a rule that changes code must declare semantics = \"preserved\" | \"corrected\" | \"repaired\"".into(),
             ),
-            (None, Some(_), _) => problems.push("semantics only applies to rules with a fix".to_string()),
-            (None, _, Some(_)) => problems.push("ask needs a fix to apply when the answer is yes".to_string()),
+            (false, Some(_), _) => problems.push("semantics only applies to rules that change code".into()),
+            (false, _, Some(_)) => problems.push("ask needs a [fix] to apply on yes, or options with edits".into()),
             _ => {}
         }
         if spec.examples.is_empty() {
-            problems.push("every rule needs at least one [[example]]".to_string());
+            problems.push("every rule needs at least one [[example]]".into());
         }
         if spec.counterexamples.is_empty() {
-            problems.push("every rule needs at least one [[counterexample]] showing where it stops".to_string());
+            problems.push("every rule needs at least one [[counterexample]] showing where it stops".into());
         }
         for (i, ex) in spec.examples.iter().enumerate() {
-            match (&spec.fix, &ex.after) {
-                (Some(_), None) => problems.push(format!("example[{i}]: a rule with a fix needs 'after'")),
-                (None, Some(_)) => problems.push(format!("example[{i}]: an explain-only rule takes no 'after'")),
+            match (changes, &ex.after) {
+                (true, None) => problems.push(format!("example[{i}]: a rule that changes code needs 'after'")),
+                (false, Some(_)) => problems.push(format!("example[{i}]: an explain-only rule takes no 'after'")),
                 _ => {}
+            }
+            if let Some(a) = &ex.answer {
+                let valid = if options.is_empty() {
+                    a == "yes" || a == "no"
+                } else {
+                    options.iter().any(|o| o.answer == *a)
+                };
+                if spec.ask.is_none() || !valid {
+                    problems.push(format!("example[{i}]: '{a}' is not an answer to this rule's question"));
+                }
+            }
+        }
+        for (label, l) in spec
+            .examples
+            .iter()
+            .map(|e| ("example", &e.language))
+            .chain(spec.counterexamples.iter().map(|c| ("counterexample", &c.language)))
+        {
+            if let Some(l) = l {
+                if !languages.iter().any(|g| g.id() == l) {
+                    problems.push(format!("{label}: language '{l}' is not one of this pack's grammars"));
+                }
             }
         }
 
@@ -305,12 +487,14 @@ impl CompiledRule {
             id: format!("{pack}/{}", spec.id),
             pack: pack.to_string(),
             spec,
-            language,
+            languages: languages.to_vec(),
             tables,
-            query,
+            shape,
+            within,
             lets,
             facts,
-            edits,
+            fix,
+            options,
             summary: summary.expect("checked"),
             question,
             anchor,
@@ -322,8 +506,63 @@ impl CompiledRule {
         self.spec.category
     }
 
-    pub fn has_fix(&self) -> bool {
-        self.spec.fix.is_some()
+    /// True when the rule can change code (directly or through an answer).
+    pub fn changes_code(&self) -> bool {
+        self.fix.is_some() || self.options.iter().any(|o| !o.edits.is_empty())
+    }
+
+    pub fn asks(&self) -> bool {
+        self.question.is_some()
+    }
+
+    pub fn is_text_rule(&self) -> bool {
+        !matches!(self.shape, Shape::Tree(_))
+    }
+
+    /// The answer that applies a correction when none is given: "yes", or
+    /// the first option that changes code.
+    pub fn default_answer(&self) -> Option<String> {
+        if !self.asks() {
+            return None;
+        }
+        if self.options.is_empty() {
+            return Some("yes".into());
+        }
+        self.options
+            .iter()
+            .find(|o| !o.edits.is_empty())
+            .map(|o| o.answer.clone())
+    }
+
+    /// The languages a text-pattern rule has patterns for (empty for others).
+    pub fn pattern_languages(&self) -> Vec<String> {
+        match &self.shape {
+            Shape::Table(map) => map.keys().cloned().collect(),
+            _ => Vec::new(),
+        }
+    }
+
+    /// True when the rule may run on this file at all.
+    pub fn applies_to(&self, file: &SourceFile) -> bool {
+        if !file.role.is_source() {
+            return false;
+        }
+        if !self.languages.is_empty()
+            && !file
+                .lang
+                .is_some_and(|l| self.languages.iter().any(|g| g.id() == l.id()))
+        {
+            return false;
+        }
+        match &self.shape {
+            Shape::Tree(_) => file.tree.is_some(),
+            Shape::Pattern(_) => self.within == Within::Any || file.knows_comments(),
+            Shape::Table(map) => {
+                file.detection.trusted()
+                    && map.contains_key(file.language_name())
+                    && (self.within == Within::Any || file.knows_comments())
+            }
+        }
     }
 
     /// Find every place in `file` where this rule's shape appears and its
@@ -332,9 +571,9 @@ impl CompiledRule {
         &self,
         file: &SourceFile,
         project: &Project,
-        answers: &dyn Fn(&str) -> Option<bool>,
+        answers: &dyn Fn(&str) -> Option<String>,
     ) -> Result<Vec<Finding>, RuleError> {
-        if file.lang.id() != self.language.id() {
+        if !self.applies_to(file) {
             return Ok(Vec::new());
         }
         let rule_err = |m: String| RuleError {
@@ -342,24 +581,8 @@ impl CompiledRule {
             file: file.display_path(),
             message: m,
         };
-        let names = self.query.capture_names();
         let mut raw: Vec<RawMatch> = Vec::new();
-        let mut cursor = QueryCursor::new();
-        let mut matches = cursor.matches(&self.query, file.tree.root_node(), file.text.as_bytes());
-        while let Some(m) = matches.next() {
-            let mut captured: BTreeMap<String, Vec<Node>> = BTreeMap::new();
-            for cap in m.captures {
-                captured
-                    .entry(names[cap.index as usize].to_string())
-                    .or_default()
-                    .push(cap.node);
-            }
-            let mut bindings: Bindings = BTreeMap::new();
-            for (name, mut nodes) in captured {
-                nodes.sort_by_key(|n| (n.start_byte(), n.end_byte()));
-                nodes.dedup_by_key(|n| n.id());
-                bindings.insert(name, Value::Nodes(nodes));
-            }
+        let mut consider = |bindings: Bindings| -> Result<(), RuleError> {
             let mut ctx = EvalCtx {
                 file,
                 project,
@@ -370,22 +593,86 @@ impl CompiledRule {
                 let value = eval(e, &ctx).map_err(|er| rule_err(format!("let.{name}: {er}")))?;
                 ctx.bindings.insert(name.clone(), value);
             }
-            let mut holds = true;
             for (src, e) in &self.facts {
                 if !eval_bool(e, &ctx).map_err(|er| rule_err(format!("where '{src}': {er}")))? {
-                    holds = false;
-                    break;
+                    return Ok(());
                 }
             }
-            if !holds {
-                continue;
+            raw.push(self.raw_match(&ctx).map_err(&rule_err)?);
+            Ok(())
+        };
+
+        match &self.shape {
+            Shape::Tree(queries) => {
+                let lang = file.lang.expect("checked by applies_to");
+                let Some((_, query)) = queries.iter().find(|(id, _)| *id == lang.id()) else {
+                    return Ok(Vec::new());
+                };
+                let root = file.root().expect("checked by applies_to");
+                let names = query.capture_names();
+                let mut cursor = QueryCursor::new();
+                let mut matches = cursor.matches(query, root, file.text.as_bytes());
+                while let Some(m) = matches.next() {
+                    let mut captured: BTreeMap<String, Vec<Node>> = BTreeMap::new();
+                    for cap in m.captures {
+                        captured
+                            .entry(names[cap.index as usize].to_string())
+                            .or_default()
+                            .push(cap.node);
+                    }
+                    let mut bindings: Bindings = BTreeMap::new();
+                    for (name, mut nodes) in captured {
+                        nodes.sort_by_key(|n| (n.start_byte(), n.end_byte()));
+                        nodes.dedup_by_key(|n| n.id());
+                        bindings.insert(name, Value::Nodes(nodes));
+                    }
+                    consider(bindings)?;
+                }
             }
-            raw.push(self.raw_match(&ctx).map_err(rule_err)?);
+            Shape::Pattern(_) | Shape::Table(_) => {
+                let regexes: Vec<&Regex> = match &self.shape {
+                    Shape::Pattern(re) => vec![re],
+                    Shape::Table(map) => map
+                        .get(file.language_name())
+                        .map(|v| v.iter().collect())
+                        .unwrap_or_default(),
+                    Shape::Tree(_) => unreachable!(),
+                };
+                for re in regexes {
+                    for caps in re.captures_iter(&file.text) {
+                        let whole = caps.get(0).expect("group 0 always matches");
+                        if whole.is_empty() {
+                            continue;
+                        }
+                        let accepted = match self.within {
+                            Within::Any => true,
+                            w => {
+                                let wanted = match w {
+                                    Within::Code => SegKind::Code,
+                                    Within::Comment => SegKind::Comment,
+                                    _ => SegKind::String,
+                                };
+                                file.kind_at(whole.start()) == Some(wanted)
+                            }
+                        };
+                        if !accepted {
+                            continue;
+                        }
+                        let mut bindings: Bindings = BTreeMap::new();
+                        bindings.insert("match".into(), Value::Spans(vec![(whole.start(), whole.end())]));
+                        for name in re.capture_names().flatten() {
+                            let spans = caps.name(name).map(|g| vec![(g.start(), g.end())]).unwrap_or_default();
+                            bindings.insert(name.to_string(), Value::Spans(spans));
+                        }
+                        consider(bindings)?;
+                    }
+                }
+            }
         }
 
         // The same place can be matched by several alternatives of a shape.
         let mut seen = BTreeSet::new();
-        raw.retain(|r| seen.insert((r.span.start_byte, r.span.end_byte, r.edits.clone())));
+        raw.retain(|r| seen.insert((r.span.start_byte, r.span.end_byte, format!("{:?}", r.edits))));
         raw.sort_by_key(|r| (r.span.start_byte, r.span.end_byte));
 
         // Anchor every match. Without explicit anchors, a match is identified
@@ -410,14 +697,24 @@ impl CompiledRule {
                         label: "also here".to_string(),
                     });
                     existing.evidence.extend(r.evidence);
-                    match (&mut existing.edits, r.edits) {
-                        (Ok(a), Ok(b)) => {
-                            a.extend(b);
-                            a.sort();
-                            a.dedup();
+                    for (key, outcome) in r.edits {
+                        let Some(slot) = existing.edits.iter_mut().find(|(k, _)| *k == key) else {
+                            existing.edits.push((key, outcome));
+                            continue;
+                        };
+                        let refused = match (&mut slot.1, outcome) {
+                            (Ok(a), Ok(b)) => {
+                                a.extend(b);
+                                a.sort();
+                                a.dedup();
+                                None
+                            }
+                            (Ok(_), Err(reason)) => Some(reason),
+                            (Err(_), _) => None,
+                        };
+                        if let Some(reason) = refused {
+                            slot.1 = Err(reason);
                         }
-                        (Ok(_), Err(reason)) => existing.edits = Err(reason),
-                        _ => {}
                     }
                     continue;
                 }
@@ -427,23 +724,73 @@ impl CompiledRule {
 
         let mut findings = Vec::new();
         for r in merged {
-            let question = r.question.map(|text| Question {
-                id: question_id(&self.id, &file.display_path(), &r.anchor),
-                text,
-            });
-            let (status, edits) = match (self.has_fix(), r.edits) {
-                (false, _) => (Status::Explained, Vec::new()),
-                (true, Err(reason)) => (Status::Refused { reason }, Vec::new()),
-                (true, Ok(edits)) => {
-                    if let Err(e) = edit::normalize(&edits) {
-                        return Err(rule_err(format!("the fix produces conflicting edits: {e}")));
+            for (_, outcome) in &r.edits {
+                if let Ok(edits) = outcome {
+                    if let Err(e) = edit::normalize(edits) {
+                        return Err(rule_err(format!("the correction produces conflicting edits: {e}")));
                     }
-                    match question {
-                        None => (Status::Fixable, edits),
-                        Some(q) => match answers(&q.id) {
-                            Some(true) => (Status::Fixable, edits),
-                            Some(false) => (Status::Declined { question: q }, Vec::new()),
-                            None => (Status::NeedsAnswer { question: q }, edits),
+                }
+            }
+            let outcome_for = |key: &str| r.edits.iter().find(|(k, _)| k == key).map(|(_, o)| o.clone());
+            let (status, edits) = match (&r.question, self.changes_code()) {
+                (_, false) => (Status::Explained, Vec::new()),
+                (None, true) => match outcome_for("") {
+                    Some(Ok(e)) => (Status::Fixable, e),
+                    Some(Err(reason)) => (Status::Refused { reason }, Vec::new()),
+                    None => (Status::Explained, Vec::new()),
+                },
+                (Some(text), true) => {
+                    let options: Vec<QuestionOption> = if self.options.is_empty() {
+                        vec![
+                            QuestionOption {
+                                answer: "yes".into(),
+                                means: "apply the correction".into(),
+                                changes: true,
+                                unavailable: match outcome_for("yes") {
+                                    Some(Err(reason)) => Some(reason),
+                                    _ => None,
+                                },
+                            },
+                            QuestionOption {
+                                answer: "no".into(),
+                                means: "keep the code as it is, recorded as intentional".into(),
+                                changes: false,
+                                unavailable: None,
+                            },
+                        ]
+                    } else {
+                        self.options
+                            .iter()
+                            .map(|o| QuestionOption {
+                                answer: o.answer.clone(),
+                                means: o.means.clone(),
+                                changes: !o.edits.is_empty(),
+                                unavailable: match outcome_for(&o.answer) {
+                                    Some(Err(reason)) => Some(reason),
+                                    _ => None,
+                                },
+                            })
+                            .collect()
+                    };
+                    let question = Question {
+                        id: question_id(&self.id, &file.display_path(), &r.anchor),
+                        text: text.clone(),
+                        options,
+                    };
+                    let chosen = answers(&question.id).and_then(|a| question.option(&a).cloned());
+                    match chosen {
+                        None => (Status::NeedsAnswer { question }, Vec::new()),
+                        Some(opt) if !opt.changes => (
+                            Status::Declined {
+                                answer: opt.answer.clone(),
+                                question,
+                            },
+                            Vec::new(),
+                        ),
+                        Some(opt) => match outcome_for(&opt.answer) {
+                            Some(Ok(e)) => (Status::Fixable, e),
+                            Some(Err(reason)) => (Status::Refused { reason }, Vec::new()),
+                            None => (Status::NeedsAnswer { question }, Vec::new()),
                         },
                     }
                 }
@@ -465,28 +812,26 @@ impl CompiledRule {
         Ok(findings)
     }
 
-    fn focus<'a>(&self, ctx: &EvalCtx<'a>) -> Option<Vec<Node<'a>>> {
+    fn focus(&self, ctx: &EvalCtx<'_>) -> Option<(usize, usize)> {
         if let Some(name) = self.spec.focus.as_deref().and_then(capture_name) {
-            return Some(ctx.bound_nodes(name)).filter(|n| !n.is_empty());
+            return ctx
+                .bindings
+                .get(name)
+                .and_then(|v| ctx.extent(v, "focus").ok().flatten());
         }
         // Default: the capture covering the most text.
         ctx.bindings
             .values()
             .filter_map(|v| match v {
-                Value::Nodes(n) if !n.is_empty() => Some(n),
+                Value::Nodes(_) | Value::Spans(_) => ctx.extent(v, "focus").ok().flatten(),
                 _ => None,
             })
-            .max_by_key(|n| {
-                let s = n.first().unwrap().start_byte();
-                let e = n.last().unwrap().end_byte();
-                (e - s, usize::MAX - s)
-            })
-            .cloned()
+            .max_by_key(|(s, e)| (e - s, usize::MAX - s))
     }
 
     fn raw_match(&self, ctx: &EvalCtx<'_>) -> Result<RawMatch, String> {
-        let focus = self.focus(ctx).ok_or("the match has no captured nodes to report")?;
-        let span = Span::from_nodes(focus.first().unwrap(), focus.last().unwrap());
+        let (start, end) = self.focus(ctx).ok_or("the match has no captured text to report")?;
+        let span = Span::from_range(&ctx.file.text, start, end);
         let message = self.summary.render(ctx).map_err(|e| format!("summary: {e}"))?;
         let question = match &self.question {
             Some(t) => Some(t.render(ctx).map_err(|e| format!("ask.question: {e}"))?),
@@ -498,57 +843,74 @@ impl CompiledRule {
         }
         let mut evidence = Vec::new();
         for (cap, label) in &self.evidence {
-            if let Some(nodes) = Some(ctx.bound_nodes(cap)).filter(|n| !n.is_empty()) {
+            if let Some((a, b)) = ctx
+                .bindings
+                .get(cap)
+                .and_then(|v| ctx.extent(v, "evidence").ok().flatten())
+            {
                 evidence.push(Evidence {
-                    span: Span::from_nodes(nodes.first().unwrap(), nodes.last().unwrap()),
+                    span: Span::from_range(&ctx.file.text, a, b),
                     label: label.render(ctx).map_err(|e| format!("evidence.label: {e}"))?,
                 });
             }
         }
-        let edits = if self.has_fix() {
-            self.build_edits(ctx)?
-        } else {
-            Ok(Vec::new())
-        };
-        let focus_text: String = ctx.text_of(&focus).split_whitespace().collect::<Vec<_>>().join(" ");
+        let mut edits = Vec::new();
+        if let Some(fix) = &self.fix {
+            let key = if self.question.is_some() { "yes" } else { "" };
+            edits.push((key.to_string(), self.build_edits(fix, ctx)?));
+        }
+        for o in &self.options {
+            if !o.edits.is_empty() {
+                edits.push((o.answer.clone(), self.build_edits(&o.edits, ctx)?));
+            }
+        }
+        let focus_text: String = ctx.file.text[start..end]
+            .split_whitespace()
+            .collect::<Vec<_>>()
+            .join(" ");
         Ok(RawMatch {
             span,
             message,
             question,
             evidence,
             edits,
-            def_path: definition_path(ctx.file, focus.first().unwrap()),
+            def_path: definition_path_at(ctx.file, start, end),
             focus_text,
             anchor: anchor_parts.join("|"),
         })
     }
 
-    /// Build the edits of the correction. The outer error is a rule bug; the
+    /// Build the edits of a correction. The outer error is a rule bug; the
     /// inner error is a guard refusing a correction that is unsafe here.
-    fn build_edits(&self, ctx: &EvalCtx<'_>) -> Result<Result<Vec<Edit>, String>, String> {
+    fn build_edits(&self, specs: &[CompiledEdit], ctx: &EvalCtx<'_>) -> Result<Result<Vec<Edit>, String>, String> {
         let text = &ctx.file.text;
         let mut out = Vec::new();
-        for (i, e) in self.edits.iter().enumerate() {
+        for (i, e) in specs.iter().enumerate() {
             let render = || -> Result<String, String> {
                 e.with
                     .as_ref()
-                    .map(|t| t.render(ctx).map_err(|er| format!("fix.edits[{i}]: {er}")))
+                    .map(|t| t.render(ctx).map_err(|er| format!("edit {i}: {er}")))
                     .unwrap_or_else(|| Ok(String::new()))
             };
             if e.op == EditOp::AddImport {
                 let stmt = render()?;
-                match ctx.file.lang.add_import(ctx.file, &stmt) {
+                let Some(lang) = ctx.file.lang else {
+                    return Ok(Err("imports can only be added to files with a syntax tree".into()));
+                };
+                match lang.add_import(ctx.file, &stmt) {
                     Ok(edit) => out.push(edit),
                     Err(reason) => return Ok(Err(reason)),
                 }
                 continue;
             }
             let target = e.target.as_deref().expect("compiled");
-            let nodes = ctx.bound_nodes(target);
-            let (Some(first), Some(last)) = (nodes.first(), nodes.last()) else {
-                return Err(format!("fix.edits[{i}]: capture @{target} is empty in this match"));
+            let Some((start, end)) = ctx
+                .bindings
+                .get(target)
+                .and_then(|v| ctx.extent(v, "edit").ok().flatten())
+            else {
+                return Err(format!("edit {i}: capture @{target} is empty in this match"));
             };
-            let (start, end) = (first.start_byte(), last.end_byte());
             let edit = match e.op {
                 EditOp::Replace => Edit {
                     start,
@@ -579,7 +941,7 @@ impl CompiledRule {
                     let mut e2 = if le < text.len() { le + 1 } else { le };
                     // A block that stood alone between blank lines takes one
                     // of them with it, so no double gap is left behind. (A
-                    // blank line beside a node that owns its lines cannot be
+                    // blank line beside text that owns its lines cannot be
                     // inside a string, so this only ever touches whitespace.)
                     let prev_blank = s == 0 || text[line_start(text, s - 1)..s].trim().is_empty();
                     let next_end = line_end(text, e2);
@@ -593,6 +955,10 @@ impl CompiledRule {
                     }
                 }
                 EditOp::DeleteItem => {
+                    let nodes = ctx.bound_nodes(target);
+                    let (Some(first), Some(last)) = (nodes.first(), nodes.last()) else {
+                        return Ok(Err("delete_item needs a syntax-tree capture".to_string()));
+                    };
                     let next = last.next_named_sibling().filter(|n| !n.is_extra());
                     let prev = first.prev_named_sibling().filter(|n| !n.is_extra());
                     let sep_after = next.is_some_and(|n| text[end..n.start_byte()].trim() == ",");
@@ -663,13 +1029,13 @@ impl CompiledRule {
             if e.start == e.end {
                 continue;
             }
-            for c in comments_in(ctx.file, e.start, e.end) {
-                let ctext = ctx.node_text(&c);
+            for (cs, ce) in comments_in(ctx.file, e.start, e.end) {
+                let ctext = &ctx.file.text[cs..ce];
                 if !e.text.contains(ctext) {
                     return Ok(Err(format!(
                         "the correction would delete the comment `{}` on line {}",
                         ctext.trim(),
-                        c.start_position().row + 1
+                        ctx.file.line_of(cs)
                     )));
                 }
             }
@@ -683,7 +1049,8 @@ struct RawMatch {
     message: String,
     question: Option<String>,
     evidence: Vec<Evidence>,
-    edits: Result<Vec<Edit>, String>,
+    /// Edits per answer: "" for a plain fix, "yes" or an option's answer.
+    edits: Vec<(String, Result<Vec<Edit>, String>)>,
     def_path: String,
     focus_text: String,
     anchor: String,
@@ -691,16 +1058,27 @@ struct RawMatch {
 
 /// `Class.method` style path of the definitions enclosing `node`.
 pub fn definition_path(file: &SourceFile, node: &Node) -> String {
+    let Some(lang) = file.lang else {
+        return String::new();
+    };
     let mut parts = Vec::new();
     let mut cur = node.parent();
     while let Some(n) = cur {
-        if let Some(name) = file.lang.definition_name(&n, &file.text) {
+        if let Some(name) = lang.definition_name(&n, &file.text) {
             parts.push(name);
         }
         cur = n.parent();
     }
     parts.reverse();
     parts.join(".")
+}
+
+/// The definitions enclosing a byte range (empty for files without a tree).
+pub fn definition_path_at(file: &SourceFile, start: usize, end: usize) -> String {
+    match file.root().and_then(|r| r.descendant_for_byte_range(start, end)) {
+        Some(n) => definition_path(file, &n),
+        None => String::new(),
+    }
 }
 
 /// FNV-1a: small, stable across platforms and versions.
@@ -728,7 +1106,7 @@ pub struct Scan {
 pub fn scan<'r>(
     project: &Project,
     rules: impl IntoIterator<Item = &'r CompiledRule> + Clone,
-    answers: &dyn Fn(&str) -> Option<bool>,
+    answers: &dyn Fn(&str) -> Option<String>,
     only_files: Option<&BTreeSet<usize>>,
 ) -> Scan {
     let mut out = Scan::default();
@@ -748,18 +1126,39 @@ pub fn scan<'r>(
     out
 }
 
-/// A finding that carries a correction supersedes an explain-only finding
-/// at exactly the same place: the explanation adds nothing the correction
-/// does not already say.
+/// Drop findings that a correction makes moot:
+///
+/// * an explain-only finding at exactly the place of a finding that carries
+///   a correction adds nothing the correction does not already say;
+/// * a question or explanation about code that a proven correction deletes
+///   (dead code, say) would ask about something that is about to disappear.
 fn supersede(findings: &mut Vec<Finding>) {
     let corrected: BTreeSet<(std::path::PathBuf, usize, usize)> = findings
         .iter()
         .filter(|f| !matches!(f.status, Status::Explained))
         .map(|f| (f.file.clone(), f.span.start_byte, f.span.end_byte))
         .collect();
+    let deleted: Vec<(std::path::PathBuf, usize, usize)> = findings
+        .iter()
+        .filter(|f| f.is_fixable())
+        .flat_map(|f| {
+            f.edits
+                .iter()
+                .filter(|e| e.text.is_empty() && e.end > e.start)
+                .map(|e| (f.file.clone(), e.start, e.end))
+                .collect::<Vec<_>>()
+        })
+        .collect();
     findings.retain(|f| {
-        !matches!(f.status, Status::Explained)
-            || !corrected.contains(&(f.file.clone(), f.span.start_byte, f.span.end_byte))
+        let same_place = (f.file.clone(), f.span.start_byte, f.span.end_byte);
+        if matches!(f.status, Status::Explained) && corrected.contains(&same_place) {
+            return false;
+        }
+        let moot = !f.is_fixable()
+            && deleted
+                .iter()
+                .any(|(file, s, e)| *file == f.file && *s <= f.span.start_byte && f.span.end_byte <= *e);
+        !moot
     });
 }
 

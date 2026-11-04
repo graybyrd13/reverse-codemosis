@@ -1,7 +1,8 @@
 # Roadmap
 
 The foundation is in place: the engine, the pack format and its proof system,
-the verification loop and the demonstration. What follows is ordered by how
+the verification loop, every language GitHub knows in three tiers, questions
+with named answers, and two demonstrations. What follows is ordered by how
 much it strengthens correction, which comes before anything else.
 
 ## Next
@@ -11,8 +12,9 @@ much it strengthens correction, which comes before anything else.
   resolution becomes a proven correction; a suggestion the compiler itself
   marks uncertain becomes a question. Packs can then match on diagnostics as
   well as on shapes.
-- **More languages.** TypeScript/JavaScript and Go first, each with a
-  runner so its packs prove themselves the way Python and Rust packs do.
+- **Deeper facts for the new grammars.** JavaScript, Go, Java and the
+  others have shapes and runners; scope analysis like Python's would let
+  their packs prove removals and renames, not only local rewrites.
 - **Type-aware facts.** Many corrections are blocked only because a fact
   such as "this operand is a str" cannot be established syntactically.
   Facts backed by a type checker would unlock them while staying
@@ -31,7 +33,6 @@ much it strengthens correction, which comes before anything else.
   step touched.
 - **Editor integration** through the Language Server Protocol: findings,
   questions and proven corrections where the code is written.
-- **Interactive answering** in the terminal, with the evidence on screen.
 - **Structural corrections** across files: moving a definition, splitting a
   module, each step still verified.
 

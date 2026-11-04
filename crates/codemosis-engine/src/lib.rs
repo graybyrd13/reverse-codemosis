@@ -98,7 +98,7 @@ pub fn enabled_rules<'p>(
     let languages = project.languages();
     packs
         .iter()
-        .filter(|p| languages.contains(&p.language.id()))
+        .filter(|p| p.applies_to(&languages))
         .flat_map(|p| p.rules.iter())
         .filter(|r| config.rule_enabled(&r.id))
         .filter(|r| only.is_empty() || only.iter().any(|o| r.id == *o || r.id.starts_with(&format!("{o}/"))))

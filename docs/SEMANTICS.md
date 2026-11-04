@@ -58,15 +58,44 @@ rule must either ask or only explain.
 
 Some corrections depend on a fact no analysis can establish: whether a
 mutable default is meant to be shared, whether a handler should let Ctrl-C
-through, whether a string was meant to be an f-string. The rule then asks a
-yes/no question. "Yes" supplies the missing fact and the correction becomes
-proven *given that fact*. "No" records the code as intentional, and it is not
-reported again.
+through, whether a string was meant to be an f-string, whether a fixed wait
+is deliberate. The rule then asks. A yes/no question's "yes" supplies the
+missing fact and the correction becomes proven *given that fact*; "no"
+records the code as intentional, and it is not reported again.
+
+When more than two answers are reasonable, the rule names them: a merge
+conflict asks *ours*, *theirs* or *both*; a fixed wait asks *keep* or
+*remove*. Each option states what it means and carries its own edits, and
+an option without edits records the code as intentional. The answer is the
+person's decision; the engine still checks the resulting edit against the
+whole acceptance contract, so an answer can never make the code worse
+either.
+
+A question that a fixable correction would make moot is not asked: when a
+rule can prove that a statement is unreachable and delete it, a question
+about a `console.log` inside that statement is dropped, and an explanation
+at exactly the place a correction is made is replaced by the correction.
 
 Answers live in `.codemosis/answers.toml`, with the question, the rule and
 the location, so a reviewer can see every human decision the corrections
 depend on. A question's identity is derived from the rule, the file and the
 code it concerns, not from line numbers, so answers survive unrelated edits.
+
+## Knowing what a file is
+
+Before any rule runs, the engine must know a file's language, and it treats
+that as a fact like any other. Detection follows GitHub Linguist (filename,
+shebang, extension, content heuristics) and reports how sure it is. A file
+whose language is only a guess (an ambiguous extension with no evidence
+either way) is listed by `codemosis map` but no rule runs on it. Generated
+files (lockfiles, minified bundles, files marked `@generated` or "DO NOT
+EDIT") and vendored ones (`node_modules/`, `vendor/`, `third_party/`...) are
+read but never edited: a correction there would be overwritten or would
+diverge from upstream.
+
+Text rules that distinguish code from comments only run on languages whose
+comment and string syntax is known. Where it is not, they would have to
+guess, so they do not run.
 
 ## Conservative facts, by example
 

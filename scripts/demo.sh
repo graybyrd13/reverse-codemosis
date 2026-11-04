@@ -2,15 +2,12 @@
 # The proof, end to end: one broken repository, one command, a green test
 # suite, and a diff to read line by line.
 #
-#   scripts/demo.sh            # uses ./target/release/codemosis, building it if needed
+#   scripts/demo.sh            # builds ./target/release/codemosis (a no-op when current)
 set -eu
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 BIN="$ROOT/target/release/codemosis"
-if [ ! -x "$BIN" ]; then
-  echo "Building codemosis..."
-  (cd "$ROOT" && cargo build --release --quiet)
-fi
+(cd "$ROOT" && cargo build --release --quiet)
 
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT

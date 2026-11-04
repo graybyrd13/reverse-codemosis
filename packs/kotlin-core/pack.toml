@@ -1,0 +1,8 @@
+[pack]
+id = "kotlin-core"
+version = "0.1.0"
+language = "kotlin"
+summary = "Questions for Kotlin: fixed waits."
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

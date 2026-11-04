@@ -125,6 +125,22 @@ pub struct Span {
 }
 
 impl Span {
+    /// A span from byte offsets into `text`.
+    pub fn from_range(text: &str, start: usize, end: usize) -> Span {
+        let pos = |at: usize| {
+            let before = &text[..at.min(text.len())];
+            let line = before.matches('\n').count() + 1;
+            let column = at - before.rfind('\n').map(|i| i + 1).unwrap_or(0) + 1;
+            Position { line, column }
+        };
+        Span {
+            start_byte: start,
+            end_byte: end,
+            start: pos(start),
+            end: pos(end),
+        }
+    }
+
     pub fn from_node(node: &tree_sitter::Node) -> Span {
         Span::from_nodes(node, node)
     }
@@ -162,12 +178,43 @@ pub struct Evidence {
     pub label: String,
 }
 
-/// A fact only a human can supply. Answering "yes" applies the correction;
-/// answering "no" records the code as intentional.
+/// A fact only a human can supply.
+///
+/// Most questions are yes/no: "yes" applies the correction, "no" records the
+/// code as intentional. Others offer named options ("keep" / "remove",
+/// "ours" / "theirs" / "both"), each saying what it means and whether it
+/// changes the code.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub struct Question {
     pub id: String,
     pub text: String,
+    pub options: Vec<QuestionOption>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub struct QuestionOption {
+    pub answer: String,
+    pub means: String,
+    /// True when choosing it changes the code.
+    pub changes: bool,
+    /// Why this option cannot be applied here, if a guard refuses it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unavailable: Option<String>,
+}
+
+impl Question {
+    pub fn option(&self, answer: &str) -> Option<&QuestionOption> {
+        self.options.iter().find(|o| o.answer.eq_ignore_ascii_case(answer))
+    }
+
+    /// "yes/no", "keep/remove"...
+    pub fn choices(&self) -> String {
+        self.options
+            .iter()
+            .map(|o| o.answer.as_str())
+            .collect::<Vec<_>>()
+            .join("/")
+    }
 }
 
 /// Where a finding stands.
@@ -178,8 +225,8 @@ pub enum Status {
     Fixable,
     /// A correction exists but depends on a fact only a human can supply.
     NeedsAnswer { question: Question },
-    /// A human answered "no": the code is intentional and stays as it is.
-    Declined { question: Question },
+    /// A human chose to keep the code as it is.
+    Declined { question: Question, answer: String },
     /// No rule can prove a correction. The finding is explained only.
     Explained,
     /// A correction exists, but an engine guard refused to apply it.
@@ -225,7 +272,7 @@ impl Finding {
 
     pub fn question(&self) -> Option<&Question> {
         match &self.status {
-            Status::NeedsAnswer { question } | Status::Declined { question } => Some(question),
+            Status::NeedsAnswer { question } | Status::Declined { question, .. } => Some(question),
             _ => None,
         }
     }

@@ -1,0 +1,77 @@
+id = "bool-literal-comparison"
+title = "Comparison with true or false"
+category = "simplification"
+semantics = "preserved"
+summary = "`${cmp}` compares a boolean with a constant; it is `${result}`."
+explain = """
+Go only lets a boolean be compared with `true` or `false`, so `x == true` is
+exactly `x`, `x == false` and `x != true` are exactly `!x`, and `x != false`
+is exactly `x`. The shorter form says the same thing directly.
+"""
+shape = '''
+(binary_expression
+  left: (_) @value
+  operator: ["==" "!="] @op
+  right: [(true) (false)] @literal) @cmp
+
+(binary_expression
+  left: [(true) (false)] @literal
+  operator: ["==" "!="] @op
+  right: (_) @value) @cmp
+'''
+focus = "@cmp"
+where = ["kind(@value) not in ['true', 'false']"]
+
+[let]
+same = "(text(@op) == '==') == (text(@literal) == 'true')"
+result = "choose(@same, text(@value), bang(text(@value)))"
+
+[fix]
+edits = [{ replace = "@cmp", with = "${result}" }]
+
+[[example]]
+before = '''
+package main
+
+import "fmt"
+
+func main() {
+	ready := len("ab") > 1
+	if ready == true {
+		fmt.Println("ready")
+	}
+	if ready != true {
+		fmt.Println("not ready")
+	}
+	if false == (len("a") > 3) {
+		fmt.Println("short")
+	}
+}
+'''
+after = '''
+package main
+
+import "fmt"
+
+func main() {
+	ready := len("ab") > 1
+	if ready {
+		fmt.Println("ready")
+	}
+	if !ready {
+		fmt.Println("not ready")
+	}
+	if !(len("a") > 3) {
+		fmt.Println("short")
+	}
+}
+'''
+
+[[counterexample]]
+code = '''
+package main
+
+func f(a, b int) bool {
+	return a == b
+}
+'''

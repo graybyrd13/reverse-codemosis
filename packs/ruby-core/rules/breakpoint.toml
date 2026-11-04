@@ -1,0 +1,50 @@
+id = "breakpoint"
+title = "Breakpoint left in the code"
+category = "waste"
+semantics = "corrected"
+summary = "`${stmt}` stops the program in a debugger, or crashes it where the debugger is not installed."
+explain = """
+`binding.pry`, `binding.irb`, `byebug` and `debugger` open a debugging
+session when reached. Left in the code, they freeze a server or a test run,
+or raise NoMethodError where the debugging gem is not loaded. They are
+nearly always leftovers, but the engine asks before removing one.
+"""
+shape = '''
+(call receiver: (identifier) @receiver method: (identifier) @method
+  (#eq? @receiver "binding")
+  (#any-of? @method "pry" "irb" "break")) @stmt
+
+((identifier) @stmt
+  (#any-of? @stmt "byebug" "debugger"))
+'''
+focus = "@stmt"
+where = [
+  "kind(parent(@stmt)) in ['program', 'body_statement', 'then', 'else', 'do_block', 'block_body']",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Remove this breakpoint?"
+
+[fix]
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+run = false
+before = '''
+def total(items)
+  binding.pry
+  items.sum
+end
+'''
+after = '''
+def total(items)
+  items.sum
+end
+'''
+
+[[counterexample]]
+code = '''
+debugger_enabled = false
+puts debugger_enabled
+'''

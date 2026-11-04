@@ -25,7 +25,13 @@ use std::sync::Arc;
 pub struct PackMeta {
     pub id: String,
     pub version: String,
-    pub language: String,
+    /// A grammar id (`python`), or `*` for rules that read any text file.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Several grammar ids whose node kinds the rules share
+    /// (`["javascript", "typescript", "tsx"]`).
+    #[serde(default)]
+    pub languages: Vec<String>,
     pub summary: String,
     #[serde(default)]
     pub description: Option<String>,
@@ -55,7 +61,19 @@ pub struct RuleSpec {
     /// The plain-language explanation shown by `codemosis explain`.
     pub explain: String,
     /// A tree-sitter query. Captures name the parts the rule talks about.
-    pub shape: String,
+    #[serde(default)]
+    pub shape: Option<String>,
+    /// A regular expression matched against the text, for rules that work
+    /// on any language. Named groups become captures; `@match` is the whole match.
+    #[serde(default)]
+    pub pattern: Option<String>,
+    /// The name of a table mapping GitHub language names to regular
+    /// expressions: the rule uses the patterns of each file's language.
+    #[serde(default)]
+    pub patterns: Option<String>,
+    /// Where a text match must start: "code" (default), "comment", "string" or "any".
+    #[serde(default)]
+    pub within: Option<String>,
     /// Facts that must all hold.
     #[serde(default, rename = "where")]
     pub facts: Vec<String>,
@@ -98,8 +116,21 @@ pub struct FixSpec {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AskSpec {
-    /// Phrased so that "yes" applies the correction.
+    /// Without options, phrased so that "yes" applies the `fix`.
     pub question: String,
+    /// Named answers, each with its own edits (none means keep the code).
+    #[serde(default, rename = "option")]
+    pub options: Vec<OptionSpec>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct OptionSpec {
+    pub answer: String,
+    /// What choosing this answer means, in a few words.
+    pub means: String,
+    #[serde(default)]
+    pub edits: Vec<EditSpec>,
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -139,6 +170,13 @@ pub struct ExampleSpec {
     /// Set to false when the example cannot be executed on its own.
     #[serde(default)]
     pub run: Option<bool>,
+    /// The answer to the rule's question in this example (default: "yes",
+    /// or the first option that changes code).
+    #[serde(default)]
+    pub answer: Option<String>,
+    /// For packs with several grammars: which one this example is in.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -149,6 +187,8 @@ pub struct CounterexampleSpec {
     #[serde(default)]
     pub path: Option<String>,
     pub code: String,
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 /// The raw files of a pack, before compilation.
@@ -185,9 +225,31 @@ impl std::error::Error for PackError {}
 pub struct Pack {
     pub meta: PackMeta,
     pub origin: String,
-    pub language: &'static dyn Language,
+    /// The grammars its rules are written for; empty for text packs, which
+    /// read any file.
+    pub languages: Vec<&'static dyn Language>,
     pub rules: Vec<CompiledRule>,
     pub tables: Arc<Tables>,
+}
+
+impl Pack {
+    pub fn is_text(&self) -> bool {
+        self.languages.is_empty()
+    }
+
+    /// "python", "javascript+typescript+tsx", or "any text".
+    pub fn target(&self) -> String {
+        if self.is_text() {
+            "any text".to_string()
+        } else {
+            self.languages.iter().map(|l| l.id()).collect::<Vec<_>>().join("+")
+        }
+    }
+
+    /// True when the pack applies to a project containing these grammars.
+    pub fn applies_to(&self, grammar_ids: &[&str]) -> bool {
+        self.is_text() || self.languages.iter().any(|l| grammar_ids.contains(&l.id()))
+    }
 }
 
 impl fmt::Debug for Pack {
@@ -264,17 +326,36 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
             meta.id
         ));
     }
-    let Some(language) = lang::by_id(&meta.language) else {
-        let known: Vec<&str> = lang::all().iter().map(|l| l.id()).collect();
-        return Err(PackError {
-            origin: src.origin.clone(),
-            problems: vec![format!(
-                "pack.toml: unknown language '{}' (this build knows: {})",
-                meta.language,
-                known.join(", ")
-            )],
-        });
+    let ids: Vec<String> = match (&meta.language, meta.languages.is_empty()) {
+        (Some(l), true) if l == "*" => Vec::new(),
+        (Some(l), true) => vec![l.clone()],
+        (None, false) => meta.languages.clone(),
+        _ => {
+            return Err(PackError {
+                origin: src.origin.clone(),
+                problems: vec![
+                    "pack.toml: give either `language` (a grammar id, or \"*\" for any text) or `languages` (a list of grammar ids)"
+                        .to_string(),
+                ],
+            })
+        }
     };
+    let mut languages = Vec::new();
+    for id in &ids {
+        match lang::by_id(id) {
+            Some(l) => languages.push(l),
+            None => {
+                let known: Vec<&str> = lang::all().iter().map(|l| l.id()).collect();
+                return Err(PackError {
+                    origin: src.origin.clone(),
+                    problems: vec![format!(
+                        "pack.toml: unknown language '{id}' (grammars in this build: {}; use \"*\" for rules that read any text)",
+                        known.join(", ")
+                    )],
+                });
+            }
+        }
+    }
     let mut tables = Tables::default();
     for (name, text) in &src.tables {
         if let Err(e) = tables.merge_toml(text) {
@@ -304,7 +385,7 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
             problems.push(format!("{name}: duplicate rule id '{}'", spec.id));
             continue;
         }
-        match CompiledRule::compile(&meta.id, spec, language, tables.clone()) {
+        match CompiledRule::compile(&meta.id, spec, &languages, tables.clone()) {
             Ok(rule) => rules.push(rule),
             Err(errs) => problems.extend(errs.into_iter().map(|e| format!("{name}: {e}"))),
         }
@@ -318,7 +399,7 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
     Ok(Pack {
         meta,
         origin: src.origin.clone(),
-        language,
+        languages,
         rules,
         tables,
     })

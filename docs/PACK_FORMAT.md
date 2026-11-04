@@ -27,7 +27,8 @@ my-pack/
 [pack]
 id = "my-pack"                 # lowercase letters, digits, dashes
 version = "0.1.0"
-language = "python"            # python | rust
+language = "python"            # a grammar id, or "*" for rules that read any text
+# languages = ["javascript", "typescript", "tsx"]   # or several grammars
 summary = "One line: what this pack corrects."
 description = "Optional longer text."
 authors = ["Ada <ada@example.com>"]
@@ -36,6 +37,13 @@ homepage = "https://example.com"   # optional
 ```
 
 Rule ids are qualified by the pack id: `my-pack/double-negation`.
+
+The grammar ids in this build are `python`, `rust`, `javascript`,
+`typescript`, `tsx`, `go`, `java`, `c`, `cpp`, `csharp`, `ruby`, `php`,
+`bash`, `kotlin`, `scala`, `lua` and `swift` (`codemosis languages
+--deep` lists them). A pack with `language = "*"` holds text rules (below)
+and applies to every file whose language the engine can read; it never edits
+a file it identified only by guesswork, a generated file or a vendored one.
 
 ## A rule
 
@@ -79,14 +87,17 @@ print(not [])
 | `semantics` | with a fix | What the correction does to behaviour: `preserved`, `corrected` or `repaired` (below). |
 | `summary` | yes | One sentence shown with each finding. A [template](#templates). |
 | `explain` | yes | The plain-language explanation shown by `codemosis explain`. Say what is wrong, why, and why the correction is safe or why there is none. |
-| `shape` | yes | A tree-sitter query (below). |
+| `shape` | one of three | A tree-sitter query (below). |
+| `pattern` | one of three | A regular expression, for [text rules](#text-rules). |
+| `patterns` | one of three | The name of a table mapping GitHub language names to regular expressions. |
+| `within` | no | Text rules only: where a match must start, `code` (default), `comment`, `string` or `any`. |
 | `where` | no | Facts that must all be true (below). |
 | `let` | no | Derived values, evaluated in order, usable as captures. |
 | `focus` | no | The capture reported as the finding's location. Default: the capture covering the most text. |
 | `anchor` | no | Templates identifying a finding. Matches with equal anchors in one file merge into one finding (for example, one missing import used in many places). |
 | `evidence` | no | `[[evidence]] at = "@capture", label = "template"`: extra labelled locations. |
 | `fix` | no | The correction: `edits = [...]`. Without it the rule only explains. |
-| `ask` | no | `question = "template"`: the correction needs a fact only a human has. Phrase it so that "yes" applies the correction. |
+| `ask` | no | `question = "template"`: the correction needs a fact only a human has. Phrase it so that "yes" applies the correction, or give named [options](#questions). |
 | `references` | no | Links to documentation backing the rule. |
 | `example` | yes, at least one | Proof that the rule does what it says (below). |
 | `counterexample` | yes, at least one | Proof of where the rule stops. |
@@ -110,6 +121,42 @@ module  [1:1]
 Captures (`@name`) name the nodes the rule talks about. The query
 predicates `#eq?`, `#match?` and `#any-of?` work as usual. Giving two nodes
 the same capture name makes the capture span from the first to the last.
+
+## Text rules
+
+Most of GitHub's 845 languages have no grammar in the engine, and some
+problems look the same in all of them. A text rule matches a regular
+expression instead of a shape:
+
+```toml
+pattern = '(?m)^[ \t]*(?P<call>Start-Sleep\s+\d+)[ \t]*$'
+within = "code"
+focus = "@match"
+where = ["occupies_lines(@match)"]
+```
+
+`@match` is the whole match and every named group (`(?P<call>...)`) is a
+capture, usable in facts, templates and edits like a node capture. `within`
+says where a match must *start*: in `code` (the default), a `comment`, a
+`string`, or `any`where. The engine knows comment and string syntax for 343
+languages (the lexical tier); a text rule that asks for `code`, `comment` or
+`string` never runs on a language whose syntax it does not know, because it
+could not tell them apart. `kind_at(@capture)` answers `code`, `comment`,
+`string` or `unknown` for finer checks.
+
+`patterns = "table"` names a table of GitHub language name to regular
+expressions, so one rule covers many languages and adding a language is one
+line of data:
+
+```toml
+[wait_patterns]
+"PowerShell" = ['(?im)^[ \t]*(?P<call>Start-Sleep\s+[\d.]+)[ \t]*$']
+"R" = ['(?m)^[ \t]*(?P<call>Sys\.sleep\(\s*[\d.]+\s*\))[ \t]*$']
+```
+
+A pack's tables are checked when the pack loads: every key must be a
+language GitHub knows, and every language a `within = "code"` table names
+must have a known comment syntax.
 
 ## Facts
 
@@ -161,8 +208,43 @@ templates: `${capture}` inserts the capture's source text,
 indentation unit of the file, and `$$` is a literal `$`.
 
 Generic filters: `trim`, `lower`, `upper`, `line`, `strip_parens`,
-`unescape_braces`, `drop_string_prefix:x`, `add_string_prefix:x`. Python adds
-`py.as_bool` and `py.negate`.
+`unescape_braces`, `bang` (C-style `!x`, parenthesised when needed),
+`drop_string_prefix:x`, `add_string_prefix:x`. Python adds `py.as_bool` and
+`py.negate`. `codemosis facts` lists every filter.
+
+## Questions
+
+When a correction depends on something only a person knows, the rule asks.
+The simplest question is yes or no, phrased so that "yes" applies `[fix]`:
+
+```toml
+[ask]
+question = "Is `${name}` meant to be the module `${module}`?"
+```
+
+When there are more than two reasonable answers, name them. Each option has
+a short `means` and its own edits; an option without edits keeps the code
+and records that the person chose it:
+
+```toml
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@match" }]
+```
+
+Answers are stored in `.codemosis/answers.toml`, keyed by the finding's
+fingerprint, so the same question is never asked twice and `fix` applies
+the answer on every run. `codemosis ask` walks through open questions one by
+one; `codemosis fix --interactive` asks as it goes; `codemosis answer
+<id> <answer>` records one answer from a script.
 
 ## Edits
 
@@ -206,10 +288,14 @@ after = '''...'''           # required for rules with a fix, forbidden otherwise
 output = "...\n"            # optional (required for `corrected`): stdout of `after`
 output_before = "...\n"     # optional: stdout of `before`
 run = false                 # optional: do not execute this example
+answer = "remove"           # optional: the answer to the rule's question (default "yes",
+                            # or the first option with edits)
+language = "typescript"     # optional, for packs with several grammars
 
 [[counterexample]]
 name = "optional description"
 code = '''...'''
+language = "tsx"            # optional, as for examples
 ```
 
 `codemosis pack test` checks, for every example:
@@ -220,10 +306,16 @@ code = '''...'''
 3. `after` has no syntax errors and the rule no longer matches it;
 4. running `before` and `after` confirms the declared semantics.
 
-Every counterexample must produce no finding at all. Python examples run with
-`python3` (override with `CODEMOSIS_PYTHON`), Rust examples with `rustc`
-(`CODEMOSIS_RUSTC`): with a `fn main` they are compiled and run, without one
-they are compiled as a library.
+Every counterexample must produce no finding at all.
+
+Examples run with the language's own toolchain: `python3`, `rustc`, `node`
+(TypeScript with `--experimental-strip-types`), `go run`, `javac`/`java`,
+`cc`, `c++`, `ruby`, `php`, `bash`, `lua` and `swift`, found on `PATH`
+(Python and Rust can be overridden with `CODEMOSIS_PYTHON` and
+`CODEMOSIS_RUSTC`). When a toolchain is missing the semantic check is
+reported as skipped, never as passed. Examples in languages without a runner
+(text rules on PowerShell, SQL, Makefiles...) are checked for the match and
+the edit only.
 
 Write examples that would catch a wrong rule. The `return-bool-if` example
 includes a class whose `>` returns `"yes"`: drop the `bool()` from the
@@ -264,7 +356,8 @@ paths = ["../my-pack"]
 A rule is accepted into a shared pack when:
 
 - its correction is right in every case its facts admit, not most cases;
-- where intent decides, it asks rather than assumes;
+- where intent decides, it asks rather than assumes, and offers the answers a
+  careful person would actually choose between;
 - its examples run and prove its semantics claim;
 - its counterexamples show the cases a careless rule would get wrong;
 - its `explain` text would satisfy a careful reviewer.

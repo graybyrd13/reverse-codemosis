@@ -1,0 +1,35 @@
+id = "duplicate-object-key"
+title = "Object key given twice"
+category = "contradiction"
+summary = "Key ${second} appears twice in this object; the value given on line ${first|line} is silently discarded."
+explain = """
+In an object literal a repeated key keeps only its last value. One of the
+keys is a typo, or one entry is stale; which one is a question about intent,
+so nothing is changed.
+"""
+shape = '''
+(object
+  (pair key: (_) @first)
+  (pair key: (_) @second)
+  (#eq? @first @second))
+'''
+focus = "@second"
+where = ["kind(@first) in ['property_identifier', 'string', 'number']"]
+
+[[evidence]]
+at = "@first"
+label = "first given here; this value is discarded"
+
+[[example]]
+before = '''
+const limits = {
+  retries: 3,
+  timeout: 1000,
+  retries: 5,
+};
+'''
+
+[[counterexample]]
+code = '''
+const limits = { retries: 3, timeout: 1000 };
+'''

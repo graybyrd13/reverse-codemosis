@@ -17,8 +17,19 @@ impl Language for Rust {
         "rs"
     }
 
-    fn extensions(&self) -> &'static [&'static str] {
-        &["rs"]
+    fn linguist_names(&self) -> &'static [&'static str] {
+        &["Rust"]
+    }
+
+    fn definition_kinds(&self) -> &'static [(&'static str, &'static str)] {
+        &[
+            ("function_item", "name"),
+            ("struct_item", "name"),
+            ("enum_item", "name"),
+            ("trait_item", "name"),
+            ("mod_item", "name"),
+            ("impl_item", "type"),
+        ]
     }
 
     fn grammar(&self) -> tree_sitter::Language {

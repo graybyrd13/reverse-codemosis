@@ -1,0 +1,68 @@
+id = "needless-return"
+title = "Bare return at the end of a function"
+category = "simplification"
+semantics = "preserved"
+summary = "This `return` is the last statement of a function with no results; it does nothing."
+explain = """
+A function with no results returns when it reaches its end. A bare `return`
+as its very last statement changes nothing.
+"""
+shape = '''
+(function_declaration
+  !result
+  body: (block (statement_list (return_statement) @ret .)))
+
+(method_declaration
+  !result
+  body: (block (statement_list (return_statement) @ret .)))
+'''
+focus = "@ret"
+where = [
+  "count(children(@ret)) == 0",
+  "occupies_lines(@ret)",
+]
+
+[fix]
+edits = [{ delete_lines = "@ret" }]
+
+[[example]]
+before = '''
+package main
+
+import "fmt"
+
+func greet() {
+	fmt.Println("hi")
+	return
+}
+
+func main() {
+	greet()
+}
+'''
+after = '''
+package main
+
+import "fmt"
+
+func greet() {
+	fmt.Println("hi")
+}
+
+func main() {
+	greet()
+}
+'''
+
+[[counterexample]]
+name = "an early return"
+code = '''
+package main
+
+func f(n int) {
+	if n < 0 {
+		return
+	}
+	println(n)
+}
+'''

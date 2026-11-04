@@ -40,6 +40,14 @@ Facts every language can use
   lookup(table, key) -> string                   The first string stored under a key of a pack map table (empty when absent).
   choose(condition, a, b) -> value               a when the condition is true, otherwise b.
   subset(list, list) -> bool                     True when every item of the first list is in the second.
+  concat(text...) -> string                      The texts joined together.
+  bang(text) -> string                           The C-style negation of an expression: `!x`, parenthesised unless x is a single name, member access or call.
+  count_matches(text, regex) -> number           How many times the regular expression matches in the text.
+  file_matches(regex) -> number                  How many times the regular expression matches in the whole file, in code only (not comments or strings) when the file's comments are known.
+  kind_at(capture) -> string                     What the capture starts in: 'code', 'comment', 'string', or 'unknown' when the file's comments and strings cannot be told apart.
+  language() -> string                           The file's language, as GitHub names it: 'Python', 'Shell', 'PowerShell'...
+  language_kind() -> string                      GitHub's type for the file's language: 'programming', 'markup', 'data' or 'prose'.
+  tier() -> string                               How deeply the file is understood: 'deep' (syntax tree), 'lexical' (comments and strings) or 'recognized'.
   file_name() -> string                          Name of the file being examined, e.g. '__init__.py'.
   file_path() -> string                          Path of the file relative to the project root.
 
@@ -50,6 +58,7 @@ Template filters
   line                   The 1-based line number of the capture instead of its text.
   strip_parens           Remove one pair of parentheses that encloses the whole text.
   unescape_braces        Turn '{{' into '{' and '}}' into '}'.
+  bang                   The C-style negation `!x`, parenthesised unless x is a single name, member access or call.
   drop_string_prefix     Remove a letter (the argument) from a string literal's prefix: ${s|drop_string_prefix:f}.
   add_string_prefix      Add a letter (the argument) to a string literal's prefix: ${s|add_string_prefix:f}.
 
@@ -84,4 +93,40 @@ python facts (py.*)
   py.yields_bool(expr) -> bool                   True when the expression always evaluates to True or False: `not x`, comparisons using only is / is not / in / not in, boolean literals, and and/or of such expressions.
   filter py.as_bool                              The expression if it always yields a bool, otherwise bool(expression).
   filter py.negate                               The logical negation of the expression, parenthesised as needed.
+
+javascript, typescript, tsx facts (js.*)
+  js.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+go facts (go.*)
+  go.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+java facts (java.*)
+  java.defines(name) -> bool                     True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+c, cpp facts (c.*)
+  c.defines(name) -> bool                        True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+csharp facts (cs.*)
+  cs.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+ruby facts (rb.*)
+  rb.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+php facts (php.*)
+  php.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+bash facts (sh.*)
+  sh.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+kotlin facts (kt.*)
+  kt.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+scala facts (scala.*)
+  scala.defines(name) -> bool                    True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+lua facts (lua.*)
+  lua.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+swift facts (swift.*)
+  swift.defines(name) -> bool                    True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
 ```

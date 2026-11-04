@@ -1,5 +1,7 @@
 //! `codemosis`: correct code the way a proof corrects an argument.
 
+mod interactive;
+mod map;
 mod scaffold;
 
 use anyhow::{anyhow, bail, Context, Result};
@@ -93,12 +95,25 @@ enum Command {
         /// Stop after this many attempted steps.
         #[arg(long, default_value_t = 500)]
         max_steps: usize,
+        /// Ask every open question first, then correct with your answers.
+        #[arg(long, short)]
+        interactive: bool,
     },
-    /// Record your answer to a question. "yes" applies the correction; "no" keeps the code.
+    /// Ask the open questions one by one and record your answers.
+    Ask {
+        /// Project root.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        #[arg(long = "pack", value_name = "DIR")]
+        packs: Vec<PathBuf>,
+        #[arg(long = "rule", value_name = "ID")]
+        rules: Vec<String>,
+    },
+    /// Record your answer to one question, such as "yes", "no", "keep" or "remove".
     Answer {
         /// The question id, like Q-1a2b3c4d.
         id: String,
-        #[arg(value_parser = ["yes", "no"])]
+        /// One of the question's answers.
         answer: String,
         /// Project root.
         #[arg(default_value = ".")]
@@ -123,6 +138,21 @@ enum Command {
     Pack {
         #[command(subcommand)]
         command: PackCommand,
+    },
+    /// Show what Reverse Codemosis understands about a project: its languages,
+    /// how deeply each is understood, its build and tests, its definitions.
+    Map {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// List every language GitHub knows, and how deeply each is understood.
+    Languages {
+        /// Only languages whose name contains this text.
+        #[arg(long)]
+        search: Option<String>,
+        /// Only languages understood at this depth: deep, lexical or recognized.
+        #[arg(long)]
+        tier: Option<String>,
     },
     /// Print the syntax tree of a file, to help write rule shapes.
     Tree { file: PathBuf },
@@ -193,9 +223,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// The packs written for a language the project contains.
+/// The packs that apply to a project with these grammars.
 fn applicable<'p>(packs: &'p [Pack], languages: &[&str]) -> Vec<&'p Pack> {
-    packs.iter().filter(|p| languages.contains(&p.language.id())).collect()
+    packs.iter().filter(|p| p.applies_to(languages)).collect()
 }
 
 fn canonical(path: &Path) -> Result<PathBuf> {
@@ -242,6 +272,7 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             packs,
             rules,
             max_steps,
+            interactive,
         } => {
             let root = canonical(&path)?;
             if !dry_run {
@@ -263,17 +294,40 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             }
             fix(
                 &root,
-                dry_run,
-                no_verify,
-                diff,
-                report.as_deref(),
-                format,
+                FixOptions {
+                    dry_run,
+                    no_verify,
+                    show_diff: diff,
+                    report_path: report.as_deref(),
+                    format,
+                    max_steps,
+                    interactive,
+                },
                 &packs,
                 &rules,
-                max_steps,
                 s,
                 e,
             )
+        }
+        Command::Ask { path, packs, rules } => {
+            let root = canonical(&path)?;
+            let mut ws = Workspace::open(&root, &packs)?;
+            let stdin = std::io::stdin();
+            let recorded = interactive::ask(&mut ws, &rules, s, &mut stdin.lock(), &mut std::io::stdout())?;
+            if recorded > 0 {
+                println!("\nRun `codemosis fix` to apply the corrections you chose.");
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Map { path } => {
+            let root = canonical(&path)?;
+            let ws = Workspace::open(&root, &[])?;
+            print!("{}", map::render(&ws, &display_root(&root), s));
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Languages { search, tier } => {
+            print!("{}", map::languages(search.as_deref(), tier.as_deref(), s)?);
+            Ok(ExitCode::SUCCESS)
         }
         Command::Answer { id, answer, path, note } => answer_cmd(&id, &answer, &path, note, s),
         Command::Explain { rule, packs } => explain(&rule, &packs, s),
@@ -296,10 +350,16 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             }
         },
         Command::Tree { file } => {
-            let lang =
-                lang::for_path(&file).ok_or_else(|| anyhow!("no language is registered for {}", file.display()))?;
             let text = std::fs::read_to_string(&file).with_context(|| format!("cannot read {}", file.display()))?;
-            let f = codemosis_core::SourceFile::parse(&file, lang, text)?;
+            let f = codemosis_core::SourceFile::new(&file, text);
+            if f.tree.is_none() {
+                bail!(
+                    "{} is {} ({} tier): this build has no grammar for it, so it has no syntax tree",
+                    file.display(),
+                    f.language_name(),
+                    f.tier().as_str()
+                );
+            }
             print!("{}", codemosis_core::render_tree(&f));
             Ok(ExitCode::SUCCESS)
         }
@@ -385,21 +445,37 @@ fn check(path: &Path, format: Format, extra: &[PathBuf], only: &[String], s: Sty
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn fix(
-    root: &Path,
+struct FixOptions<'a> {
     dry_run: bool,
     no_verify: bool,
     show_diff: bool,
-    report_path: Option<&Path>,
+    report_path: Option<&'a Path>,
     format: Format,
-    extra: &[PathBuf],
-    only: &[String],
     max_steps: usize,
-    s: Style,
-    e: Style,
-) -> Result<ExitCode> {
+    interactive: bool,
+}
+
+fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style, e: Style) -> Result<ExitCode> {
+    let FixOptions {
+        dry_run,
+        no_verify,
+        show_diff,
+        report_path,
+        format,
+        max_steps,
+        interactive,
+    } = o;
     let mut ws = Workspace::open(root, extra)?;
+    if interactive {
+        // Prompts go to stderr when stdout carries JSON or Markdown.
+        let stdin = std::io::stdin();
+        if format == Format::Text {
+            interactive::ask(&mut ws, only, s, &mut stdin.lock(), &mut std::io::stdout())?;
+            println!();
+        } else {
+            interactive::ask(&mut ws, only, e, &mut stdin.lock(), &mut std::io::stderr())?;
+        }
+    }
     let (section, detected) = ws.oracle_section();
     let oracle = (!no_verify && !dry_run).then(|| oracle_from(root, &section));
     let text = format == Format::Text;
@@ -493,6 +569,20 @@ fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Styl
             )
         })?;
     let q = finding.question().expect("found by question");
+    let Some(option) = q.option(answer) else {
+        bail!(
+            "{} is not an answer to {}; its answers are: {}",
+            answer,
+            q.id,
+            q.choices()
+        );
+    };
+    if let Some(why) = &option.unavailable {
+        bail!("{answer} is not possible here: {why}");
+    }
+    let changes = option.changes;
+    let answer = option.answer.clone();
+    let answer = answer.as_str();
     ws.answers.set(Answer {
         id: q.id.clone(),
         rule: finding.rule.clone(),
@@ -508,7 +598,7 @@ fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Styl
         q.id,
         codemosis_engine::answers::FILE
     );
-    if answer == "yes" {
+    if changes {
         println!("Run `codemosis fix` to apply the correction.");
     } else {
         println!("The code stays as it is and will not be reported again.");
@@ -528,23 +618,35 @@ fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
     let rule = find_rule(&packs, id).ok_or_else(|| anyhow!("no rule named '{id}'; `codemosis rules` lists them"))?;
     let spec = &rule.spec;
     println!("{}  {}", s.bold(&rule.id), spec.title);
+    let sem = spec.semantics.map(|x| x.describe()).unwrap_or("");
     let kind = match (&spec.fix, &spec.ask) {
-        (Some(_), None) => format!(
-            "corrects automatically ({})",
-            spec.semantics.map(|x| x.describe()).unwrap_or("")
-        ),
-        (Some(_), Some(_)) => format!(
-            "corrects after you answer yes ({})",
-            spec.semantics.map(|x| x.describe()).unwrap_or("")
-        ),
+        (Some(_), None) => format!("corrects automatically ({sem})"),
+        (_, Some(ask)) if !ask.options.is_empty() => format!("asks, then corrects as you choose ({sem})"),
+        (Some(_), Some(_)) => format!("corrects after you answer yes ({sem})"),
         _ => "explains only".to_string(),
     };
+    let target = if rule.languages.is_empty() {
+        let langs = rule.pattern_languages();
+        if langs.is_empty() {
+            "any text file".to_string()
+        } else {
+            format!("{} languages: {}", langs.len(), langs.join(", "))
+        }
+    } else {
+        rule.languages.iter().map(|l| l.id()).collect::<Vec<_>>().join(", ")
+    };
     println!("  category  {} — {}", spec.category, spec.category.describe());
-    println!("  language  {}", rule.language.id());
+    println!("  language  {target}");
     println!("  action    {kind}\n");
     println!("{}\n", spec.explain.trim());
-    println!("{}", s.bold("Shape"));
-    for l in spec.shape.trim().lines() {
+    let (title, body) = match (&spec.shape, &spec.pattern, &spec.patterns) {
+        (Some(q), _, _) => ("Shape", q.clone()),
+        (_, Some(p), _) => ("Pattern", p.clone()),
+        (_, _, Some(t)) => ("Patterns", format!("one per language, from the table '{t}'")),
+        _ => ("Shape", String::new()),
+    };
+    println!("{}", s.bold(title));
+    for l in body.trim().lines() {
         println!("  {l}");
     }
     if !spec.facts.is_empty() {
@@ -555,13 +657,23 @@ fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
     }
     if let Some(ask) = &spec.ask {
         println!("\n{}\n  {}", s.bold("Question"), ask.question);
+        for o in &ask.options {
+            println!("    {:<8} {}", o.answer, o.means);
+        }
     }
     if let Some(ex) = spec.examples.first() {
         println!("\n{}", s.bold("Example"));
         match &ex.after {
             Some(after) => print!(
                 "{}",
-                codemosis_engine::session::unified_diff(rule.language.example_file(), &ex.before, after)
+                codemosis_engine::session::unified_diff(
+                    ex.path
+                        .as_deref()
+                        .or(rule.languages.first().map(|l| l.example_file()))
+                        .unwrap_or("example"),
+                    &ex.before,
+                    after
+                )
             ),
             None => {
                 for l in ex.before.lines() {
@@ -589,12 +701,12 @@ fn list_rules(extra: &[PathBuf], s: Style) -> Result<ExitCode> {
             s.bold(&p.meta.id),
             p.meta.version,
             p.meta.summary,
-            p.language.id()
+            p.target()
         );
         for r in &p.rules {
-            let kind = match (&r.spec.fix, &r.spec.ask) {
-                (Some(_), None) => "fix",
-                (Some(_), Some(_)) => "ask",
+            let kind = match (r.changes_code(), r.asks()) {
+                (true, false) => "fix",
+                (true, true) => "ask",
                 _ => "explain",
             };
             println!(
@@ -703,6 +815,7 @@ fn facts(language: Option<&str>, s: Style) -> Result<ExitCode> {
             println!("  {:<22} {}", n, s.dim(d));
         }
     }
+    let mut seen = std::collections::BTreeSet::new();
     for l in lang::all() {
         if language.is_some_and(|x| x != l.id()) {
             continue;
@@ -710,9 +823,21 @@ fn facts(language: Option<&str>, s: Style) -> Result<ExitCode> {
         if l.facts().is_empty() && l.filters().is_empty() {
             continue;
         }
-        println!("\n{}", s.bold(&format!("{} facts ({}.*)", l.id(), l.prefix())));
+        if !seen.insert(l.prefix()) {
+            continue;
+        }
+        let sharing: Vec<&str> = lang::all()
+            .iter()
+            .filter(|o| o.prefix() == l.prefix())
+            .map(|o| o.id())
+            .collect();
+        println!(
+            "\n{}",
+            s.bold(&format!("{} facts ({}.*)", sharing.join(", "), l.prefix()))
+        );
         for f in l.facts() {
-            println!("  {:<46} {}", f.signature, s.dim(f.doc));
+            let sig = f.signature.replace("<prefix>", l.prefix());
+            println!("  {:<46} {}", sig, s.dim(f.doc));
         }
         for (n, d) in l.filters() {
             println!("  filter {:<39} {}", format!("{}.{n}", l.prefix()), s.dim(d));

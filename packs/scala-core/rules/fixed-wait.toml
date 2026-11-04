@@ -1,0 +1,65 @@
+id = "fixed-wait"
+title = "Fixed wait"
+category = "hazard"
+semantics = "preserved"
+summary = "`${stmt}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed sleep is a guess about timing: too short and the code is flaky (what it waited for is not ready yet), too long and every run is slow. The safe form waits for the condition itself: poll it with a timeout, wait for the process or the event.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
+"""
+shape = '''
+(call_expression
+  function: (field_expression value: (identifier) @class field: (identifier) @method)
+  (#eq? @class "Thread")
+  (#eq? @method "sleep")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "kind(parent(@stmt)) in ['block', 'template_body', 'compilation_unit']",
+  "!inside(@stmt, 'while_expression', 'for_expression', 'do_while_expression', 'lambda_expression')",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+object Checkout {
+  def pay(): Unit = {
+    charge()
+    Thread.sleep(500)
+    confirm()
+  }
+}
+'''
+after = '''
+object Checkout {
+  def pay(): Unit = {
+    charge()
+    confirm()
+  }
+}
+'''
+
+[[counterexample]]
+code = '''
+object Poller {
+  def await(): Unit = {
+    while (!ready()) {
+      Thread.sleep(100)
+    }
+  }
+}
+'''

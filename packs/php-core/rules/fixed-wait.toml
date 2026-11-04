@@ -1,0 +1,54 @@
+id = "fixed-wait"
+title = "Fixed wait"
+category = "hazard"
+semantics = "preserved"
+summary = "`${call}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed sleep is a guess about timing: too short and the code is flaky (what it waited for is not ready yet), too long and every run is slow. The safe form waits for the condition itself: poll it with a timeout, wait for the process or the event.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
+"""
+shape = '''
+(expression_statement
+  (function_call_expression function: (name) @function) @call
+  (#any-of? @function "sleep" "usleep" "time_nanosleep")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "!inside(@stmt, 'for_statement', 'foreach_statement', 'while_statement', 'do_statement')",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+<?php
+echo "start\n";
+usleep(1000);
+echo "done\n";
+'''
+after = '''
+<?php
+echo "start\n";
+echo "done\n";
+'''
+
+[[counterexample]]
+code = '''
+<?php
+while (!file_exists("ready")) {
+    usleep(100000);
+}
+'''

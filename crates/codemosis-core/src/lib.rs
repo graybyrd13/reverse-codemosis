@@ -13,6 +13,8 @@ pub mod edit;
 pub mod eval;
 pub mod expr;
 pub mod lang;
+pub mod lex;
+pub mod linguist;
 pub mod model;
 pub mod pack;
 pub mod process;
@@ -22,9 +24,11 @@ pub mod selftest;
 pub mod tables;
 pub mod template;
 
-pub use model::{Category, Distance, Edit, Evidence, Finding, Position, Question, Semantics, Span, Status};
+pub use model::{
+    Category, Distance, Edit, Evidence, Finding, Position, Question, QuestionOption, Semantics, Span, Status,
+};
 pub use pack::Pack;
-pub use project::{FileFilter, Project, SourceFile};
+pub use project::{FileFilter, Project, SourceFile, Tier};
 pub use rule::{scan, CompiledRule, Scan};
 
 /// Render a syntax tree with field names and anonymous tokens, to help pack
@@ -72,6 +76,8 @@ pub fn render_tree(file: &SourceFile) -> String {
         }
     }
     let mut out = String::new();
-    walk(&mut file.tree.walk(), &file.text, 0, &mut out);
+    if let Some(tree) = &file.tree {
+        walk(&mut tree.walk(), &file.text, 0, &mut out);
+    }
     out
 }

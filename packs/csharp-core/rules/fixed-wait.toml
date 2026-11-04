@@ -1,0 +1,72 @@
+id = "fixed-wait"
+title = "Fixed wait"
+category = "hazard"
+semantics = "preserved"
+summary = "`${call}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed sleep is a guess about timing: too short and the code is flaky (what it waited for is not ready yet), too long and every run is slow. The safe form waits for the condition itself: join the thread, wait on the channel or future, poll with a timeout.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
+"""
+shape = '''
+(expression_statement
+  (invocation_expression
+    function: (member_access_expression expression: (identifier) @class name: (identifier) @method)) @call
+  (#eq? @class "Thread")
+  (#eq? @method "Sleep")) @stmt
+
+(expression_statement
+  (await_expression
+    (invocation_expression
+      function: (member_access_expression expression: (identifier) @class name: (identifier) @method))) @call
+  (#eq? @class "Task")
+  (#eq? @method "Delay")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "!inside(@stmt, 'for_statement', 'foreach_statement', 'while_statement', 'do_statement', 'lambda_expression')",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+class Checkout {
+    async Task Pay() {
+        Charge();
+        await Task.Delay(2000);
+        Confirm();
+    }
+}
+'''
+after = '''
+class Checkout {
+    async Task Pay() {
+        Charge();
+        Confirm();
+    }
+}
+'''
+
+[[counterexample]]
+code = '''
+class Poller {
+    async Task Wait() {
+        while (!Ready()) {
+            await Task.Delay(100);
+        }
+    }
+}
+'''

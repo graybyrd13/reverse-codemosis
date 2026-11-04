@@ -144,14 +144,123 @@ impl Config {
     }
 }
 
-/// Guess the oracle of a project that has no `[oracle]` section.
+/// Guess the oracle of a project that has no `[oracle]` section, from the
+/// build files at its root. The first ecosystem found, in this order, wins:
+/// Cargo, Go, npm (pnpm, yarn, bun), Maven, Gradle, .NET, Mix, SwiftPM,
+/// Bundler, Composer, Python, Make.
 pub fn detect_oracle(root: &Path) -> OracleSection {
     let mut o = OracleSection::default();
-    if root.join("Cargo.toml").is_file() {
-        o.build = Some("cargo build --all-targets".to_string());
-        o.test = Some("cargo test".to_string());
+    let has = |f: &str| root.join(f).is_file();
+    let set = |o: &mut OracleSection, build: Option<&str>, test: Option<String>| {
+        o.build = build.map(|b| b.to_string());
+        o.test = test;
+    };
+    if has("Cargo.toml") {
+        set(&mut o, Some("cargo build --all-targets"), Some("cargo test".into()));
         return o;
     }
+    if has("go.mod") {
+        set(&mut o, Some("go build ./..."), Some("go test -v ./...".into()));
+        return o;
+    }
+    if has("package.json") {
+        let scripts: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(root.join("package.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|v| v.get("scripts").and_then(|s| s.as_object()).cloned())
+            .unwrap_or_default();
+        let runner = if has("pnpm-lock.yaml") {
+            "pnpm"
+        } else if has("yarn.lock") {
+            "yarn"
+        } else if has("bun.lockb") || has("bun.lock") {
+            "bun"
+        } else {
+            "npm"
+        };
+        let real_test = scripts
+            .get("test")
+            .and_then(|t| t.as_str())
+            .is_some_and(|t| !t.contains("no test specified"));
+        o.test = real_test.then(|| format!("{runner} test"));
+        o.build = scripts.contains_key("build").then(|| format!("{runner} run build"));
+        return o;
+    }
+    if has("pom.xml") {
+        set(&mut o, Some("mvn -q -B compile"), Some("mvn -q -B test".into()));
+        return o;
+    }
+    if has("build.gradle") || has("build.gradle.kts") {
+        let g = if has("gradlew") { "./gradlew" } else { "gradle" };
+        o.build = Some(format!("{g} assemble"));
+        o.test = Some(format!("{g} test"));
+        return o;
+    }
+    let dotnet = std::fs::read_dir(root)
+        .map(|rd| {
+            rd.flatten().any(|e| {
+                let n = e.file_name().to_string_lossy().into_owned();
+                n.ends_with(".sln") || n.ends_with(".csproj") || n.ends_with(".fsproj")
+            })
+        })
+        .unwrap_or(false);
+    if dotnet {
+        set(
+            &mut o,
+            Some("dotnet build"),
+            Some("dotnet test --logger \"console;verbosity=normal\"".into()),
+        );
+        return o;
+    }
+    if has("mix.exs") {
+        set(&mut o, Some("mix compile"), Some("mix test".into()));
+        return o;
+    }
+    if has("Package.swift") {
+        set(&mut o, Some("swift build"), Some("swift test".into()));
+        return o;
+    }
+    if has("Gemfile") {
+        let test = if root.join("spec").is_dir() {
+            Some("bundle exec rspec".to_string())
+        } else if has("Rakefile") {
+            Some("bundle exec rake test".to_string())
+        } else {
+            None
+        };
+        set(&mut o, None, test);
+        return o;
+    }
+    if has("composer.json") {
+        let scripted = std::fs::read_to_string(root.join("composer.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .is_some_and(|v| v.pointer("/scripts/test").is_some());
+        let test = if scripted {
+            Some("composer test".to_string())
+        } else if has("vendor/bin/phpunit") {
+            Some("vendor/bin/phpunit".to_string())
+        } else {
+            None
+        };
+        set(&mut o, None, test);
+        return o;
+    }
+    let python = detect_python(root);
+    if python.build.is_some() || python.test.is_some() {
+        return python;
+    }
+    if has("Makefile") {
+        let text = std::fs::read_to_string(root.join("Makefile")).unwrap_or_default();
+        let has_target = |t: &str| text.lines().any(|l| l.starts_with(&format!("{t}:")));
+        o.build = Some("make".to_string());
+        o.test = has_target("test").then(|| "make test".to_string());
+    }
+    o
+}
+
+fn detect_python(root: &Path) -> OracleSection {
+    let mut o = OracleSection::default();
     let has_python = ["setup.py", "pyproject.toml", "setup.cfg", "requirements.txt"]
         .iter()
         .any(|f| root.join(f).is_file())

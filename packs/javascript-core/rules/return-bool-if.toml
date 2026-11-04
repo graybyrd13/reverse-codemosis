@@ -1,0 +1,81 @@
+id = "return-bool-if"
+title = "if/else that returns true or false"
+category = "simplification"
+semantics = "preserved"
+summary = "This if/else returns the truth value of its condition; it is `return ${value};`."
+explain = """
+`if (c) { return true; } else { return false; }` returns the truth value of
+`c`, which is what `Boolean(c)` computes. JavaScript has no operator
+overloading, so comparisons (`===`, `<`, `instanceof`, `in`...) and `!`
+always produce a boolean already, and then `return c;` is exact. The rule
+applies only when the file does not redefine `Boolean`.
+"""
+shape = '''
+(if_statement
+  condition: (parenthesized_expression (_) @cond)
+  consequence: [(statement_block . (return_statement (true)) .) (return_statement (true))]
+  alternative: (else_clause [(statement_block . (return_statement (false)) .) (return_statement (false))])) @whole
+
+(statement_block
+  (if_statement
+    condition: (parenthesized_expression (_) @cond)
+    consequence: [(statement_block . (return_statement (true)) .) (return_statement (true))]
+    !alternative) @whole
+  .
+  (return_statement (false)) @whole)
+'''
+focus = "@whole"
+where = [
+  "occupies_lines(@whole)",
+  "!js.defines('Boolean')",
+]
+
+[let]
+boolean = "(kind(@cond) == 'binary_expression' && text(field(@cond, 'operator')) in ['===', '!==', '==', '!=', '<', '>', '<=', '>=', 'instanceof', 'in']) || (kind(@cond) == 'unary_expression' && text(field(@cond, 'operator')) == '!')"
+value = "choose(@boolean, text(@cond), concat('Boolean(', text(@cond), ')'))"
+
+[fix]
+edits = [{ replace = "@whole", with = "return ${value};" }]
+
+[[example]]
+before = '''
+function isAdmin(user, admins) {
+  if (admins.includes(user) === true) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
+function hasItems(cart) {
+  if (cart.items.length) return true;
+  return false;
+}
+
+console.log(isAdmin("ada", ["ada"]), isAdmin("bob", ["ada"]));
+console.log(hasItems({ items: [1] }), hasItems({ items: [] }));
+'''
+after = '''
+function isAdmin(user, admins) {
+  return admins.includes(user) === true;
+}
+
+function hasItems(cart) {
+  return Boolean(cart.items.length);
+}
+
+console.log(isAdmin("ada", ["ada"]), isAdmin("bob", ["ada"]));
+console.log(hasItems({ items: [1] }), hasItems({ items: [] }));
+'''
+
+[[counterexample]]
+name = "more work before returning"
+code = '''
+function check(n) {
+  if (n) {
+    console.log("yes");
+    return true;
+  }
+  return false;
+}
+'''

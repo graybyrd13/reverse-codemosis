@@ -11,7 +11,7 @@ fn project(files: &[(&str, &str)]) -> Project {
     Project::in_memory(
         files
             .iter()
-            .map(|(p, t)| SourceFile::parse(*p, py, t.to_string()).unwrap())
+            .map(|(p, t)| SourceFile::with_language(*p, py, t.to_string()))
             .collect(),
     )
 }
@@ -124,7 +124,7 @@ fn imported_elsewhere_sees_reexports() {
 fn add_import(text: &str, stmt: &str) -> String {
     let p = project(&[("m.py", text)]);
     let f = &p.files[0];
-    let e = f.lang.add_import(f, stmt).unwrap();
+    let e = f.lang.unwrap().add_import(f, stmt).unwrap();
     codemosis_core::edit::apply(text, &[e]).unwrap()
 }
 
@@ -163,5 +163,5 @@ fn imports_go_to_the_right_place() {
 fn already_imported_names_are_refused() {
     let p = project(&[("m.py", "from typing import Optional\n")]);
     let f = &p.files[0];
-    assert!(f.lang.add_import(f, "from typing import Optional").is_err());
+    assert!(f.lang.unwrap().add_import(f, "from typing import Optional").is_err());
 }

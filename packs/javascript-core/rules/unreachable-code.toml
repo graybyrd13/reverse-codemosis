@@ -1,0 +1,79 @@
+id = "unreachable-code"
+title = "Unreachable code"
+category = "waste"
+semantics = "preserved"
+summary = "This code can never run: the block always leaves at line ${jump|line} before reaching it."
+explain = """
+Statements after `return`, `throw`, `break` or `continue` in the same block
+never execute.
+
+Deleting them is usually safe, but JavaScript has two exceptions the rule
+checks. Function declarations and `var` are hoisted: they exist from the top
+of their scope, even when written after a return, so code above may use
+them. And `let`, `const` and `class` create a temporal dead zone: a dead
+`let x` still makes every earlier `x` in the block refer to it (and throw).
+If the unreachable statements declare anything at all, nothing is reported.
+"""
+shape = "(statement_block [(return_statement) (throw_statement) (break_statement) (continue_statement)] @jump)"
+focus = "@dead"
+where = [
+  "exists(@dead)",
+  "occupies_lines(@dead)",
+  "!contains(@dead, 'function_declaration', 'generator_function_declaration', 'class_declaration', 'variable_declaration', 'lexical_declaration', 'abstract_class_declaration', 'enum_declaration')",
+]
+
+[let]
+dead = "siblings_after(@jump)"
+
+[fix]
+edits = [{ delete_lines = "@dead" }]
+
+[[example]]
+before = '''
+function price(n) {
+  if (n < 0) {
+    throw new Error("negative");
+    console.log("unreachable");
+  }
+  return n * 2;
+  console.log("also unreachable");
+}
+console.log(price(21));
+'''
+after = '''
+function price(n) {
+  if (n < 0) {
+    throw new Error("negative");
+  }
+  return n * 2;
+}
+console.log(price(21));
+'''
+
+[[counterexample]]
+name = "a hoisted function declaration"
+code = '''
+function f() {
+  return helper();
+  function helper() {
+    return 1;
+  }
+}
+console.log(f());
+'''
+
+[[counterexample]]
+name = "a dead let still has a temporal dead zone"
+code = '''
+const x = "outer";
+function show() {
+  try {
+    console.log(typeof x);
+  } catch (e) {
+    console.log("x is in its dead zone");
+  }
+  return;
+  let x = 1;
+}
+show();
+'''

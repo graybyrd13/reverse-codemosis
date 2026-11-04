@@ -1,0 +1,54 @@
+id = "assignment-in-condition"
+title = "Assignment of a constant in a condition"
+category = "contradiction"
+semantics = "corrected"
+summary = "`${assign}` assigns rather than compares, so this condition is always the same."
+explain = """
+`if (mode = "prod")` assigns "prod" to `mode` and then tests the string,
+which is always truthy: the branch always runs, and `mode` is overwritten.
+Almost always `===` was meant, but an assignment in a condition can be
+deliberate, so the engine asks.
+"""
+shape = '''
+(if_statement
+  condition: (parenthesized_expression
+    (assignment_expression
+      left: (identifier) @variable
+      right: [(number) (string) (true) (false) (null)] @value) @assign))
+'''
+focus = "@assign"
+
+[ask]
+question = "Did you mean `${variable} === ${value}`?"
+
+[fix]
+edits = [{ replace = "@assign", with = "${variable} === ${value}" }]
+
+[[example]]
+before = '''
+let mode = "test";
+if (mode = "prod") {
+  console.log("deploying");
+} else {
+  console.log("dry run");
+}
+'''
+after = '''
+let mode = "test";
+if (mode === "prod") {
+  console.log("deploying");
+} else {
+  console.log("dry run");
+}
+'''
+output = "dry run\n"
+output_before = "deploying\n"
+
+[[counterexample]]
+name = "assigning a computed value is a common idiom"
+code = '''
+let match;
+if ((match = /a/.exec("abc"))) {
+  console.log(match.index);
+}
+'''

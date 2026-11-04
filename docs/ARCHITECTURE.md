@@ -2,7 +2,8 @@
 
 ```text
             ┌───────────────────────── codemosis-cli ─────────────────────────┐
-            │  check · fix · answer · explain · rules · pack test/new · tree  │
+            │ check · fix · ask · answer · explain · map · languages · rules  │
+            │ pack test/new · tree · facts · init                             │
             └───────────────┬─────────────────────────────────┬───────────────┘
                             │                                 │
             ┌───────── codemosis-engine ─────────┐   ┌── codemosis-core ─────────────┐
@@ -12,8 +13,10 @@
             │ testparse   per-test results       │   │ expr     the fact language    │
             │ answers     the human-facts ledger │   │ eval     fact vocabulary      │
             │ report      text, markdown, json   │   │ template rewrite templates    │
-            │ vcs         clean-tree check       │   │ lang     python, rust         │
-            └────────────────────────────────────┘   │ project  parsed source files  │
+            │ vcs         clean-tree check       │   │ lang     17 grammars          │
+            └────────────────────────────────────┘   │ linguist 845 languages        │
+                                                     │ lex      code/comment/string  │
+                                                     │ project  every source file    │
                                                      │ selftest pack proofs          │
                                                      └───────────────────────────────┘
                                      packs/  (embedded at build time by build.rs)
@@ -27,10 +30,29 @@ changing anything on disk.
 - **`model`**: `Category` (the five kinds of distance, in priority order),
   `Semantics`, `Finding`, `Status` (fixable, needs answer, declined,
   explained, refused), `Edit`, `Question`, `Distance`.
-- **`project`**: a `Project` is every source file of a directory (honouring
-  `.gitignore`), each parsed once with tree-sitter. Each file caches one
-  language-specific analysis (for Python, the scope analysis), so facts are
-  cheap and can look across files.
+- **`linguist`**: every language GitHub knows, generated at build time from
+  Linguist's `languages.yml` (in `data/linguist/`). Detection follows
+  Linguist's order: exact filename, shebang interpreter, longest extension,
+  then content heuristics for ambiguous extensions (`.h`, `.m`, `.pl`,
+  `.ts`, `.tsx`, `.php`...). Every detection carries a confidence
+  (`Certain`, `Heuristic`, `Guess`) and a role (`Source`, `Generated`,
+  `Vendored`, `Documentation`); rules never run on a guess and never edit
+  generated or vendored files.
+- **`lex`**: comment and string syntax for 343 languages, grouped into
+  families keyed by Linguist's `ace_mode`, `codemirror_mode` and `tm_scope`.
+  `segments()` splits a file into code, comment and string; text rules use
+  it to know where a match starts.
+- **`project`**: a `Project` is every file of a directory (honouring
+  `.gitignore`) with its language, tier and role. Files with a grammar are
+  parsed once with tree-sitter and cache one language-specific analysis (for
+  Python, the scope analysis), so facts are cheap and can look across files.
+  Each file sits in one of three tiers:
+
+  | Tier | Languages | What the engine understands |
+  |---|---|---|
+  | deep | 17 | the syntax tree: shapes, scopes, definitions, every fact |
+  | lexical | 343 | where code, comments and strings are; text rules |
+  | recognized | 485 | the language and role; language-independent text rules |
 - **`pack`**: reading and validating packs. Built-in packs in `/packs` are
   embedded into the binary by `build.rs`. Compilation collects every problem
   in a pack instead of stopping at the first.
@@ -45,8 +67,12 @@ changing anything on disk.
   live in `eval`; language facts behind `Language::call`.
 - **`template`**: `${capture|filter}` templates.
 - **`lang`**: the `Language` trait (grammar, facts, filters, import
-  placement, a snippet runner) with Python (`python.rs`,
-  `python_scope.rs`) and Rust (`rust.rs`).
+  placement, a snippet runner). Python (`python.rs`, `python_scope.rs`) and
+  Rust (`rust.rs`) have hand-written scope facts; `generic.rs` is a table of
+  fifteen more grammars (JavaScript, TypeScript, TSX, Go, Java, C, C++, C#,
+  Ruby, PHP, Bash, Kotlin, Scala, Lua, Swift), each with its comment kinds,
+  definition kinds, import convention and a `CommandRunner` for its
+  toolchain.
 - **`selftest`**: the pack proofs: rewrite to a fixpoint, compare with
   `after`, check idempotence, run before and after with the language runner
   to check the semantics claim, and check counterexamples.
@@ -57,7 +83,10 @@ changing anything on disk.
   the answers ledger and the parsed source.
 - **`Oracle`** runs the project's build and test commands (in the project
   directory, with a time limit, keeping Python bytecode out of the tree) and
-  reads per-test results with `testparse` (unittest, pytest, libtest, Go).
+  reads per-test results with `testparse` (unittest, pytest, libtest, Go,
+  TAP, Jest/Vitest/Mocha/node:test spec output, dotnet). `config` detects
+  the oracle from the project: Cargo, Go modules, npm scripts, Maven,
+  Gradle, dotnet, Bundler/Rake, Composer, CMake, Make, pytest or unittest.
   `regressions(before, after)` lists everything that got worse.
 - **`Session`** is the correction loop:
 
@@ -80,11 +109,30 @@ changing anything on disk.
   Every round either accepts or rejects at least one finding, so the loop
   terminates; `max_steps` is a further guard.
 - **`answers`**: `.codemosis/answers.toml`. Questions are identified by a
-  hash of rule, file and anchor.
+  hash of rule, file and anchor; an answer is "yes", "no" or the name of one
+  of the rule's options.
 - **`report`**: terminal output (compiler-style findings), Markdown (for a
   pull request) and JSON (the whole `Report`, serialised).
 
+## codemosis-cli
+
+- **`main`**: the commands, and `FixOptions` shared by `fix` and
+  `fix --interactive`.
+- **`interactive`**: asks open questions on the terminal one at a time
+  (prompts go to stderr, so `--format json` stays machine-readable) and
+  records each answer before the next correction round.
+- **`map`**: `codemosis map` is the project as the engine sees it: every
+  language with its tier and file count, the oracle it detected, and the
+  distance per category.
+- **`scaffold`**: `codemosis pack new` and `codemosis init`.
+
 ## Adding a language
+
+A language GitHub knows is already recognized. To move it up a tier:
+
+- **lexical**: add its comment and string syntax to a profile in
+  `core/src/lex.rs` (or map its Linguist `ace_mode` to an existing family).
+- **deep**:
 
 1. Add the tree-sitter grammar crate to `codemosis-core`.
 2. Implement `Language` in `lang/<language>.rs`: id, fact prefix,
@@ -92,7 +140,8 @@ changing anything on disk.
    ideally, a `Runner` so pack examples can be executed.
 3. Add language facts as the first rules need them, each with a `FactDoc`
    stating its exact meaning and why it is conservative.
-4. Register it in `lang::all()`.
+4. Register it in `lang::all()` (or add a row to the table in
+   `lang/generic.rs` when it needs no facts of its own yet).
 5. Write a `<language>-core` pack.
 
 ## Design decisions
@@ -105,6 +154,10 @@ changing anything on disk.
 - **Anchors, not line numbers.** A finding's identity comes from the rule,
   the file, the enclosing definitions and the code itself, so questions and
   rejections survive unrelated edits.
+- **Guessing is refused at every layer.** Language detection says how sure
+  it is and rules do not run on a guess; text rules that need to know
+  comments from code do not run where the comment syntax is unknown; facts
+  that cannot be sure answer in the direction that blocks a correction.
 - **In place, on a clean tree.** Corrections are written into the working
   tree so the project's real build and tests can verify them; requiring a
   clean git tree makes `git diff` the review and `git checkout .` the undo.
