@@ -1,5 +1,6 @@
 //! `codemosis`: correct code the way a proof corrects an argument.
 
+mod doctor;
 mod interactive;
 mod map;
 mod packdocs;
@@ -30,6 +31,10 @@ struct Cli {
     /// When to use colour.
     #[arg(long, value_enum, default_value_t = ColorChoice::Auto, global = true)]
     color: ColorChoice,
+    /// Log what the engine does to standard error: debug or trace.
+    /// Also: CODEMOSIS_LOG=debug|trace, CODEMOSIS_LOG_FORMAT=json.
+    #[arg(long, value_name = "LEVEL", global = true, value_parser = ["debug", "trace"])]
+    log: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -102,6 +107,9 @@ enum Command {
         /// Show the proven corrections as a diff (not verified by the build and tests; `fix` does that).
         #[arg(long)]
         diff: bool,
+        /// Print where the time went (loading, matching, the slowest rules) to standard error.
+        #[arg(long)]
+        timings: bool,
     },
     /// Record today's open findings as accepted, so `check --baseline` fails only on new ones.
     Baseline {
@@ -214,6 +222,12 @@ enum Command {
         #[arg(long)]
         language: Option<String>,
     },
+    /// Check that everything Reverse Codemosis relies on is in place: configuration,
+    /// packs, lockfile, answers, the build and test commands, and the toolchains.
+    Doctor {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
     /// Work with proof certificates.
     Proof {
         #[command(subcommand)]
@@ -314,6 +328,11 @@ fn main() -> ExitCode {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
     let cli = Cli::parse();
+    codemosis_core::log::init(match cli.log.as_deref() {
+        Some("trace") => codemosis_core::log::TRACE,
+        Some(_) => codemosis_core::log::DEBUG,
+        None => 0,
+    });
     let out = style(cli.color, std::io::stdout().is_terminal());
     let err = style(cli.color, std::io::stderr().is_terminal());
     match run(cli.command, out, err) {
@@ -367,6 +386,7 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             no_baseline,
             show_suppressed,
             diff,
+            timings,
         } => check(
             &path,
             CheckOptions {
@@ -377,6 +397,7 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
                 no_baseline,
                 show_suppressed,
                 diff,
+                timings,
             },
             &packs,
             &rules,
@@ -515,6 +536,14 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         Command::Facts { language } => facts(language.as_deref(), s),
         Command::Init { path } => init(&path),
         Command::Lock { path, check } => lock_cmd(&path, check),
+        Command::Doctor { path } => {
+            let root = canonical(&path)?;
+            Ok(if doctor::run(&root, s) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
+        }
         Command::Proof {
             command: ProofCommand::Verify { certificate, path },
         } => proof_verify(&certificate, &path, s),
@@ -529,6 +558,7 @@ struct CheckOptions<'a> {
     no_baseline: bool,
     show_suppressed: bool,
     diff: bool,
+    timings: bool,
 }
 
 fn finding_json(f: &Finding, policy: &codemosis_engine::policy::Policy, baselined: bool) -> serde_json::Value {
@@ -575,9 +605,16 @@ fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: St
     use codemosis_engine::ci;
     use codemosis_engine::policy::{Baseline, FailOn};
     let root = canonical(path)?;
+    let started = std::time::Instant::now();
     let ws = Workspace::open(&root, extra)?;
+    let loaded = started.elapsed();
     let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
+    let scan_started = std::time::Instant::now();
     let scan = ws.scan_rules(only);
+    let scanned = scan_started.elapsed();
+    if o.timings {
+        print_timings(&ws, &scan, loaded, scanned);
+    }
     let fail_on = match o.fail_on {
         Some(t) => FailOn::parse(t).map_err(|e| anyhow!("--fail-on: {e}"))?,
         None => ws.policy.fail_on,
@@ -764,6 +801,41 @@ fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: St
         None => print!("{body}"),
     }
     Ok(if fails { ExitCode::from(1) } else { ExitCode::SUCCESS })
+}
+
+/// `check --timings`: where the time went, on standard error.
+fn print_timings(
+    ws: &Workspace,
+    scan: &codemosis_core::Scan,
+    loaded: std::time::Duration,
+    scanned: std::time::Duration,
+) {
+    let bytes: usize = ws.project.files.iter().map(|f| f.text.len()).sum();
+    let cpu: std::time::Duration = scan.timings.iter().map(|(_, t)| *t).sum();
+    eprintln!("Timings ({} thread(s))", codemosis_core::parallel::threads());
+    eprintln!(
+        "  load      {:>9.2?}  configuration, {} pack(s), {} file(s) read and parsed ({:.1} MB)",
+        loaded,
+        ws.packs.len(),
+        ws.project.files.len(),
+        bytes as f64 / 1_048_576.0
+    );
+    eprintln!(
+        "  match     {:>9.2?}  wall · {:.2?} CPU over {} rule(s) · {:.0} files/s",
+        scanned,
+        cpu,
+        scan.timings.len(),
+        ws.project.files.len() as f64 / scanned.as_secs_f64().max(1e-9)
+    );
+    let mut slowest: Vec<&(String, std::time::Duration)> = scan.timings.iter().collect();
+    slowest.sort_by(|a, b| b.1.cmp(&a.1));
+    for (rule, t) in slowest.iter().take(8).filter(|(_, t)| !t.is_zero()) {
+        eprintln!(
+            "    {:>9.2?}  {:>4.1}%  {rule}",
+            t,
+            100.0 * t.as_secs_f64() / cpu.as_secs_f64().max(1e-9)
+        );
+    }
 }
 
 /// A link to a finding on GitHub, inside a GitHub Actions run.

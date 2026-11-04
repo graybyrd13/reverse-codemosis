@@ -51,13 +51,58 @@ pub struct Workspace {
 
 impl Workspace {
     pub fn open(root: &Path, extra_packs: &[PathBuf]) -> Result<Workspace, EngineError> {
+        let t = std::time::Instant::now();
         let (config, config_path) = Config::load(root)?;
-        let packs = config.load_packs(root, extra_packs)?;
-        let answers = Answers::load(root).map_err(EngineError::Answers)?;
+        codemosis_core::debug!(
+            "configuration: {}",
+            config_path
+                .as_ref()
+                .map(|p| p.display().to_string())
+                .unwrap_or_else(|| "none (defaults)".into())
+        );
         let project = Project::load(root, &config.filter())?;
+        codemosis_core::debug!(
+            "{} file(s) read, {} skipped, in {:.2?} on {} thread(s)",
+            project.files.len(),
+            project.skipped.len(),
+            t.elapsed(),
+            codemosis_core::parallel::threads()
+        );
+        for (p, why) in &project.skipped {
+            codemosis_core::trace!("skipped {}: {why}", p.display());
+        }
+        // Compile only the packs that can apply: text packs, and packs for
+        // a grammar the project contains. Every pack still counts for the
+        // lockfile and for names in the policy.
+        let sources = config.pack_sources(root, extra_packs)?;
+        let index: Vec<_> = sources.iter().map(codemosis_core::pack::index).collect();
+        let languages = project.languages();
+        let wanted: Vec<_> = sources
+            .iter()
+            .zip(&index)
+            .filter(|(_, i)| {
+                i.as_ref().is_none_or(|i| {
+                    i.languages.is_empty() || i.languages.iter().any(|l| languages.contains(&l.as_str()))
+                })
+            })
+            .map(|(s, _)| s.clone())
+            .collect();
+        let packs = config::compile_all(&wanted)?;
+        codemosis_core::debug!(
+            "{} of {} pack(s) apply and were compiled: {}",
+            packs.len(),
+            sources.len(),
+            packs.iter().map(|p| p.meta.id.as_str()).collect::<Vec<_>>().join(", ")
+        );
+        let answers = Answers::load(root).map_err(EngineError::Answers)?;
         let policy = config.policy()?;
         if let Some(lock) = lock::Lock::load(root).map_err(|e| EngineError::Config(ConfigError::Other(e)))? {
-            let problems = lock.verify(&packs);
+            let ids: Vec<(String, String, String)> = index
+                .iter()
+                .flatten()
+                .map(|i| (i.id.clone(), i.version.clone(), i.digest.clone()))
+                .collect();
+            let problems = lock.verify_ids(&ids);
             if !problems.is_empty() {
                 return Err(EngineError::Config(ConfigError::Other(format!(
                     "the packs do not match {}:\n  - {}\nReview the pack changes, then run `codemosis lock` to pin them again.",
@@ -67,9 +112,10 @@ impl Workspace {
             }
         }
         let known = |name: &str| {
-            packs
+            index
                 .iter()
-                .any(|p| p.meta.id == name || p.rules.iter().any(|r| r.id == name))
+                .flatten()
+                .any(|i| i.id == name || i.rules.iter().any(|r| r == name))
         };
         for name in policy.named_rules() {
             if !known(&name) {

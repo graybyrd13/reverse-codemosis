@@ -31,7 +31,7 @@
 //! reason = "legacy worker, replaced in Q1"
 //! ```
 
-use codemosis_core::pack::{self, Pack, PackError};
+use codemosis_core::pack::{self, Pack, PackError, PackSource};
 use codemosis_core::FileFilter;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -114,21 +114,23 @@ impl Config {
 
     /// The packs that apply to this project: the selected built-in packs and
     /// any packs listed by path (relative to the project root).
-    pub fn load_packs(&self, root: &Path, extra: &[PathBuf]) -> Result<Vec<Pack>, ConfigError> {
-        let mut packs = Vec::new();
-        for src in pack::builtin_sources() {
-            let p = pack::compile(&src)?;
-            let wanted = match &self.packs.builtin {
-                None => true,
-                Some(list) => list.contains(&p.meta.id),
-            };
-            if wanted {
-                packs.push(p);
-            }
-        }
+    /// The sources of the packs that apply to this project: the selected
+    /// built-in packs and any packs listed by path (relative to the project
+    /// root), a path pack replacing a built-in pack with the same id.
+    pub fn pack_sources(&self, root: &Path, extra: &[PathBuf]) -> Result<Vec<PackSource>, ConfigError> {
+        let mut sources: Vec<PackSource> = pack::builtin_sources()
+            .into_iter()
+            .filter(|src| {
+                let dir = src.origin.trim_start_matches("builtin:");
+                self.packs
+                    .builtin
+                    .as_ref()
+                    .is_none_or(|list| list.iter().any(|id| id == dir))
+            })
+            .collect();
         if let Some(list) = &self.packs.builtin {
             for id in list {
-                if !packs.iter().any(|p| p.meta.id == *id) {
+                if !sources.iter().any(|s| s.origin == format!("builtin:{id}")) {
                     return Err(ConfigError::Other(format!("there is no built-in pack named '{id}'")));
                 }
             }
@@ -140,13 +142,19 @@ impl Config {
             .map(|p| root.join(p))
             .chain(extra.iter().cloned())
         {
-            let p = pack::compile(&pack::read_dir(&dir)?)?;
-            if let Some(i) = packs.iter().position(|q| q.meta.id == p.meta.id) {
-                packs.remove(i);
-            }
-            packs.push(p);
+            let src = pack::read_dir(&dir)?;
+            let id = pack::index(&src).map(|i| i.id).unwrap_or_default();
+            sources.retain(|s| pack::index(s).map(|i| i.id).unwrap_or_default() != id);
+            sources.push(src);
         }
-        Ok(packs)
+        Ok(sources)
+    }
+
+    /// Every configured pack, compiled. Packs are independent, so they
+    /// compile in parallel (query compilation dominates start-up).
+    pub fn load_packs(&self, root: &Path, extra: &[PathBuf]) -> Result<Vec<Pack>, ConfigError> {
+        let sources = self.pack_sources(root, extra)?;
+        compile_all(&sources)
     }
 
     pub fn policy(&self) -> Result<crate::policy::Policy, ConfigError> {
@@ -160,6 +168,15 @@ impl Config {
             .iter()
             .any(|d| d == id || id.starts_with(&format!("{d}/")))
     }
+}
+
+/// Compile pack sources in parallel, keeping their order.
+pub fn compile_all(sources: &[PackSource]) -> Result<Vec<Pack>, ConfigError> {
+    let mut packs = Vec::new();
+    for compiled in codemosis_core::parallel::map(sources, pack::compile) {
+        packs.push(compiled?);
+    }
+    Ok(packs)
 }
 
 /// Guess the oracle of a project that has no `[oracle]` section, from the

@@ -86,23 +86,30 @@ impl Lock {
 
     /// Every way the loaded packs differ from the lock.
     pub fn verify(&self, packs: &[Pack]) -> Vec<String> {
+        let ids: Vec<(String, String, String)> = packs
+            .iter()
+            .map(|p| (p.meta.id.clone(), p.meta.version.clone(), p.digest.clone()))
+            .collect();
+        self.verify_ids(&ids)
+    }
+
+    /// Every way these packs, as (id, version, sha256), differ from the lock.
+    pub fn verify_ids(&self, packs: &[(String, String, String)]) -> Vec<String> {
         let mut problems = Vec::new();
-        for p in packs {
-            match self.packs.iter().find(|l| l.id == p.meta.id) {
-                None => problems.push(format!("pack '{}' is loaded but not pinned in {LOCK_FILE}", p.meta.id)),
-                Some(l) if l.sha256 != p.digest => problems.push(format!(
-                    "pack '{}' changed since it was pinned (version {} -> {}, sha256 {}… -> {}…)",
-                    p.meta.id,
+        for (id, version, digest) in packs {
+            match self.packs.iter().find(|l| l.id == *id) {
+                None => problems.push(format!("pack '{id}' is loaded but not pinned in {LOCK_FILE}")),
+                Some(l) if l.sha256 != *digest => problems.push(format!(
+                    "pack '{id}' changed since it was pinned (version {} -> {version}, sha256 {}… -> {}…)",
                     l.version,
-                    p.meta.version,
                     &l.sha256[..12.min(l.sha256.len())],
-                    &p.digest[..12]
+                    &digest[..12.min(digest.len())]
                 )),
                 Some(_) => {}
             }
         }
         for l in &self.packs {
-            if !packs.iter().any(|p| p.meta.id == l.id) {
+            if !packs.iter().any(|(id, _, _)| *id == l.id) {
                 problems.push(format!("{LOCK_FILE} pins pack '{}', which is no longer loaded", l.id));
             }
         }

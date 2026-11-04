@@ -382,26 +382,37 @@ impl Project {
             paths.push(rel);
         }
         paths.sort();
-        let mut files = Vec::with_capacity(paths.len());
-        let mut skipped = Vec::new();
-        for rel in paths {
-            let abs = root.join(&rel);
+        enum Loaded {
+            File(SourceFile),
+            Skipped(PathBuf, String),
+        }
+        let loaded = crate::parallel::map(&paths, |rel| -> Result<Loaded, ProjectError> {
+            let abs = root.join(rel);
             let size = std::fs::metadata(&abs).map(|m| m.len()).unwrap_or(0);
             if size > MAX_FILE_BYTES {
-                skipped.push((rel, format!("larger than {} MB", MAX_FILE_BYTES / 1024 / 1024)));
-                continue;
+                return Ok(Loaded::Skipped(
+                    rel.clone(),
+                    format!("larger than {} MB", MAX_FILE_BYTES / 1024 / 1024),
+                ));
             }
             let bytes = std::fs::read(&abs).map_err(|source| ProjectError::Read {
                 path: abs.clone(),
                 source,
             })?;
             if bytes[..bytes.len().min(8000)].contains(&0) {
-                skipped.push((rel, "binary".to_string()));
-                continue;
+                return Ok(Loaded::Skipped(rel.clone(), "binary".to_string()));
             }
-            match String::from_utf8(bytes) {
-                Ok(text) => files.push(SourceFile::new(normalize(&rel), text)),
-                Err(_) => skipped.push((rel, "not UTF-8 text".to_string())),
+            Ok(match String::from_utf8(bytes) {
+                Ok(text) => Loaded::File(SourceFile::new(normalize(rel), text)),
+                Err(_) => Loaded::Skipped(rel.clone(), "not UTF-8 text".to_string()),
+            })
+        });
+        let mut files = Vec::with_capacity(paths.len());
+        let mut skipped = Vec::new();
+        for l in loaded {
+            match l? {
+                Loaded::File(f) => files.push(f),
+                Loaded::Skipped(p, why) => skipped.push((p, why)),
             }
         }
         Ok(Project {

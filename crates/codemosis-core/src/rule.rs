@@ -595,7 +595,7 @@ impl CompiledRule {
         &self,
         file: &SourceFile,
         project: &Project,
-        answers: &dyn Fn(&str) -> Option<String>,
+        answers: &(dyn Fn(&str) -> Option<String> + Sync),
     ) -> Result<Vec<Finding>, RuleError> {
         if !self.applies_to(file) {
             return Ok(Vec::new());
@@ -1144,24 +1144,49 @@ pub fn question_id(rule: &str, file: &str, anchor: &str) -> String {
 pub struct Scan {
     pub findings: Vec<Finding>,
     pub errors: Vec<RuleError>,
+    /// CPU time spent in each rule, summed over files and threads, in rule order.
+    pub timings: Vec<(String, std::time::Duration)>,
 }
 
+/// Run every rule on every file (or only the files in `only_files`).
+/// Files are matched in parallel; the result does not depend on how.
 pub fn scan<'r>(
     project: &Project,
     rules: impl IntoIterator<Item = &'r CompiledRule> + Clone,
-    answers: &dyn Fn(&str) -> Option<String>,
+    answers: &(dyn Fn(&str) -> Option<String> + Sync),
     only_files: Option<&BTreeSet<usize>>,
 ) -> Scan {
-    let mut out = Scan::default();
-    for (idx, file) in project.files.iter().enumerate() {
-        if only_files.is_some_and(|set| !set.contains(&idx)) {
-            continue;
-        }
-        for rule in rules.clone() {
+    let rules: Vec<&CompiledRule> = rules.into_iter().collect();
+    let indices: Vec<usize> = (0..project.files.len())
+        .filter(|i| only_files.is_none_or(|set| set.contains(i)))
+        .collect();
+    let per_file = crate::parallel::map(&indices, |&idx| {
+        let file = &project.files[idx];
+        let mut found = Vec::new();
+        let mut errors = Vec::new();
+        let mut times = vec![std::time::Duration::ZERO; rules.len()];
+        for (i, rule) in rules.iter().enumerate() {
+            let t = std::time::Instant::now();
             match rule.find(file, project, answers) {
-                Ok(f) => out.findings.extend(f),
-                Err(e) => out.errors.push(e),
+                Ok(f) => found.extend(f),
+                Err(e) => errors.push(e),
             }
+            times[i] += t.elapsed();
+        }
+        (found, errors, times)
+    });
+    let mut out = Scan {
+        timings: rules
+            .iter()
+            .map(|r| (r.id.clone(), std::time::Duration::ZERO))
+            .collect(),
+        ..Scan::default()
+    };
+    for (found, errors, times) in per_file {
+        out.findings.extend(found);
+        out.errors.extend(errors);
+        for (slot, t) in out.timings.iter_mut().zip(times) {
+            slot.1 += t;
         }
     }
     supersede(&mut out.findings);

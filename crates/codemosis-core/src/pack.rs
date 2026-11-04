@@ -353,6 +353,45 @@ pub fn read_dir(dir: &Path) -> Result<PackSource, PackError> {
     })
 }
 
+/// What can be known about a pack without compiling it.
+#[derive(Clone, Debug)]
+pub struct PackIndex {
+    pub id: String,
+    pub version: String,
+    /// Grammar ids; empty for a text pack (`language = "*"`).
+    pub languages: Vec<String>,
+    /// Qualified rule ids.
+    pub rules: Vec<String>,
+    pub digest: String,
+}
+
+/// Read a pack's identity, languages and rule ids cheaply, without compiling
+/// its queries. None when the manifest does not parse (compiling reports why).
+pub fn index(src: &PackSource) -> Option<PackIndex> {
+    let manifest: ManifestFile = toml::from_str(&src.manifest).ok()?;
+    let m = manifest.pack;
+    let languages = match (&m.language, m.languages.is_empty()) {
+        (Some(l), true) if l == "*" => Vec::new(),
+        (Some(l), true) => vec![l.clone()],
+        _ => m.languages.clone(),
+    };
+    let rules = src
+        .rules
+        .iter()
+        .filter_map(|(_, text)| {
+            let v: toml::Table = toml::from_str(text).ok()?;
+            v.get("id").and_then(|i| i.as_str()).map(|i| format!("{}/{i}", m.id))
+        })
+        .collect();
+    Some(PackIndex {
+        id: m.id,
+        version: m.version,
+        languages,
+        rules,
+        digest: src.digest(),
+    })
+}
+
 /// Validate and compile a pack.
 pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
     let mut problems = Vec::new();
@@ -496,5 +535,5 @@ pub fn builtin_sources() -> Vec<PackSource> {
 /// Compile every built-in pack. A broken built-in pack is a bug in this
 /// build, caught by the test suite.
 pub fn builtin() -> Result<Vec<Pack>, PackError> {
-    builtin_sources().iter().map(compile).collect()
+    crate::parallel::map(&builtin_sources(), compile).into_iter().collect()
 }

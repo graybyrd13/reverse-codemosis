@@ -107,7 +107,7 @@ pub enum Event<'e> {
 pub struct Session<'s> {
     pub project: &'s mut Project,
     pub rules: Vec<&'s CompiledRule>,
-    pub answers: &'s dyn Fn(&str) -> Option<String>,
+    pub answers: &'s (dyn Fn(&str) -> Option<String> + Sync),
     pub oracle: Option<&'s Oracle>,
     /// The project's policy: its `[[suppress]]` entries apply to every scan.
     pub policy: Option<&'s crate::policy::Policy>,
@@ -357,6 +357,11 @@ impl Session<'_> {
         before: &Scan,
         st: &mut State,
     ) -> std::io::Result<Result<Step, Vec<String>>> {
+        codemosis_core::debug!(
+            "step: trying {} correction(s) of {}",
+            batch.len(),
+            batch.first().map(|f| f.rule.as_str()).unwrap_or("?")
+        );
         let mut per_file: BTreeMap<usize, Vec<Edit>> = BTreeMap::new();
         for f in batch {
             match self.project.index_of(&f.file) {
@@ -446,6 +451,7 @@ impl Session<'_> {
             }
         }
         if !reasons.is_empty() {
+            codemosis_core::debug!("step: refused: {}", reasons.join("; "));
             self.restore(&snapshot)?;
             return Ok(Err(reasons));
         }
@@ -463,6 +469,7 @@ impl Session<'_> {
             let regs = regressions(prev, &run);
             if !regs.is_empty() {
                 self.restore(&snapshot)?;
+                codemosis_core::debug!("step: rolled back by the oracle: {}", regs.join("; "));
                 return Ok(Err(regs));
             }
             step_oracle = Some(StepOracle {
