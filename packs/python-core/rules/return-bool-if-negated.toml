@@ -69,3 +69,22 @@ def f(n):
         return 0
     return 1
 '''
+
+[[example]]
+name = "a negated comparison keeps its parentheses"
+before = '''
+def uses_innodb(engine):
+    if engine != "InnoDB":
+        return False
+    return True
+
+
+print(uses_innodb("InnoDB"), uses_innodb("MyISAM"))
+'''
+after = '''
+def uses_innodb(engine):
+    return not (engine != "InnoDB")
+
+
+print(uses_innodb("InnoDB"), uses_innodb("MyISAM"))
+'''

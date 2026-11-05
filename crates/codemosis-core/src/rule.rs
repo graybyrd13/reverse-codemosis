@@ -114,6 +114,9 @@ fn capture_name(s: &str) -> Option<&str> {
     s.strip_prefix('@').filter(|n| !n.is_empty())
 }
 
+/// The most partial matches a shape may have in progress at once in a file.
+pub const MATCH_LIMIT: u32 = 1024;
+
 const EDIT_OPS: &str =
     "replace, delete, delete_lines, delete_item, insert_before, insert_after, insert_lines_before, insert_lines_after, add_import";
 
@@ -635,6 +638,11 @@ impl CompiledRule {
                 let root = file.root().expect("checked by applies_to");
                 let names = query.capture_names();
                 let mut cursor = QueryCursor::new();
+                // A deterministic bound on partial matches: a shape that pairs
+                // every sibling with every other would otherwise take time
+                // cubic in the number of siblings (a 3,600-entry dictionary
+                // took minutes). Exceeding it is reported, never silent.
+                cursor.set_match_limit(MATCH_LIMIT);
                 let mut matches = cursor.matches(query, root, file.text.as_bytes());
                 while let Some(m) = matches.next() {
                     let mut captured: BTreeMap<String, Vec<Node>> = BTreeMap::new();
@@ -651,6 +659,14 @@ impl CompiledRule {
                         bindings.insert(name, Value::Nodes(nodes));
                     }
                     consider(bindings)?;
+                }
+                drop(matches);
+                if cursor.did_exceed_match_limit() {
+                    return Err(rule_err(format!(
+                        "the shape had more than {MATCH_LIMIT} partial matches at once in this file, so its matches \
+                         here may be incomplete and the rule was skipped; a shape that pairs siblings with each \
+                         other is quadratic (use a fact such as earlier_same_field instead)"
+                    )));
                 }
             }
             Shape::Pattern(_) | Shape::Table(_) => {

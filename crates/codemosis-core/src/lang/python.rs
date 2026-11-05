@@ -487,9 +487,11 @@ fn placeholders_bound(a: &PyAnalysis, node: &Node, ctx: &EvalCtx<'_>) -> bool {
     let Some(body) = string_body(node, ctx) else {
         return false;
     };
-    let re =
+    static PLACEHOLDER: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = PLACEHOLDER.get_or_init(|| {
         regex::Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*)(\.[A-Za-z_][A-Za-z0-9_]*)*(\[[^\[\]{}]*\])?(![rsa])?(:[^{}]*)?$")
-            .expect("valid regex");
+            .expect("valid regex")
+    });
     let scope = a.scope_at(node.start_byte(), node.end_byte());
     let mut found = 0;
     let mut rest = body;
@@ -581,7 +583,9 @@ fn negate(node: &Node, text: &str, ctx: &EvalCtx<'_>) -> String {
         }
     }
     match node.kind() {
-        "boolean_operator" | "conditional_expression" | "lambda" | "named_expression" => {
+        // `not a != b` parses as `not (a != b)`, but readers stumble on it;
+        // the parentheses say what Python already does.
+        "boolean_operator" | "conditional_expression" | "lambda" | "named_expression" | "comparison_operator" => {
             format!("not ({text})")
         }
         _ => format!("not {text}"),

@@ -380,6 +380,11 @@ pub const GENERIC_FACTS: &[FactDoc] = &[
         doc: "All named siblings after the last node, excluding comments.",
     },
     FactDoc {
+        name: "earlier_same_field",
+        signature: "earlier_same_field(nodes, field) -> nodes",
+        doc: "The `field` child of the first earlier named sibling whose `field` child has exactly the same text as the node's own (for duplicate keys: `earlier_same_field(@pair, 'key')`). Empty when there is none. Linear in the number of siblings, unlike a shape that pairs every sibling with every other.",
+    },
+    FactDoc {
         name: "ancestor",
         signature: "ancestor(nodes, kind...) -> nodes",
         doc: "Nearest ancestor of the first node with one of the kinds.",
@@ -629,6 +634,52 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
                 first_nodes(name)?.first().and_then(prev_named).into_iter().collect(),
             ))
         }
+        "earlier_same_field" => {
+            arity(name, args, 2, 2)?;
+            let field = ctx.string(&args[1], name)?;
+            let Some(node) = first_nodes(name)?.first().copied() else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            let Some(own) = node.child_by_field_name(&field) else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            let own_text = &ctx.file.text[own.byte_range()];
+            // Walk forward from the first sibling: tree-sitter finds a
+            // previous sibling by rescanning from the parent's start, so a
+            // backward walk would be quadratic per call.
+            let Some(parent) = node.parent() else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            // Where each text first appears among the siblings, computed once
+            // per parent, so the whole container costs linear time.
+            let firsts = ctx
+                .file
+                .memo(format!("earlier_same_field:{}:{field}", parent.id()), || {
+                    let mut firsts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+                    let mut walker = parent.walk();
+                    for sib in parent.named_children(&mut walker) {
+                        if let Some(k) = sib.child_by_field_name(&field) {
+                            firsts
+                                .entry(ctx.file.text[k.byte_range()].to_string())
+                                .or_insert(k.start_byte());
+                        }
+                    }
+                    firsts
+                });
+            let Some(&first_start) = firsts.get(own_text) else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            if first_start >= own.start_byte() {
+                return Ok(Value::Nodes(Vec::new()));
+            }
+            // A real duplicate (rare): find the earlier node itself.
+            let mut walker = parent.walk();
+            let found = parent
+                .named_children(&mut walker)
+                .filter_map(|sib| sib.child_by_field_name(&field))
+                .find(|k| k.start_byte() == first_start);
+            Ok(Value::Nodes(found.into_iter().collect()))
+        }
         "siblings_after" => {
             arity(name, args, 1, 1)?;
             let mut out = Vec::new();
@@ -712,7 +763,8 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
             arity(name, args, 2, 2)?;
             let text = ctx.string(&args[0], name)?;
             let pattern = ctx.string(&args[1], name)?;
-            let re = regex::Regex::new(&pattern).map_err(|e| EvalError(format!("matches(): invalid regex: {e}")))?;
+            let re =
+                crate::regex_cache::get(&pattern).map_err(|e| EvalError(format!("matches(): invalid regex: {e}")))?;
             Ok(Value::Bool(re.is_match(&text)))
         }
         "starts_with" | "ends_with" => {
@@ -786,13 +838,13 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
         "count_matches" => {
             arity(name, args, 2, 2)?;
             let text = ctx.string(&args[0], name)?;
-            let re = regex::Regex::new(&ctx.string(&args[1], name)?)
+            let re = crate::regex_cache::get(&ctx.string(&args[1], name)?)
                 .map_err(|e| EvalError(format!("count_matches(): invalid regex: {e}")))?;
             Ok(Value::Num(re.find_iter(&text).count() as i64))
         }
         "file_matches" => {
             arity(name, args, 1, 1)?;
-            let re = regex::Regex::new(&ctx.string(&args[0], name)?)
+            let re = crate::regex_cache::get(&ctx.string(&args[0], name)?)
                 .map_err(|e| EvalError(format!("file_matches(): invalid regex: {e}")))?;
             let file = ctx.file;
             let n = re

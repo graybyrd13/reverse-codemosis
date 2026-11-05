@@ -158,21 +158,8 @@ changing anything on disk.
 
 ## Adding a language
 
-A language GitHub knows is already recognized. To move it up a tier:
-
-- **lexical**: add its comment and string syntax to a profile in
-  `core/src/lex.rs` (or map its Linguist `ace_mode` to an existing family).
-- **deep**:
-
-1. Add the tree-sitter grammar crate to `codemosis-core`.
-2. Implement `Language` in `lang/<language>.rs`: id, fact prefix,
-   extensions, grammar, comment kinds, `definition_name` (for anchors) and,
-   ideally, a `Runner` so pack examples can be executed.
-3. Add language facts as the first rules need them, each with a `FactDoc`
-   stating its exact meaning and why it is conservative.
-4. Register it in `lang::all()` (or add a row to the table in
-   `lang/generic.rs` when it needs no facts of its own yet).
-5. Write a `<language>-core` pack.
+A language GitHub knows is already recognized; moving it to the lexical or
+deep tier is a recipe in the [developer guide](DEVELOPING.md#teach-the-engine-a-language).
 
 ## Design decisions
 

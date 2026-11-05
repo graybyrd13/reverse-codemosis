@@ -146,8 +146,10 @@ enum Command {
         report: Option<PathBuf>,
         #[arg(long, value_enum, default_value_t = Format::Text)]
         format: Format,
+        /// Also load the pack in this directory (repeatable).
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
+        /// Only these rules, or every rule of these packs (repeatable).
         #[arg(long = "rule", value_name = "ID")]
         rules: Vec<String>,
         /// Stop after this many attempted steps.
@@ -165,8 +167,10 @@ enum Command {
         /// Project root.
         #[arg(default_value = ".")]
         path: PathBuf,
+        /// Also load the pack in this directory (repeatable).
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
+        /// Only these rules, or every rule of these packs (repeatable).
         #[arg(long = "rule", value_name = "ID")]
         rules: Vec<String>,
     },
@@ -187,11 +191,13 @@ enum Command {
     Explain {
         /// Rule id, like python-core/is-literal.
         rule: String,
+        /// Also load the pack in this directory (repeatable).
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
     },
     /// List the available rules.
     Rules {
+        /// Also load the pack in this directory (repeatable).
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
     },

@@ -184,14 +184,12 @@ so nothing is changed.
 **Shape**
 
 ```scheme
-(object
-  (pair key: (_) @first)
-  (pair key: (_) @second)
-  (#eq? @first @second))
+(object (pair key: (_) @second) @pair)
 ```
 
 **Facts that must hold**
 
+- `exists(@first)`
 - `kind(@first) in ['property_identifier', 'string', 'number']`
 
 **Example: 1**

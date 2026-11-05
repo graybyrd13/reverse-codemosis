@@ -228,3 +228,30 @@ fn kinds_are_one_of_three() {
     let kinds: Vec<SegKind> = (0..f.text.len()).filter_map(|i| f.kind_at(i)).collect();
     assert!(kinds.contains(&SegKind::Code) && kinds.contains(&SegKind::String) && kinds.contains(&SegKind::Comment));
 }
+
+/// Field-test regression: a 3,600-entry dictionary (rich's emoji table) took
+/// minutes because a duplicate-key shape paired every entry with every
+/// other. Large containers must stay linear.
+#[test]
+fn large_containers_stay_fast() {
+    let packs = codemosis_core::pack::builtin().unwrap();
+    let rules: Vec<_> = packs
+        .iter()
+        .flat_map(|p| p.rules.iter())
+        .filter(|r| r.id.ends_with("duplicate-dict-key") || r.id.ends_with("duplicate-object-key"))
+        .collect();
+    assert_eq!(rules.len(), 2);
+    let n = 6000;
+    let entries: String = (0..n).map(|i| format!("    \"key_{i}\": {i},\n")).collect();
+    let py = format!("D = {{\n{entries}    \"key_17\": -1,\n}}\n");
+    let js = format!("const D = {{\n{entries}    \"key_17\": -1,\n}};\n");
+    let project =
+        codemosis_core::Project::in_memory(vec![SourceFile::new("big.py", py), SourceFile::new("big.mjs", js)]);
+    let none = |_: &str| None;
+    let started = std::time::Instant::now();
+    let scan = codemosis_core::scan(&project, rules, &none, None);
+    let elapsed = started.elapsed();
+    assert!(scan.errors.is_empty(), "{:?}", scan.errors);
+    assert_eq!(scan.findings.len(), 2, "one duplicate in each file");
+    assert!(elapsed.as_secs() < 10, "took {elapsed:?}");
+}

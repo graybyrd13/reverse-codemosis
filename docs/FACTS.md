@@ -21,6 +21,7 @@ Facts every language can use
   next(nodes) -> nodes                           Next named sibling of the last node, skipping comments.
   prev(nodes) -> nodes                           Previous named sibling of the first node, skipping comments.
   siblings_after(nodes) -> nodes                 All named siblings after the last node, excluding comments.
+  earlier_same_field(nodes, field) -> nodes      The `field` child of the first earlier named sibling whose `field` child has exactly the same text as the node's own (for duplicate keys: `earlier_same_field(@pair, 'key')`). Empty when there is none. Linear in the number of siblings, unlike a shape that pairs every sibling with every other.
   ancestor(nodes, kind...) -> nodes              Nearest ancestor of the first node with one of the kinds.
   inside(nodes, kind...) -> bool                 True when the first node has an ancestor of one of the kinds.
   contains(nodes, kind...) -> bool               True when any node, or any descendant, has one of the kinds.

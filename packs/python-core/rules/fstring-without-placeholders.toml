@@ -8,11 +8,17 @@ An f-string with no `{...}` placeholders is just a string with a misleading
 prefix: readers look for the interpolation that is not there. Removing the
 `f` gives an identical value, provided escaped braces are unescaped: in an
 f-string `{{` means one brace, in a plain string it means two.
+
+Fragments of an implicit concatenation (`f"a " f"{b}"`) are one f-string
+as far as Python is concerned, and many projects write every fragment with
+the prefix on purpose, so the rule only applies when no fragment of the
+concatenation has a placeholder (as pyflakes does).
 """
 shape = "(string) @s"
 where = [
   "matches(py.string_prefix(@s), 'f')",
   "!contains(@s, 'interpolation')",
+  "!(kind(parent(@s)) == 'concatenated_string' && contains(parent(@s), 'interpolation'))",
 ]
 
 [fix]
@@ -35,4 +41,14 @@ name = "an f-string with a placeholder"
 code = '''
 name = "Ada"
 print(f"Hello, {name}")
+'''
+
+[[counterexample]]
+name = "a fragment of a concatenation that has a placeholder"
+code = '''
+user = "ada"
+print(
+    f"Renamed permissions for "
+    f"{user}."
+)
 '''

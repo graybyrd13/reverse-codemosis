@@ -1,12 +1,28 @@
 # Reverse Codemosis
 
-**Reverse Codemosis corrects code the way a proof corrects an argument.**
+**Correct code the way a proof corrects an argument.**
 
-It is an open source Rust tool with no language model inside, and it never
-guesses. Point it at a project and it works out the best form that code can
-take, finds every place the code falls short of that form, fixes what it can
-prove, explains what it cannot fix, and asks you for the missing fact when a
-decision is genuinely yours.
+Reverse Codemosis is a command-line tool, written in Rust with no AI model
+inside, that:
+
+1. **finds** every place a project's code falls short of its best form;
+2. **corrects** what it can prove, and only that, checking every step
+   against the project's own build and tests;
+3. **explains** what it cannot correct, in plain language, with the evidence;
+4. **asks** when the decision is genuinely yours, and records your answer.
+
+It never guesses. When it is not sure, it does nothing and says why.
+
+| | When the code is wrong it... | You get |
+|---|---|---|
+| A linter | tells you, and leaves the change to you | a list of warnings |
+| An AI assistant | rewrites it, whether or not the rewrite is right | plausible new code to check |
+| **Reverse Codemosis** | changes it only when a rule proves the change safe, and rolls back anything your tests disagree with | a diff, the reasons, and a proof anyone can replay |
+
+## See it work
+
+[`examples/broken-inventory`](examples/broken-inventory) is a small Python
+project that does not build and fails every test. One command:
 
 ```console
 $ codemosis fix
@@ -16,417 +32,120 @@ $ codemosis fix
 Baseline
   build     failed (1 error)
   tests     0 passed · 4 failed
-  distance  broken 4 · contradiction 4 · hazard 2 · waste 7 · simplification 1
 
 Corrections
   ✓  1  python-core/missing-module-import 2 corrections in inventory/report.py  build and tests unchanged
   ✓  2  python-core/missing-name-import inventory/store.py:27  tests 0 → 10 passing
   ✓  3  python-legacy/except-comma inventory/pricing.py:16  tests 10 → 18 passing
-  ✓  4  python-core/is-literal inventory/models.py:31  tests 18 → 20 passing
-  ✓  5  python-core/vacuous-assert inventory/store.py:24  tests 20 → 21 passing
-  ✓  6  python-core/fstring-without-placeholders inventory/report.py:29  build and tests unchanged
-  ✓  7  python-core/redundant-list-around-sorted inventory/store.py:44  build and tests unchanged
-  ✓  8  python-core/redundant-pass inventory/models.py:8  build and tests unchanged
-  ✓  9  python-core/unreachable-code inventory/store.py:40  build and tests unchanged
-  ✓ 10  python-core/unused-import 3 corrections in inventory/pricing.py, inventory/store.py  build and tests unchanged
+  ...
   ✓ 11  python-core/return-bool-if inventory/store.py:29  build and tests unchanged
 
 Result
   build     ok
   tests     21 passed · 0 failed
-  distance  broken 0 · contradiction 2 · hazard 2 · waste 0 · simplification 0
   applied   14 corrections in 4 files; review them with `git diff`
 
 Needs your decision (3)
 ...
+Proof certificate: .codemosis/proofs/2026-11-04-343c7cc839d8.json
 ```
 
-That is [the proof](examples/broken-inventory): one broken repository, one
-command, a green test suite at the end, and [a diff](examples/broken-inventory.diff)
-a careful human can read and approve line by line. The test suite checks that
-it stays that way.
+The result is [a diff](examples/broken-inventory.diff) you can read and
+approve line by line, three questions only you can answer, and a
+certificate that `codemosis proof verify` replays to show every change is
+exactly what the rules prove. A JavaScript demonstration,
+[`examples/flaky-checkout`](examples/flaky-checkout), does the same for a
+flaky test suite, asking before it removes each fixed wait.
 
-## The core idea
-
-Every piece of code sits at some distance from the best version of itself.
-That distance is not a matter of taste. It is made of things that can be
-defined and measured:
-
-| Category | What it means |
-|---|---|
-| **broken** | errors that break the build or fail every time the line runs |
-| **contradiction** | logic that contradicts itself |
-| **hazard** | unsafe patterns with known safe forms |
-| **waste** | dead paths and wasted work |
-| **simplification** | structures that a simpler structure provably replaces |
-
-Reverse Codemosis defines the best form as a body of rules, measures real code
-against it, and closes the distance step by step, most serious category
-first, checking the build and the tests after every step so that no
-correction ever makes the code worse.
-
-## Every language GitHub knows
-
-Reverse Codemosis identifies every file the way GitHub does, from
-[Linguist](https://github.com/github-linguist/linguist)'s catalogue of
-**845 languages** (by filename, shebang and extension, with content
-heuristics where an extension is shared), and understands each at one of
-three depths:
-
-| Tier | Languages | What it understands |
-|---|---|---|
-| **deep** | 17: Python, Rust, JavaScript, TypeScript, TSX, Go, Java, C, C++, C#, Ruby, PHP, Shell, Kotlin, Scala, Lua, Swift | the full syntax tree, scopes and declarations, the language's own facts; examples are compiled and run |
-| **lexical** | 343, from PowerShell and R to Erlang, T-SQL, Makefiles and YAML | what is code, what is a comment and what is a string, derived from the editor modes Linguist records |
-| **recognized** | the other 485 | the language's identity; universal rules such as unresolved merge conflicts |
-
-`codemosis languages` lists all 845 with their tier. Detection is itself
-held to the rule of not guessing: when an extension is shared by several
-languages (`.h`, `.m`, `.pl`, `.R`...) and nothing in the file decides
-between them, the file is marked uncertain and no language-specific rule
-runs on it. Generated files (lockfiles, `*.pb.go`, "DO NOT EDIT" headers,
-minified code) and vendored code are never edited.
+## Quick start
 
 ```console
-$ codemosis map
+$ cargo install --locked --path crates/codemosis-cli   # installs `codemosis`
+$ cd your-project                  # a git repository with a clean working tree
+$ codemosis map                    # what it understands about the project
+$ codemosis check                  # every finding; changes nothing
+$ codemosis fix --interactive      # answer the questions, then apply what can be proven
+$ git diff                         # read what changed
 ```
 
-```text
-Languages (by size; percentages count programming and markup, as GitHub does)
-  ● JavaScript             100.0%    4 files  deep: syntax tree and facts (javascript) · 11 rules
-  ● Markdown                    -    1 file   recognized: universal rules only · 2 rules
-  ● JSON                        -    1 file   recognized: universal rules only · 2 rules
+`codemosis doctor` checks your setup. The [user guide](docs/GUIDE.md) walks
+through everything else.
 
-Build and test
-  ecosystems  JavaScript/TypeScript (npm)
-  oracle      detected
-    test      npm test
+## How it decides
 
-Definitions (deep languages)
-  JavaScript     1 classes · 2 functions · 5 methods
+- **Rules come from fix packs**: plain TOML files anyone can read and write.
+  A rule says *when this shape appears and these facts hold, this
+  correction is safe*, and carries the examples that prove it.
+- **Every rule proves itself** before it ships: `codemosis pack test`
+  applies it to its examples and runs the code before and after with the
+  real interpreter or compiler, checking that behaviour is preserved (or
+  corrected, or repaired) exactly as the rule claims.
+- **Facts are conservative**: when one cannot be sure, it blocks the
+  correction. A missed fix is acceptable; a wrong fix is not.
+- **Your tests have the last word**: each step is kept only if the build
+  does not regress and no passing test fails; otherwise it is rolled back
+  and reported with its evidence.
+- **Some code is never touched**: comments, generated and vendored files,
+  files whose language is a guess, code inside `#if` blocks or behind Rust
+  `#[cfg]`, macro bodies, code the grammar could not parse, and (in Python)
+  any edit that would change what a name refers to elsewhere.
+- **What only you know, it asks**: keep this wait or remove it? Which side
+  of this merge conflict? Answers live in `.codemosis/answers.toml`,
+  reviewed and committed like code.
 
-Distance from best form
-  broken 0 · contradiction 2 · hazard 2 · waste 3 · simplification 1
-  4 provably fixable · 3 need your decision · 12 rules from 3 packs apply
-```
+The precise model is in [docs/SEMANTICS.md](docs/SEMANTICS.md).
 
-The build and test commands are found from the project's own files
-(`Cargo.toml`, `go.mod`, `package.json` scripts, Maven, Gradle, .NET, Mix,
-SwiftPM, Bundler, Composer, Python, Make), and individual test results are
-read from unittest, pytest, cargo, Go, TAP, Jest/Vitest/Mocha and dotnet.
+## What it covers today
 
-## Questions
+- **Languages**: all 845 languages GitHub knows. 17 are understood deeply
+  (Python, JavaScript, TypeScript, Go, Java, C, C++, C#, Rust, Ruby, PHP,
+  Shell, Kotlin, Scala, Lua, Swift, TSX), 343 lexically (comments and
+  strings), the rest by identity. [Details](docs/LANGUAGES.md).
+- **Rules**: 16 built-in packs with 62 rules: missing imports, identity
+  comparisons with literals, `=== NaN`, unreachable code, unused imports,
+  vacuous asserts, empty catches, debugging leftovers, fixed waits in 48
+  languages, merge conflicts, committed keys, and more.
+  [Reference](docs/packs/README.md).
+- **Workflows**: SARIF for code scanning, GitLab Code Quality, GitHub
+  annotations and suggested changes, a GitHub Action, pre-commit hooks, a
+  language server for editors, baselines and suppressions for adopting it
+  on an existing codebase. [Integrations](docs/INTEGRATIONS.md).
 
-Where a correction depends on a fact only you have, Reverse Codemosis asks.
-Questions are yes/no, or offer named choices, each saying what it means:
-
-```console
-$ codemosis fix --interactive
-```
-
-```text
-3 questions need a decision only you can make.
-
-[1/3]
-hazard         javascript-core/fixed-wait  Fixed wait
-  --> src/checkout.js:14:3
-     |
-  14 |   await new Promise((resolve) => setTimeout(resolve, 300));
-     |   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  = `await new Promise((resolve) => setTimeout(resolve, 300))` pauses for a fixed time instead of waiting for what the code actually needs.
-  Keep this fixed wait?
-    keep     the wait is deliberate (rate limit, back-off, pacing); record it as intentional
-    remove   delete it; if something must be ready first, wait for that condition instead
-  answer [keep/remove/skip/quit] remove
-  recorded; `codemosis fix` will apply it
-```
-
-Fixed waits (sleeps, `setTimeout` promises, `Thread.sleep`, `Start-Sleep`,
-`WAITFOR DELAY`, `sleep 10` in a Makefile...) are asked about in every deep
-language and, through one table anyone can extend, in 32 more; waits that
-pace a polling loop are left alone. Other questions cover mutable default arguments, bare `except`,
-strings that look like they meant to be f-strings, leftover `console.log`,
-`var_dump` and breakpoints, unquoted variables in `rm`, assignments in
-conditions, and which side of an unresolved merge conflict to keep.
-
-Every answer is recorded in `.codemosis/answers.toml` with the question, the
-rule and the location, reviewed and committed like code. Answers that keep
-the code record it as intentional, and it is not asked again.
-
-## How it works
-
-It has two parts.
-
-**The engine** (Rust) reads a whole project, identifies and parses every
-file and holds it as one connected structure, so facts can look across
-files. It applies a transformation only when every condition is met, then
-verifies the result against the project's own build and tests.
-
-**Fix packs** are libraries of small formal rules that anyone can write and
-share, each pack covering one language, framework or family of failures. A
-rule says: *when this shape appears and these facts hold, this correction is
-safe, and here is the proof*. Shapes are tree-sitter queries for deep
-languages, or regular expressions that must start in code (not in a comment
-or a string) for any language.
-
-```toml
-id = "is-literal"
-title = "Identity comparison with a literal"
-category = "contradiction"
-semantics = "corrected"
-summary = "`${cmp}` asks whether two objects are the same object in memory, not whether they are equal."
-explain = "..."
-
-# The shape: a tree-sitter query.
-shape = '''
-[
-  (comparison_operator (_) @left operators: ["is" "is not"] @op
-                       [(integer) (float) (string) (concatenated_string)] @literal)
-  (comparison_operator [(integer) (float) (string) (concatenated_string)] @literal
-                       operators: ["is" "is not"] @op (_) @right)
-] @cmp
-'''
-# The facts that must hold.
-where = ["field_count(@cmp, 'operators') == 1"]
-
-[let]
-replacement = "choose(text(@op) == 'is', '==', '!=')"
-
-# The correction.
-[fix]
-edits = [{ replace = "@op", with = "${replacement}" }]
-
-# The proof: run before and after; `after` must print exactly this.
-[[example]]
-before = '''
-status = "".join(["act", "ive"])
-print(status is "active")
-'''
-after = '''
-status = "".join(["act", "ive"])
-print(status == "active")
-'''
-output = "True\n"
-
-# Where the rule stops.
-[[counterexample]]
-code = '''
-value = None
-print(value is None)
-'''
-```
-
-Every rule proves itself before it ships. `codemosis pack test` applies each
-rule to its examples until it stops matching, compares the result with
-`after` exactly, checks that the result parses and that nothing is left to
-correct, and then **runs** `before` and `after` with the real interpreter or
-compiler (python3, node, go, javac/java, cc, c++, ruby, php, bash, rustc) to
-check the rule's claim:
-
-- `preserved`: both produce the same output and exit status;
-- `corrected`: `after` produces the declared output and `before` does not;
-- `repaired`: `before` fails to compile or run, and `after` runs.
-
-Counterexamples must not match at all.
-
-### The acceptance contract
-
-On a real project, the engine keeps a step only if:
-
-1. every finding it targets is gone;
-2. it introduces no finding of a more serious category;
-3. every file it touches still parses, with no new syntax errors;
-4. the build does not regress;
-5. no test that passed before stops passing.
-
-A step that fails is rolled back. If it held several corrections, the engine
-bisects to find the one at fault, rejects that one with its evidence, and
-keeps the rest. Rule proofs cover what the rule's semantic model covers; the
-oracle covers everything else, such as a test that reads source text.
-
-Whatever a rule says, the engine also refuses to delete a comment, to change
-what a name refers to anywhere outside the edit (Python), and to touch code
-a build cannot verify: inside `#if` blocks, behind a Rust `#[cfg(...)]`, in
-macro bodies, or where the grammar could not parse the code. Each of these
-guards has an adversarial case in the [soundness suite](crates/codemosis-engine/tests/soundness.rs).
-
-### Refusing to guess
-
-Where a correction cannot be proven, the tool does not improvise. It reports
-the problem in plain language, shows the evidence, and asks for the detail
-that would settle it. **That refusal to guess is the product.**
-
-Facts are conservative by construction: when one cannot be sure, it blocks
-the correction. A missed fix is acceptable. A wrong fix is not. Some
-examples of what that means in practice:
-
-- `python-core/unreachable-code` will not delete `x = 1` after a `return`
-  if that dead line is the only thing making `x` local to the function.
-- `javascript-core/unreachable-code` will not delete dead code that declares
-  anything: function declarations and `var` hoist, and `let`/`const` cast a
-  temporal dead zone back over the whole block.
-- `python-legacy/except-comma` leaves `except A, B:` alone, because since
-  Python 3.14 that is valid code catching two exception types.
-- `go-core/fixed-wait` only asks about a `time.Sleep` when removing it would
-  not leave the `time` import unused, which Go refuses to compile.
-
-## Proof you can check
-
-Every `codemosis fix` that changes code writes a certificate to
-`.codemosis/proofs/`: the packs (by content hash) and the answers each step
-relied on, each step's exact patch, and the build and test results.
-
-```console
-$ codemosis proof verify .codemosis/proofs/2026-11-04-343c7cc839d8.json
-  ✓ the certificate is intact (its digest matches its content)
-  ✓ inventory/store.py is as the correction left it
-  ✓ inventory/store.py: the original is recovered from the patch
-  ✓ step 1 (python-core/missing-module-import) reproduces exactly
-  ...
-  ✓ step 11 (python-core/return-bool-if) reproduces exactly
-
-Verified: the change is exactly what the pinned rules prove.
-```
-
-Verification trusts nothing in the certificate: it recovers the original
-code from the patch and replays every step with the pinned rules, byte for
-byte. Reviewers no longer have to take the tool's word for a diff.
-
-## In CI and in your editor
-
-```yaml
-- uses: graybyrd13/reverse-codemosis@main
-  with:
-    fail-on: warning     # the gate
-    sarif: true          # GitHub code scanning
-    review: true         # proven corrections as suggested changes on the PR
-```
-
-- **CI**: SARIF 2.1.0, GitLab Code Quality, GitHub annotations and job
-  summaries, pull-request suggestions, pre-commit hooks, and JSON with
-  versioned schemas. Every finding has a stable fingerprint.
-- **Adoption**: `codemosis baseline` accepts today's findings so only new
-  ones fail; `# codemosis: ignore[rule] reason until=2027-01-31` and
-  `[[suppress]]` entries accept one with a reason and an expiry date;
-  `[severity]` and `--fail-on` set the bar; `codemosis lock` pins packs.
-- **Editors**: `codemosis lsp` publishes findings as you type, explains
-  them on hover, offers proven corrections as quick fixes, and records your
-  answers to questions.
-
-See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md).
+The rules are deliberately narrow: each corrects one well-understood
+mistake, and only where it can prove the correction. On healthy, mature
+codebases it usually finds little, and that is the intended behaviour.
+[docs/FIELD_TEST.md](docs/FIELD_TEST.md) records what it found, and did
+not find, on real open-source projects.
 
 ## What it refuses to do
 
-It does not design. It has no brain and pretends to none. It will not invent
-features, choose architectures, or write your program from a wish. It takes
-code that exists, including the flood of almost-right code now pouring out of
-AI tools, and returns code that is correct, clean, and as close to optimal as
-the rules can prove. Design is a later chapter that begins only once
-correction is trusted completely.
+It does not design. It will not invent features, choose architectures or
+write a program from a wish. It takes code that exists, including the flood
+of almost-right code now coming out of AI tools, and returns code that is
+correct and clean as far as the rules can prove. Design is a later chapter
+that begins only once correction is trusted completely.
 
-## Getting started
+## Documentation
 
-```console
-$ cargo install --path crates/codemosis-cli   # installs `codemosis`
-$ cd your-project                             # a clean git working tree
-$ codemosis map                               # what it understands about the project
-$ codemosis check                             # every finding, nothing changed
-$ codemosis fix --interactive                 # answer the questions, then apply what can be proven
-$ git diff                                    # read it
-```
-
-| Command | What it does |
+| I want to... | Read |
 |---|---|
-| `codemosis check [PATH]` | Measure the project and report every finding. Changes nothing. |
-| `codemosis fix [PATH]` | Apply every provable correction, verifying each step. `--interactive` asks the questions first; `--dry-run` plans without writing. |
-| `codemosis ask [PATH]` | Ask the open questions one at a time and record the answers. |
-| `codemosis answer ID ANSWER` | Record one answer: `yes`, `no`, `keep`, `remove`, `ours`... |
-| `codemosis map [PATH]` | What the engine understands: languages and tiers, build and tests, definitions, protected files. |
-| `codemosis languages` | Every language GitHub knows, with how deeply each is understood. |
-| `codemosis explain RULE` | What a rule finds, why, the facts it needs and its proof. |
-| `codemosis rules` | List the rules of every pack. |
-| `codemosis baseline [PATH]` | Accept today's findings; `check --baseline` then fails only on new ones. |
-| `codemosis lock [PATH]` | Pin every pack by content hash in `codemosis.lock`. |
-| `codemosis proof verify CERT` | Re-derive a recorded change by replaying it with the pinned rules. |
-| `codemosis doctor [PATH]` | Check configuration, packs, lockfile, oracle and toolchains. |
-| `codemosis lsp` | The language server, for editors. |
-| `codemosis pack test [DIR]` | Run a pack's proofs (the built-in packs by default); `--mutations` finds unproven facts. |
-| `codemosis pack lint [DIR]` | Find weaknesses in packs that still load. |
-| `codemosis pack docs [DIR]` | Generate reference pages from the rules and their proofs. |
-| `codemosis pack new DIR --id ID` | Start a pack from a working template, for any grammar or `"*"`. |
-| `codemosis tree FILE` | Print a file's syntax tree, to help write shapes. |
-| `codemosis facts` | The fact vocabulary, template filters and edit operations. |
-| `codemosis schema [NAME]` | JSON Schemas for every file format. |
-| `codemosis init` | Write a `codemosis.toml` with the detected build and test commands. |
+| use it on my project | [User guide](docs/GUIDE.md) |
+| run it in CI or my editor | [Integrations](docs/INTEGRATIONS.md) |
+| write a rule | [Tutorial](docs/TUTORIAL.md), then [pack format](docs/PACK_FORMAT.md) and [facts](docs/FACTS.md) |
+| work on the engine | [Developer guide](docs/DEVELOPING.md), [architecture](docs/ARCHITECTURE.md) |
+| know exactly what "proven" means | [Semantics](docs/SEMANTICS.md) |
+| see what comes next | [Roadmap](docs/ROADMAP.md) |
 
-`check` takes `--format text|json|markdown|sarif|gitlab|github|review`,
-`--fail-on`, `--baseline`, `--diff` (the proven corrections, unverified) and
-`--timings`. Every command takes `--log debug|trace`.
+Everything is indexed in [docs/README.md](docs/README.md).
 
-`fix` works in place, so by default it refuses to run on a dirty working
-tree: `git diff` then shows exactly what Reverse Codemosis did, and
-`git checkout .` undoes it.
+## Contributing
 
-## Built-in packs
-
-16 packs, 62 rules, 377 self-test checks. Each pack has a generated
-reference page in [docs/packs](docs/packs/README.md).
-
-| Pack | Covers |
-|---|---|
-| [`python-core`](packs/python-core) | missing imports, undefined names, `is` with literals, vacuous asserts, duplicate keys, missing f-prefixes, mutable defaults, bare except, `== None`, unreachable code, unused imports, redundant code, boolean returns, fixed waits |
-| [`python-legacy`](packs/python-legacy) | Python 2 constructs with exact Python 3 equivalents |
-| [`javascript-core`](packs/javascript-core) | JavaScript, TypeScript and TSX: `=== NaN`, unreachable code (hoisting-aware), `debugger`, boolean returns, assignments in conditions, duplicate keys, empty catch, `console.log`, fixed waits |
-| [`go-core`](packs/go-core) | comparisons with `true`/`false`, needless `return`, fixed waits |
-| [`java-core`](packs/java-core) | strings compared with `==`, comparisons with `true`/`false`, empty catch, fixed waits |
-| [`c-family`](packs/c-family) | C and C++: assignments in conditions, fixed waits |
-| [`csharp-core`](packs/csharp-core), [`kotlin-core`](packs/kotlin-core), [`scala-core`](packs/scala-core), [`swift-core`](packs/swift-core) | fixed waits; empty catch in C# |
-| [`ruby-core`](packs/ruby-core) | fixed waits, breakpoints left behind |
-| [`php-core`](packs/php-core) | fixed waits, `var_dump`/`dd` left behind |
-| [`shell-core`](packs/shell-core) | fixed waits, unquoted variables in `rm` |
-| [`rust-core`](packs/rust-core) | needless `return`, field-init shorthand, `-> ()`, manual `assert!`, `todo!()`, fixed waits |
-| [`universal`](packs/universal) | every text file: unresolved merge conflicts, committed private keys |
-| [`waits`](packs/waits) | fixed waits in 32 more languages (PowerShell, R, T-SQL, Makefiles, YAML...), from a table anyone can extend |
-
-## The demonstrations
-
-- [`examples/broken-inventory`](examples/broken-inventory) (Python): does
-  not build, every test fails; `codemosis fix` makes it green with 14
-  verified corrections, 3 questions and 1 explanation.
-  [The diff.](examples/broken-inventory.diff)
-- [`examples/flaky-checkout`](examples/flaky-checkout) (JavaScript): one
-  test fails and the suite is slowed by fixed waits; `codemosis fix
-  --interactive` asks three questions, then makes it green and fast.
-  [The diff.](examples/flaky-checkout.diff)
-
-## Project status
-
-The engine, the pack format and its proof system, the verification loop,
-every language GitHub knows (17 deep), 16 packs, CI and editor
-integrations, proof certificates, soundness guards and two demonstrations.
-Before 1.0, minor releases may break compatibility, always with a
-changelog entry and a migration ([docs/COMPATIBILITY.md](docs/COMPATIBILITY.md)).
-See [docs/ROADMAP.md](docs/ROADMAP.md) for what comes next.
-
-| To... | Read |
-|---|---|
-| write your first rule | [docs/TUTORIAL.md](docs/TUTORIAL.md), then [docs/PACK_FORMAT.md](docs/PACK_FORMAT.md) |
-| set up CI, editors, shells | [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) |
-| know what "proven" means, precisely | [docs/SEMANTICS.md](docs/SEMANTICS.md) |
-| see what each language gets | [docs/LANGUAGES.md](docs/LANGUAGES.md) |
-| look up a fact or a rule | [docs/FACTS.md](docs/FACTS.md), [docs/packs](docs/packs/README.md) |
-| understand the code | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
-| assess the risks | [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), [SECURITY.md](SECURITY.md) |
-| contribute or take part | [CONTRIBUTING.md](CONTRIBUTING.md), [GOVERNANCE.md](GOVERNANCE.md), [rfcs](rfcs/README.md) |
-| cut a release | [docs/RELEASING.md](docs/RELEASING.md), [CHANGELOG.md](CHANGELOG.md) |
-
-## Why it matters
-
-IDEs tell you what is wrong and leave the work to you. AI assistants try
-their best and hand back fresh slop with total confidence. Reverse Codemosis
-is the third thing: tireless, exact, and honest about its limits. Every AI
-tool that ships sloppy code makes it more necessary, every fix pack a
-stranger contributes makes it stronger, and every developer who has ever
-inherited a broken project is its audience.
+Rules are the most valuable contribution: every rule a stranger writes makes
+the tool stronger for everyone. Start with the [tutorial](docs/TUTORIAL.md)
+and [CONTRIBUTING.md](CONTRIBUTING.md). Report a correction that made code
+worse with the "A correction made code worse" issue template; it is treated
+as the most serious kind of bug. Security reports go through
+[SECURITY.md](SECURITY.md).
 
 ## License
 

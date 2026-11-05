@@ -369,13 +369,30 @@ fn matrix_row(l: &linguist::LinguistLanguage, packs: &[codemosis_core::Pack]) ->
         "filenames": l.filenames,
         "interpreters": l.interpreters,
     });
+    // Text rules apply to every file whose language they name (or, for
+    // universal rules, to every file they can read), deep files included.
+    let text_rules: Vec<String> = packs
+        .iter()
+        .filter(|p| p.is_text())
+        .flat_map(|p| p.rules.iter())
+        .filter(|r| {
+            let langs = r.pattern_languages();
+            if langs.is_empty() {
+                r.spec.within.as_deref() == Some("any") || t != Tier::Recognized
+            } else {
+                langs.iter().any(|x| x == l.name)
+            }
+        })
+        .map(|r| r.id.clone())
+        .collect();
     match grammar {
         Some(g) => {
-            let rules: Vec<&str> = packs
+            let mut rules: Vec<String> = packs
                 .iter()
                 .filter(|p| p.languages.iter().any(|x| x.id() == g.id()))
-                .flat_map(|p| p.rules.iter().map(|r| r.id.as_str()))
+                .flat_map(|p| p.rules.iter().map(|r| r.id.clone()))
                 .collect();
+            rules.extend(text_rules);
             v["grammar"] = serde_json::json!({
                 "id": g.id(),
                 "crate": lang::grammar_crate(g.id()),
@@ -395,20 +412,6 @@ fn matrix_row(l: &linguist::LinguistLanguage, packs: &[codemosis_core::Pack]) ->
             if let Some(p) = lex::profile_for(l) {
                 v["lexical_family"] = serde_json::json!(p.family);
             }
-            let text_rules: Vec<String> = packs
-                .iter()
-                .filter(|p| p.is_text())
-                .flat_map(|p| p.rules.iter())
-                .filter(|r| {
-                    let langs = r.pattern_languages();
-                    if langs.is_empty() {
-                        r.spec.within.as_deref() == Some("any") || t == Tier::Lexical
-                    } else {
-                        langs.iter().any(|x| x == l.name)
-                    }
-                })
-                .map(|r| r.id.clone())
-                .collect();
             v["rules"] = serde_json::json!(text_rules);
         }
     }

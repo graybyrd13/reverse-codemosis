@@ -8,23 +8,23 @@ Every one of the 845 languages in GitHub Linguist is known: **17** deep (a synta
 
 | Language | Grammar | Version | Facts | Runner | Edit guards | Rules |
 |---|---|---|---|---|---|---:|
-| C | `c` | tree-sitter-c 0.24.2 | generic + 1 | `cc` | conditional compilation, parse damage, comments | 2 |
-| C# | `csharp` | tree-sitter-c-sharp 0.23.5 | generic + 1 | none | conditional compilation, parse damage, comments | 2 |
-| C++ | `cpp` | tree-sitter-cpp 0.23.4 | generic + 1 | `c++` | conditional compilation, parse damage, comments | 2 |
-| Go | `go` | tree-sitter-go 0.25.0 | generic + 1 | `go` | parse damage, comments | 3 |
-| Java | `java` | tree-sitter-java 0.23.5 | generic + 1 | `java` | parse damage, comments | 4 |
-| JavaScript | `javascript` | tree-sitter-javascript 0.25.0 | generic + 1 | `node` | parse damage, comments | 9 |
-| Kotlin | `kotlin` | tree-sitter-kotlin-ng 1.1.0 | generic + 1 | none | parse damage, comments | 1 |
-| Lua | `lua` | tree-sitter-lua 0.5.0 | generic + 1 | `lua` | parse damage, comments | 0 |
-| PHP | `php` | tree-sitter-php 0.25.1 | generic + 1 | `php` | parse damage, comments | 2 |
-| Python | `python` | tree-sitter-python 0.25.0 | generic + 17 + bindings | `python3` | parse damage, comments | 24 |
-| Ruby | `ruby` | tree-sitter-ruby 0.23.1 | generic + 1 | `ruby` | parse damage, comments | 2 |
-| Rust | `rust` | tree-sitter-rust 0.24.2 | generic + 0 | `rustc` | #[cfg], macro bodies, parse damage, comments | 6 |
-| Scala | `scala` | tree-sitter-scala 0.26.4 | generic + 1 | none | parse damage, comments | 1 |
-| Shell | `bash` | tree-sitter-bash 0.25.1 | generic + 1 | `bash` | parse damage, comments | 2 |
-| Swift | `swift` | tree-sitter-swift 0.7.4 | generic + 1 | `swift` | conditional compilation, parse damage, comments | 1 |
-| TSX | `tsx` | tree-sitter-typescript 0.23.2 | generic + 1 | none | parse damage, comments | 9 |
-| TypeScript | `typescript` | tree-sitter-typescript 0.23.2 | generic + 1 | `node` | parse damage, comments | 9 |
+| C | `c` | tree-sitter-c 0.24.2 | generic + 1 | `cc` | conditional compilation, parse damage, comments | 4 |
+| C# | `csharp` | tree-sitter-c-sharp 0.23.5 | generic + 1 | none | conditional compilation, parse damage, comments | 4 |
+| C++ | `cpp` | tree-sitter-cpp 0.23.4 | generic + 1 | `c++` | conditional compilation, parse damage, comments | 4 |
+| Go | `go` | tree-sitter-go 0.25.0 | generic + 1 | `go` | parse damage, comments | 5 |
+| Java | `java` | tree-sitter-java 0.23.5 | generic + 1 | `java` | parse damage, comments | 6 |
+| JavaScript | `javascript` | tree-sitter-javascript 0.25.0 | generic + 1 | `node` | parse damage, comments | 11 |
+| Kotlin | `kotlin` | tree-sitter-kotlin-ng 1.1.0 | generic + 1 | none | parse damage, comments | 3 |
+| Lua | `lua` | tree-sitter-lua 0.5.0 | generic + 1 | `lua` | parse damage, comments | 3 |
+| PHP | `php` | tree-sitter-php 0.25.1 | generic + 1 | `php` | parse damage, comments | 4 |
+| Python | `python` | tree-sitter-python 0.25.0 | generic + 17 + bindings | `python3` | parse damage, comments | 26 |
+| Ruby | `ruby` | tree-sitter-ruby 0.23.1 | generic + 1 | `ruby` | parse damage, comments | 4 |
+| Rust | `rust` | tree-sitter-rust 0.24.2 | generic + 0 | `rustc` | #[cfg], macro bodies, parse damage, comments | 8 |
+| Scala | `scala` | tree-sitter-scala 0.26.4 | generic + 1 | none | parse damage, comments | 3 |
+| Shell | `bash` | tree-sitter-bash 0.25.1 | generic + 1 | `bash` | parse damage, comments | 4 |
+| Swift | `swift` | tree-sitter-swift 0.7.4 | generic + 1 | `swift` | conditional compilation, parse damage, comments | 3 |
+| TSX | `tsx` | tree-sitter-typescript 0.23.2 | generic + 1 | none | parse damage, comments | 11 |
+| TypeScript | `typescript` | tree-sitter-typescript 0.23.2 | generic + 1 | `node` | parse damage, comments | 11 |
 
 ## Lexical tier
 

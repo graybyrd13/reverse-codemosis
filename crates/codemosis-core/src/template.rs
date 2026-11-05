@@ -237,7 +237,10 @@ fn apply_filter<'a>(
 /// correct, so they are kept whenever precedence could matter.
 pub fn bang(text: &str) -> String {
     let t = text.trim();
-    let simple = regex::Regex::new(r"^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*(\([^()]*\))?$").expect("valid regex");
+    static SIMPLE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let simple = SIMPLE.get_or_init(|| {
+        regex::Regex::new(r"^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*(\([^()]*\))?$").expect("valid regex")
+    });
     let parenthesised = t.starts_with('(') && strip_parens(t) != t;
     if simple.is_match(t) || parenthesised {
         format!("!{t}")

@@ -24,6 +24,7 @@ pub mod parallel;
 pub mod process;
 pub mod project;
 pub mod redact;
+pub mod regex_cache;
 pub mod rule;
 pub mod selftest;
 pub mod suppress;

@@ -56,6 +56,8 @@ pub struct SourceFile {
     pub lexical: Option<&'static Profile>,
     analysis: OnceLock<Box<dyn Any + Send + Sync>>,
     segments: OnceLock<Vec<Segment>>,
+    /// Per-file memo for facts that would otherwise repeat work per match.
+    memo: std::sync::Mutex<std::collections::HashMap<String, std::sync::Arc<dyn Any + Send + Sync>>>,
 }
 
 impl std::fmt::Debug for SourceFile {
@@ -118,6 +120,7 @@ impl SourceFile {
             lexical,
             analysis: OnceLock::new(),
             segments: OnceLock::new(),
+            memo: Default::default(),
         }
     }
 
@@ -163,6 +166,22 @@ impl SourceFile {
             .get_or_init(|| Box::new(compute(self)))
             .downcast_ref::<T>()
             .expect("one analysis type per language")
+    }
+
+    /// A value computed once per file and key, then shared: for facts whose
+    /// naive form would redo the same work for every match.
+    pub fn memo<T: Any + Send + Sync>(&self, key: String, compute: impl FnOnce() -> T) -> std::sync::Arc<T> {
+        if let Some(v) = self.memo.lock().expect("memo lock").get(&key) {
+            if let Ok(t) = v.clone().downcast::<T>() {
+                return t;
+            }
+        }
+        let value = std::sync::Arc::new(compute());
+        self.memo
+            .lock()
+            .expect("memo lock")
+            .insert(key, value.clone() as std::sync::Arc<dyn Any + Send + Sync>);
+        value
     }
 
     /// The file split into code, comments and strings. Empty when the
@@ -383,7 +402,7 @@ impl Project {
         }
         paths.sort();
         enum Loaded {
-            File(SourceFile),
+            File(Box<SourceFile>),
             Skipped(PathBuf, String),
         }
         let loaded = crate::parallel::map(&paths, |rel| -> Result<Loaded, ProjectError> {
@@ -403,7 +422,7 @@ impl Project {
                 return Ok(Loaded::Skipped(rel.clone(), "binary".to_string()));
             }
             Ok(match String::from_utf8(bytes) {
-                Ok(text) => Loaded::File(SourceFile::new(normalize(rel), text)),
+                Ok(text) => Loaded::File(Box::new(SourceFile::new(normalize(rel), text))),
                 Err(_) => Loaded::Skipped(rel.clone(), "not UTF-8 text".to_string()),
             })
         });
@@ -411,7 +430,7 @@ impl Project {
         let mut skipped = Vec::new();
         for l in loaded {
             match l? {
-                Loaded::File(f) => files.push(f),
+                Loaded::File(f) => files.push(*f),
                 Loaded::Skipped(p, why) => skipped.push((p, why)),
             }
         }

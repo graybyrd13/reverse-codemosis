@@ -15,7 +15,7 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 | [`bare-except`](#bare-except) Bare except clause | hazard | asks, corrects on yes (corrected) | 1 ex. · 2 counter |
 | [`duplicate-dict-key`](#duplicate-dict-key) Dictionary key given twice | contradiction | explains | 1 ex. · 2 counter |
 | [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 3 ex. · 3 counter |
-| [`fstring-without-placeholders`](#fstring-without-placeholders) f-string without placeholders | waste | corrects (preserved) | 1 ex. · 1 counter |
+| [`fstring-without-placeholders`](#fstring-without-placeholders) f-string without placeholders | waste | corrects (preserved) | 1 ex. · 2 counter |
 | [`is-literal`](#is-literal) Identity comparison with a literal | contradiction | corrects (corrected) | 2 ex. · 3 counter |
 | [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 4 counter |
 | [`missing-module-import`](#missing-module-import) Module used without being imported | broken | corrects (repaired) | 2 ex. · 3 counter |
@@ -24,7 +24,7 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 | [`none-equality`](#none-equality) Equality comparison with None | hazard | asks, corrects on yes (preserved) | 1 ex. · 2 counter |
 | [`redundant-list-around-sorted`](#redundant-list-around-sorted) list() around sorted() | waste | corrects (preserved) | 1 ex. · 3 counter |
 | [`redundant-pass`](#redundant-pass) Redundant pass | waste | corrects (preserved) | 1 ex. · 1 counter |
-| [`return-bool-if-negated`](#return-bool-if-negated) if/else that returns False or True | simplification | corrects (preserved) | 1 ex. · 1 counter |
+| [`return-bool-if-negated`](#return-bool-if-negated) if/else that returns False or True | simplification | corrects (preserved) | 2 ex. · 1 counter |
 | [`return-bool-if`](#return-bool-if) if/else that returns True or False | simplification | corrects (preserved) | 1 ex. · 2 counter |
 | [`undefined-name`](#undefined-name) Name that is never defined | broken | explains | 2 ex. · 2 counter |
 | [`unreachable-code`](#unreachable-code) Unreachable code | waste | corrects (preserved) | 2 ex. · 3 counter |
@@ -115,14 +115,12 @@ and delete or rename the other.
 **Shape**
 
 ```scheme
-(dictionary
-  (pair key: (_) @first)
-  (pair key: (_) @second)
-  (#eq? @first @second))
+(dictionary (pair key: (_) @second) @pair)
 ```
 
 **Facts that must hold**
 
+- `exists(@first)`
 - `kind(@first) in ['string', 'integer', 'float', 'true', 'false', 'none']`
 - `!contains(@first, 'interpolation')`
 
@@ -280,6 +278,11 @@ prefix: readers look for the interpolation that is not there. Removing the
 `f` gives an identical value, provided escaped braces are unescaped: in an
 f-string `{{` means one brace, in a plain string it means two.
 
+Fragments of an implicit concatenation (`f"a " f"{b}"`) are one f-string
+as far as Python is concerned, and many projects write every fragment with
+the prefix on purpose, so the rule only applies when no fragment of the
+concatenation has a placeholder (as pyflakes does).
+
 **Shape**
 
 ```scheme
@@ -290,6 +293,7 @@ f-string `{{` means one brace, in a plain string it means two.
 
 - `matches(py.string_prefix(@s), 'f')`
 - `!contains(@s, 'interpolation')`
+- `!(kind(parent(@s)) == 'concatenated_string' && contains(parent(@s), 'interpolation'))`
 
 **Example: 1**
 
@@ -310,6 +314,16 @@ f-string `{{` means one brace, in a plain string it means two.
 ```python
 name = "Ada"
 print(f"Hello, {name}")
+```
+
+**Counterexample: a fragment of a concatenation that has a placeholder** (no finding)
+
+```python
+user = "ada"
+print(
+    f"Renamed permissions for "
+    f"{user}."
+)
 ```
 
 
@@ -955,6 +969,22 @@ defines a direct opposite (`not (a in b)` is `a not in b`, `not (a is b)` is
  
  
  print(is_allowed("ada", {"bob"}), is_allowed("bob", {"bob"}))
+```
+
+**Example: a negated comparison keeps its parentheses**
+
+```diff
+--- a/example.py
++++ b/example.py
+@@ -1,7 +1,5 @@
+ def uses_innodb(engine):
+-    if engine != "InnoDB":
+-        return False
+-    return True
++    return not (engine != "InnoDB")
+ 
+ 
+ print(uses_innodb("InnoDB"), uses_innodb("MyISAM"))
 ```
 
 **Counterexample: returns values other than booleans** (no finding)

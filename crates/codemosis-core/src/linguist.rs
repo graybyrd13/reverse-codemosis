@@ -264,7 +264,9 @@ pub fn detect(path: &Path, text: &str) -> Detection {
 }
 
 fn has(text: &str, pattern: &str) -> bool {
-    regex::Regex::new(pattern).map(|r| r.is_match(text)).unwrap_or(false)
+    crate::regex_cache::get(pattern)
+        .map(|r| r.is_match(text))
+        .unwrap_or(false)
 }
 
 /// Content heuristics for shared extensions, after Linguist's heuristics.yml.
