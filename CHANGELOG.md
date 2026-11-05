@@ -44,10 +44,11 @@ follows [Semantic Versioning](https://semver.org/) as described in
 - `.github/workflows/field-test.yml`: the ledger on pull requests, and
   `codemosis fix` on cobra, gin and ripgrep with their own tests as the
   oracle, re-checked independently (`scripts/field-test-oracle.sh`).
-- Proof coverage: 141 of 144 facts in the built-in packs are now proven
-  necessary by a counterexample (from 55 of 160). Implied facts were
-  removed, and table invariants are tested. `pack test --mutations
-  --max-unproven N` is enforced in CI.
+- Proof coverage: every one of the 144 facts in the built-in packs is now
+  proven necessary by a counterexample (from 55 of 160). Implied facts
+  were removed, and table invariants are tested. `pack test --mutations
+  --max-unproven N` is enforced in CI at 0. Counterexamples can carry
+  other project files (`files`) for cross-file facts.
 - zsh (`.zsh`, zsh shebangs, `#compdef`) is read in the lexical tier rather
   than misparsed by the bash grammar; `map` says so.
 - Suppressions written for other tools are honoured through rules'

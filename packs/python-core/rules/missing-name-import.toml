@@ -111,3 +111,13 @@ code = '''
 from helpers import *
 counts = defaultdict(int)
 '''
+
+[[counterexample]]
+name = "the project defines its own defaultdict: the import might not be the one meant"
+code = '''
+counts = defaultdict(int)
+'''
+files = { "helpers.py" = '''
+def defaultdict(kind):
+    return {}
+''' }

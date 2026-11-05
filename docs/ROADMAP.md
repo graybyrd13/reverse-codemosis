@@ -18,7 +18,7 @@ and exposed what to do next:
 |---|---|
 | A correct ripgrep correction breaks its 79-column `rustfmt` check | formatter-aware corrections (M1, **done**) |
 | Projects' test suites were not run as the oracle (third-party code) | a sandboxed field-test job (M1, **built**) |
-| 105 of 160 facts were not proven necessary by any counterexample | proof coverage (M1, **141 of 144 now**) |
+| 105 of 160 facts were not proven necessary by any counterexample | proof coverage (M1, **done: 144 of 144**) |
 | `bool(...)` and `not (a != b)` are kept because types are unknown | type facts (M2) |
 | Binding analysis exists only for Python | scope graphs for more languages (M2) |
 | 42 files hit grammar gaps (C macros, Kotlin `actual`, Swift `()`, POSIX `case`) | grammar work (M2; zsh done) |
@@ -73,18 +73,17 @@ formatter, demonstrated continuously on real repositories.
    `scripts/field-test-baseline.json` holds all 127 reviewed corrections by
    fingerprint, so any new proven correction fails CI until someone has read
    it.
-4. **Proof coverage (nearly done).** Every `where` fact in the built-in packs either has
-   a counterexample that needs it (`pack test --mutations`) or is removed.
-   *Exit:* every fact proven necessary, enforced in CI.
-   *Delivered:* 141 of 144 (from 55 of 160). 98 counterexamples were
-   added. Writing them showed that 16 facts were implied by others
-   (for example, `exists(@x)` before `kind(@x)`, a shape predicate repeated
-   in `where`, or a line-anchored pattern). Those facts were removed, each
-   with a comment, and where a table makes a fact redundant a test in
-   `codemosis-core/tests/pack_invariants.rs` keeps the table so. CI runs
-   `pack test --mutations --max-unproven 3`. The three left are cross-file
-   facts (`py.defined_in_project`, `py.imported_elsewhere`), which need
-   multi-file examples (M2.4).
+4. **Proof coverage (done).** Every `where` fact in the built-in packs has
+   a counterexample that needs it (`pack test --mutations`).
+   *Delivered:* 144 of 144 facts (from 55 of 160). 101 counterexamples
+   were added. 16 facts turned out to be implied by others (for example,
+   `exists(@x)` before `kind(@x)`, a shape predicate repeated in `where`,
+   or a line-anchored pattern). Those were removed, each with a comment.
+   Where a table makes a fact redundant, a test in
+   `codemosis-core/tests/pack_invariants.rs` keeps the table so.
+   Counterexamples can now carry other files of the project (`files`), so
+   the cross-file facts are proven too. CI runs
+   `pack test --mutations --max-unproven 0`.
 5. **Readable corrections.** Offer the clearer form when it is provably
    equal: `a not in b` instead of `not (a in b)` (already done), and `==`
    instead of `not (... != ...)` when *both* operands are of builtin types.
@@ -124,6 +123,8 @@ formatter, demonstrated continuously on real repositories.
    *Exit:* parse damage in the field test drops from 44 files (42 now) to
    under 10.
 4. **Multi-file pack examples**, so cross-file facts are proven in packs.
+   Counterexamples have `files` (done); examples, whose other files must
+   stay unchanged, are next.
 
 ## M3: scale and flow (0.4)
 
@@ -163,8 +164,7 @@ Concrete, ordered, each small enough for one pull request:
 2. ~~`.github/workflows/field-test.yml`~~ (built for cobra, gin and
    ripgrep; watch its first runs).
 3. ~~`scripts/field-test.sh --summary-json` and a committed baseline~~ (done).
-4. ~~Counterexamples for the unproven facts~~ (141 of 144; the rest wait
-   for multi-file examples, M2.4).
+4. ~~Counterexamples for the unproven facts~~ (done: 144 of 144).
 5. ~~zsh detection and routing to the lexical tier~~ (done).
 6. Decide on the three upstream reports in [FIELD_TEST.md](FIELD_TEST.md).
 

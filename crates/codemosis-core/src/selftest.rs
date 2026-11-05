@@ -347,7 +347,12 @@ fn test_rule(rule: &CompiledRule, opts: &Options) -> RuleReport {
     for (i, cx) in rule.spec.counterexamples.iter().enumerate() {
         let label = cx.name.clone().unwrap_or_else(|| format!("counterexample {}", i + 1));
         let at = place(rule, cx.language.as_deref(), cx.path.as_deref());
-        let p = single_file(at, &cx.code);
+        let mut p = single_file(at, &cx.code);
+        p.files.extend(
+            cx.files
+                .iter()
+                .map(|(path, text)| SourceFile::new(path.as_str(), text.clone())),
+        );
         let outcome = if !rule.is_text_rule() && p.files[0].syntax_errors() > 0 {
             Outcome::Fail("the code has syntax errors".into())
         } else {

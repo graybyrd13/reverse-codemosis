@@ -323,6 +323,10 @@ language = "typescript"     # optional, for packs with several grammars
 name = "optional description"
 code = '''...'''
 language = "tsx"            # optional, as for examples
+path = "config.py"          # optional, as for examples
+files = { "app.py" = '''from config import json''' }
+                            # optional: other files of the same project, for
+                            # facts that look across files
 ```
 
 `codemosis pack test` checks, for every example:

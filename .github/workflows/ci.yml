@@ -50,10 +50,9 @@ jobs:
       - name: Pack lint
         run: cargo run -q -- pack lint --deny-warnings --color always
       # Every fact a rule checks must be needed by some example or
-      # counterexample. The 3 allowed are cross-file facts, which need
-      # multi-file pack examples (roadmap M2.4). Lower it, never raise it.
+      # counterexample: a fact nothing needs is either redundant or untested.
       - name: Proof coverage (mutation testing)
-        run: cargo run -q -- pack test --mutations --max-unproven 3 --color always
+        run: cargo run -q -- pack test --mutations --max-unproven 0 --color always
       - name: Reverse Codemosis on its own source
         run: cargo run -q -- check crates --color always
 

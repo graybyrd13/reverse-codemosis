@@ -18,8 +18,8 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 | [`fstring-without-placeholders`](#fstring-without-placeholders) f-string without placeholders | waste | corrects (preserved) | 1 ex. · 2 counter |
 | [`is-literal`](#is-literal) Identity comparison with a literal | contradiction | corrects (corrected) | 2 ex. · 3 counter |
 | [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 8 counter |
-| [`missing-module-import`](#missing-module-import) Module used without being imported | broken | corrects (repaired) | 2 ex. · 3 counter |
-| [`missing-name-import`](#missing-name-import) Standard-library name used without being imported | broken | corrects (repaired) | 2 ex. · 4 counter |
+| [`missing-module-import`](#missing-module-import) Module used without being imported | broken | corrects (repaired) | 2 ex. · 4 counter |
+| [`missing-name-import`](#missing-name-import) Standard-library name used without being imported | broken | corrects (repaired) | 2 ex. · 5 counter |
 | [`mutable-default`](#mutable-default) Mutable default argument | hazard | asks, corrects on yes (corrected) | 2 ex. · 3 counter |
 | [`none-equality`](#none-equality) Equality comparison with None | hazard | asks, corrects on yes (preserved) | 1 ex. · 2 counter |
 | [`redundant-list-around-sorted`](#redundant-list-around-sorted) list() around sorted() | waste | corrects (preserved) | 1 ex. · 4 counter |
@@ -28,7 +28,7 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 | [`return-bool-if`](#return-bool-if) if/else that returns True or False | simplification | corrects (preserved) | 1 ex. · 2 counter |
 | [`undefined-name`](#undefined-name) Name that is never defined | broken | explains | 2 ex. · 5 counter |
 | [`unreachable-code`](#unreachable-code) Unreachable code | waste | corrects (preserved) | 2 ex. · 3 counter |
-| [`unused-import`](#unused-import) Unused import | waste | corrects (preserved) | 1 ex. · 9 counter |
+| [`unused-import`](#unused-import) Unused import | waste | corrects (preserved) | 1 ex. · 10 counter |
 | [`vacuous-assert`](#vacuous-assert) Assertion that can never fail | contradiction | corrects (corrected) | 1 ex. · 4 counter |
 
 ## bare-except
@@ -653,6 +653,12 @@ from helpers import *
 print(json.dumps({}))
 ```
 
+**Counterexample: the project has its own json module: which one the import means is ambiguous** (no finding)
+
+```python
+print(json.dumps({}))
+```
+
 **References**
 
 - <https://docs.python.org/3/reference/executionmodel.html#resolution-of-names>
@@ -742,6 +748,12 @@ options = dict(defaultdict=False)
 
 ```python
 from helpers import *
+counts = defaultdict(int)
+```
+
+**Counterexample: the project defines its own defaultdict: the import might not be the one meant** (no finding)
+
+```python
 counts = defaultdict(int)
 ```
 
@@ -1508,6 +1520,12 @@ import json
 __all__ = ["dump"]
 def dump(x):
     return repr(x)
+```
+
+**Counterexample: another module imports the name from this one** (no finding)
+
+```python
+import json
 ```
 
 

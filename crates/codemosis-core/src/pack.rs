@@ -217,6 +217,11 @@ pub struct CounterexampleSpec {
     pub code: String,
     #[serde(default)]
     pub language: Option<String>,
+    /// Other files of the same project, by path, for facts that look across
+    /// files (`py.defined_in_project`, `py.imported_elsewhere`). The rule is
+    /// checked on `code` only; these files must exist for it to stop.
+    #[serde(default)]
+    pub files: std::collections::BTreeMap<String, String>,
 }
 
 /// The raw files of a pack, before compilation.

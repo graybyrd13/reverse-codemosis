@@ -481,6 +481,14 @@
             "null"
           ],
           "default": null
+        },
+        "files": {
+          "description": "Other files of the same project, by path, for facts that look across\nfiles (`py.defined_in_project`, `py.imported_elsewhere`). The rule is\nchecked on `code` only; these files must exist for it to stop.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
         }
       },
       "additionalProperties": false,

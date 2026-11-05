@@ -107,3 +107,13 @@ from helpers import *
 
 print(json.dumps({}))
 '''
+
+[[counterexample]]
+name = "the project has its own json module: which one the import means is ambiguous"
+code = '''
+print(json.dumps({}))
+'''
+files = { "json.py" = '''
+def dumps(value):
+    return "local"
+''' }

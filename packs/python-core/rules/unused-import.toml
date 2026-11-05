@@ -129,3 +129,14 @@ __all__ = ["dump"]
 def dump(x):
     return repr(x)
 '''
+
+[[counterexample]]
+name = "another module imports the name from this one"
+path = "config.py"
+code = '''
+import json
+'''
+files = { "app.py" = '''
+from config import json
+print(json.dumps({}))
+''' }
