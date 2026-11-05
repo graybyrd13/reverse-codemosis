@@ -21,7 +21,7 @@ Every one of the 845 languages in GitHub Linguist is known: **17** deep (a synta
 | Ruby | `ruby` | tree-sitter-ruby 0.23.1 | generic + 1 | `ruby` | parse damage, comments | 4 |
 | Rust | `rust` | tree-sitter-rust 0.24.2 | generic + 0 | `rustc` | #[cfg], macro bodies, parse damage, comments | 8 |
 | Scala | `scala` | tree-sitter-scala 0.26.4 | generic + 1 | none | parse damage, comments | 3 |
-| Shell | `bash` | tree-sitter-bash 0.25.1 | generic + 1 | `bash` | parse damage, comments | 4 |
+| Shell | `bash` | tree-sitter-bash 0.25.1 | generic + 1 | `bash` | parse damage, comments, zsh read lexically | 4 |
 | Swift | `swift` | tree-sitter-swift 0.7.4 | generic + 1 | `swift` | conditional compilation, parse damage, comments | 3 |
 | TSX | `tsx` | tree-sitter-typescript 0.23.2 | generic + 1 | none | parse damage, comments | 11 |
 | TypeScript | `typescript` | tree-sitter-typescript 0.23.2 | generic + 1 | `node` | parse damage, comments | 11 |

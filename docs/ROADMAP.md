@@ -21,7 +21,7 @@ and exposed what to do next:
 | 105 of 160 facts are not proven necessary by any counterexample | proof coverage (M1) |
 | `bool(...)` and `not (a != b)` are kept because types are unknown | type facts (M2) |
 | Binding analysis exists only for Python | scope graphs for more languages (M2) |
-| 44 files hit grammar gaps (C macros, Kotlin `actual`, Swift `()`, zsh) | grammar work (M2) |
+| 42 files hit grammar gaps (C macros, Kotlin `actual`, Swift `()`, POSIX `case`) | grammar work (M2; zsh done) |
 | Django takes 7.4 s cold, every time | incremental analysis (M3) |
 
 ## M1: verified on real projects (0.2)
@@ -102,11 +102,13 @@ formatter, demonstrated continuously on real repositories.
    and `!=` cases above.
    *Exit:* the redundant `bool()` is dropped exactly when the operands are
    known to be bools; rustc's machine-applicable fixes pass the field test.
-3. **Grammar gaps.** Detect zsh and send it to the lexical tier instead of
-   the bash grammar; upgrade the Swift and Kotlin grammars, or contribute
-   fixes upstream; let packs declare C macros that act as statements or
-   loops (`jv_array_foreach`).
-   *Exit:* parse damage in the field test drops from 44 files to under 10.
+3. **Grammar gaps.** ~~Detect zsh and send it to the lexical tier~~ (done:
+   `lang::unread_dialect`); upgrade the Swift and Kotlin grammars, or
+   contribute fixes upstream (including tree-sitter-bash's POSIX `case`
+   patterns); let packs declare C macros that act as statements or loops
+   (`jv_array_foreach`).
+   *Exit:* parse damage in the field test drops from 44 files (42 now) to
+   under 10.
 4. **Multi-file pack examples**, so cross-file facts are proven in packs.
 
 ## M3: scale and flow (0.4)
@@ -149,7 +151,7 @@ Concrete, ordered, each small enough for one pull request:
 3. ~~`scripts/field-test.sh --summary-json` and a committed baseline~~ (done).
 4. Counterexamples for the unproven facts in `javascript-core` and
    `go-core`, tagged "good first issue" (M1.4).
-5. zsh detection and routing to the lexical tier (M2.3).
+5. ~~zsh detection and routing to the lexical tier~~ (done).
 6. Decide on the three upstream reports in [FIELD_TEST.md](FIELD_TEST.md).
 
 ## Decisions for the maintainers

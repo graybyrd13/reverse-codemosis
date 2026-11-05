@@ -137,6 +137,8 @@ def compare(current, baseline):
     if ct["unparsed"] > bt["unparsed"]:
         ok = False
         lines.append("FAIL: more files fail to parse than in the baseline")
+    elif ct["unparsed"] < bt["unparsed"]:
+        lines.append("  fewer files fail to parse: update the baseline to keep the gain")
     if ct["rule_errors"] > bt["rule_errors"]:
         ok = False
         lines.append("FAIL: a rule errors on real code (see the .json reports' rule_errors)")

@@ -281,3 +281,20 @@ fn a_language_detected_by_guesswork_gets_no_rules() {
     let (r, _) = session(vec![SourceFile::new("x.h", "\n".into())], vec![&rule]);
     assert!(r.remaining.is_empty());
 }
+
+#[test]
+fn zsh_is_not_corrected_with_the_bash_grammar() {
+    // The bash grammar misreads zsh; a syntax-tree rule must not touch it.
+    let rule = builtin("shell-core/unquoted-rm");
+    let code = "#!/usr/bin/env zsh\nrm -rf $dir/*(.N)\n";
+    let (r, project) = session(vec![SourceFile::new("clean", code.into())], vec![&rule]);
+    assert!(r.steps.is_empty() && r.remaining.is_empty(), "{:#?}", r.remaining);
+    assert_eq!(project.files[0].text, code);
+    // The same line in a bash script is reached.
+    let bash = "#!/bin/bash\nrm -rf $dir/*\n";
+    let (r, _) = session(vec![SourceFile::new("clean", bash.into())], vec![&rule]);
+    assert!(
+        !r.remaining.is_empty() || !r.steps.is_empty(),
+        "the rule should see bash"
+    );
+}

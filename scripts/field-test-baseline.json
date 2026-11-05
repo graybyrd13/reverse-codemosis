@@ -8,7 +8,7 @@
     "explained": 9,
     "refused": 2,
     "suppressed": 11,
-    "unparsed": 44,
+    "unparsed": 42,
     "rule_errors": 0,
     "questions_per_kfile": 11.87,
     "explained_per_kfile": 0.83
@@ -1088,7 +1088,7 @@
       "explained": 0,
       "refused": 0,
       "suppressed": 0,
-      "unparsed": 3,
+      "unparsed": 1,
       "rule_errors": 0,
       "by_rule": {
         "rust-core/manual-assert": {

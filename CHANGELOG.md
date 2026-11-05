@@ -44,6 +44,8 @@ follows [Semantic Versioning](https://semver.org/) as described in
 - `.github/workflows/field-test.yml`: the ledger on pull requests, and
   `codemosis fix` on cobra, gin and ripgrep with their own tests as the
   oracle, re-checked independently (`scripts/field-test-oracle.sh`).
+- zsh (`.zsh`, zsh shebangs, `#compdef`) is read in the lexical tier rather
+  than misparsed by the bash grammar; `map` says so.
 - Suppressions written for other tools are honoured through rules'
   `equivalents` (flake8/ruff, mypy, pyright, pylint, eslint, clang-tidy,
   golangci-lint, ShellCheck, clippy).

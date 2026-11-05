@@ -79,7 +79,7 @@ the [roadmap](ROADMAP.md).
 | ms | 0 | 0 | 0 | 0 | 0 | 0.28 |
 | cobra | 1 | 0 | 0 | 0 | 0 | 0.12 |
 | gin | 1 | 8 | 1 | 0 | 0 | 0.12 |
-| ripgrep | 2 | 0 | 0 | 0 | 3 | 0.45 |
+| ripgrep | 2 | 0 | 0 | 0 | 1 | 0.45 |
 | gson | 0 | 0 | 0 | 0 | 0 | 0.22 |
 | sinatra | 0 | 0 | 0 | 0 | 0 | 0.16 |
 | guzzle | 0 | 0 | 0 | 0 | 0 | 0.31 |
@@ -87,7 +87,7 @@ the [roadmap](ROADMAP.md).
 | nvm | 0 | 15 | 0 | 0 | 2 | 0.38 |
 | Alamofire | 0 | 1 | 0 | 0 | 5 | 0.55 |
 | okio | 0 | 30 | 1 | 0 | 6 | 0.28 |
-| **Total** | **127** | **128** | **9** | **11** | **44** | **15.5** |
+| **Total** | **127** | **128** | **9** | **11** | **42** | **15.5** |
 
 Nine of the twenty projects get nothing at all. They are mature,
 heavily linted codebases, and the rules are deliberately narrow, so this is
@@ -209,18 +209,24 @@ The changes, all in the engine and the packs:
   typeahead...) and generated `.docset` directories are never edited.
 - **Parse damage** no longer spreads to a whole C header through its
   include guard.
+- **zsh** (`.zsh` files, zsh shebangs, `#compdef` completions) is read in
+  the lexical tier instead of being misparsed by the bash grammar
+  (ripgrep: 3 damaged files → 1).
 
 ## Grammar gaps
 
-44 files contain code a grammar could not parse; no correction is made
+42 files contain code a grammar could not parse; no correction is made
 there, and `check` lists them.
 
 - **C (jq, 26):** macros used as statements or loops
   (`jv_array_foreach(...)`, X-macros).
-- **Kotlin (okio, 6):** multiplatform `actual constructor`.
+- **Kotlin (okio, 5):** multiplatform `actual constructor`.
 - **Swift (Alamofire, 5):** the empty-tuple expression `()`.
-- **Shell (ripgrep, nvm, okio):** zsh scripts, which Linguist files under
-  Shell and which are parsed with the bash grammar.
+- **Shell (nvm 2, okio 1, ripgrep 1):** POSIX `sh` that tree-sitter-bash
+  misreads: `case` patterns mixing globs and quotes (`--only=*' '*)`), a
+  `#(` comment after `case ... in` (Gradle's wrapper), and a file of fish
+  and zsh glob patterns named `.sh`. (Two zsh scripts in ripgrep were
+  counted here too; zsh is now read lexically.)
 - **JavaScript (Django, 2):** template-processed and Python-2-era files.
 
 ## Rerunning it

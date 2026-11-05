@@ -18,6 +18,8 @@ struct LangStats {
     tier: Tier,
     grammar: Option<&'static str>,
     rules: usize,
+    /// Files in a dialect the grammar does not read (zsh), by dialect.
+    dialects: BTreeMap<&'static str, usize>,
 }
 
 fn hex_rgb(hex: &str) -> Option<(u8, u8, u8)> {
@@ -111,12 +113,19 @@ pub fn render(ws: &Workspace, root: &str, s: Style) -> String {
             tier: Tier::Recognized,
             grammar: None,
             rules: 0,
+            dialects: BTreeMap::new(),
         });
         e.files += 1;
         e.bytes += f.text.len();
         e.tier = e.tier.max(f.tier());
         if let Some(l) = f.lang {
             e.grammar = Some(l.id());
+        } else if let Some(d) = f
+            .linguist()
+            .and_then(|l| codemosis_core::lang::for_linguist(l.name))
+            .and_then(|g| codemosis_core::lang::unread_dialect(g, &f.path, &f.text))
+        {
+            *e.dialects.entry(d).or_default() += 1;
         }
     }
     for st in stats.values_mut() {
@@ -166,7 +175,13 @@ pub fn render(ws: &Workspace, root: &str, s: Style) -> String {
         } else {
             String::new()
         };
-        let grammar = l.grammar.map(|g| format!(" ({g})")).unwrap_or_default();
+        let mut grammar = l.grammar.map(|g| format!(" ({g})")).unwrap_or_default();
+        for (dialect, n) in &l.dialects {
+            grammar.push_str(&format!(
+                "; {n} {dialect} file{} read lexically",
+                if *n == 1 { "" } else { "s" }
+            ));
+        }
         let _ = writeln!(
             out,
             "  {} {:<22} {pct} {:>4} file{}  {}{}{}",
@@ -425,6 +440,7 @@ fn matrix_row(l: &linguist::LinguistLanguage, packs: &[codemosis_core::Pack]) ->
                 "edit_guards": match g.id() {
                     "c" | "cpp" | "csharp" | "swift" => vec!["conditional compilation", "parse damage", "comments"],
                     "rust" => vec!["#[cfg]", "macro bodies", "parse damage", "comments"],
+                    "bash" => vec!["parse damage", "comments", "zsh read lexically"],
                     _ => vec!["parse damage", "comments"],
                 },
             });

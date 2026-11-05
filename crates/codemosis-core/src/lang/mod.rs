@@ -226,6 +226,38 @@ pub fn for_linguist(name: &str) -> Option<&'static dyn Language> {
     all().into_iter().find(|l| l.linguist_names().contains(&name))
 }
 
+/// A dialect a grammar does not read, though Linguist files it under the
+/// grammar's language: zsh, which Linguist counts as Shell but whose syntax
+/// (glob qualifiers, `${(f)...}` flags, `#compdef` files) the bash grammar
+/// misparses. Such a file keeps its language and its comment and string
+/// syntax, but gets no syntax tree: it is read in the lexical tier, and no
+/// syntax-tree rule touches it.
+pub fn unread_dialect(lang: &dyn Language, path: &std::path::Path, text: &str) -> Option<&'static str> {
+    if lang.id() != "bash" {
+        return None;
+    }
+    let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let zsh_name = name.ends_with(".zsh")
+        || name.ends_with(".zsh-theme")
+        || matches!(
+            name.trim_start_matches('.'),
+            "zshrc" | "zshenv" | "zprofile" | "zlogin" | "zlogout"
+        );
+    let first = text.lines().next().unwrap_or("").trim();
+    let zsh_shebang = first.starts_with("#!") && {
+        let mut words = first[2..].split_whitespace();
+        let program = words.next().unwrap_or("");
+        let program = if program.ends_with("/env") {
+            words.find(|w| !w.starts_with('-')).unwrap_or("")
+        } else {
+            program
+        };
+        program.rsplit('/').next() == Some("zsh")
+    };
+    let zsh_completion = first.starts_with("#compdef") || first.starts_with("#autoload");
+    (zsh_name || zsh_shebang || zsh_completion).then_some("zsh")
+}
+
 include!(concat!(env!("OUT_DIR"), "/grammar_versions.rs"));
 
 /// The crate that provides a grammar.

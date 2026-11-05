@@ -77,7 +77,10 @@ impl SourceFile {
         let detection = linguist::detect(&path, &text);
         let role = linguist::role(&path, &text);
         let lang = if detection.trusted() {
-            detection.language.and_then(|l| lang::for_linguist(l.name))
+            detection
+                .language
+                .and_then(|l| lang::for_linguist(l.name))
+                .filter(|l| lang::unread_dialect(*l, &path, &text).is_none())
         } else {
             None
         };
@@ -724,5 +727,35 @@ mod syntax_tests {
             !same_syntax(py, "s = 'a  b'\n", "s = 'a b'\n"),
             "whitespace in a string is content"
         );
+    }
+}
+
+#[cfg(test)]
+mod dialect_tests {
+    use super::*;
+
+    #[test]
+    fn zsh_is_read_lexically() {
+        let body = "print -l ${(f)\"$(ls)\"}\nfor f in *(.N); do echo $f; done\n";
+        for (path, text) in [
+            ("rg.zsh".to_string(), body.to_string()),
+            (".zshrc".to_string(), body.to_string()),
+            ("ci/test-complete".to_string(), format!("#!/usr/bin/env zsh\n{body}")),
+            ("bin/run.sh".to_string(), format!("#!/bin/zsh -f\n{body}")),
+            ("_rg.sh".to_string(), format!("#compdef rg\n{body}")),
+        ] {
+            let f = SourceFile::new(path.clone(), text);
+            assert_eq!(f.language_name(), "Shell", "{path}");
+            assert!(f.lang.is_none(), "{path} should get no bash syntax tree");
+            assert_eq!(f.tier(), Tier::Lexical, "{path}");
+        }
+        for (path, text) in [
+            ("run.sh", "#!/bin/bash\necho hi\n"),
+            ("run.sh", "#!/usr/bin/env -S bash -e\necho hi\n"),
+            ("build.sh", "echo zsh is mentioned, not used\n"),
+        ] {
+            let f = SourceFile::new(path, text.into());
+            assert_eq!(f.lang.map(|l| l.id()), Some("bash"), "{path}: {text}");
+        }
     }
 }
