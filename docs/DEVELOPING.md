@@ -31,11 +31,13 @@ reverse-codemosis/
 │   │   ├── src/lib.rs           Workspace: config + packs + answers + project
 │   │   ├── src/session.rs       the correction loop and its acceptance contract
 │   │   ├── src/oracle.rs        running the build and tests; testparse.rs reads results
+│   │   ├── src/formatter.rs     the project's formatters: detection, checking, layout
 │   │   ├── src/policy.rs        severities, suppressions, the gate, baselines
 │   │   ├── src/ci.rs            SARIF, GitLab, GitHub annotations, reviews
 │   │   ├── src/proof.rs         certificates; patch.rs exact diffs; lock.rs; audit.rs
 │   │   ├── src/fsguard.rs       every write goes through here
-│   │   └── tests/soundness.rs   adversarial cases that must be refused
+│   │   ├── tests/soundness.rs   adversarial cases that must be refused
+│   │   └── tests/formatting.rs  the formatting contract end to end (needs gofmt)
 │   └── codemosis-cli/         the `codemosis` command
 │       ├── src/main.rs          commands and their options
 │       ├── src/lsp.rs, doctor.rs, map.rs, interactive.rs, packdocs.rs, scaffold.rs

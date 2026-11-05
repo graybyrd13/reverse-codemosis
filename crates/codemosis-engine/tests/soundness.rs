@@ -29,6 +29,7 @@ fn session(files: Vec<SourceFile>, rules: Vec<&CompiledRule>) -> (Report, Projec
         answers: &none,
         oracle: None,
         policy: None,
+        formatters: None,
         options: Options {
             write: false,
             max_steps: 50,

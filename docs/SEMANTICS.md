@@ -127,9 +127,11 @@ A step on a real project is kept only if:
    its own output is defective, and its step is refused);
 2. it introduces no finding of a more serious category;
 3. every file it touches still parses, with no new syntax errors;
-4. the build does not regress (it does not start failing, or fail with more
+4. every file it touches that the project's formatter left unchanged before
+   is left unchanged by it after (see below);
+5. the build does not regress (it does not start failing, or fail with more
    errors);
-5. no test that passed before stops passing, is skipped, or disappears.
+6. no test that passed before stops passing, is skipped, or disappears.
 
 The engine also refuses any correction that would overlap another or delete
 a comment, and three more, whatever a rule says:
@@ -152,6 +154,29 @@ a comment, and three more, whatever a rule says:
   those places. `repaired` rules are the exception: their purpose is to fix
   code that does not parse, and the step must still leave no new error.
 
+### Formatting
+
+Projects that keep their code exactly as a formatter prints it check that in
+CI, so a correction that is right but leaves a line too long would still
+make the project worse. The engine detects each file's formatter from an
+explicit signal (rustfmt from `rustfmt.toml` or `Cargo.toml`, gofmt always
+for Go, Black or Ruff from their configuration or pre-commit hooks, Prettier
+from its configuration or `package.json`, clang-format from
+`.clang-format`). A file is held to its formatter only if the formatter
+already leaves it unchanged, so a wrong guess costs nothing. With
+`[format] mode = "refuse"` (the default) a step that would leave such a file
+unformatted is rolled back with the line the formatter would rewrite. With
+`mode = "reformat"` the formatter's output is applied instead, provided
+every line it changes lies within three lines of a line the rule changed;
+otherwise the step is refused, because it would change code the rule did not
+prove. The certificate records the text the rule produced and the formatter
+and version that laid it out (below).
+
+Formatting is done over standard input; nothing is written. Prettier can
+execute a project's configuration and plugins, so it runs only when the
+project's build and tests are the oracle; a missing formatter is reported,
+and its files are then not held to it.
+
 Each guard has a case in the soundness regression suite
 (`crates/codemosis-engine/tests/soundness.rs`): a rule or input built to
 trick the engine, which must be refused.
@@ -164,7 +189,13 @@ step relied on, each step's exact patch, every file's hash before and
 after, and the oracle's results. `codemosis proof verify` checks it without
 trusting its author: it recovers the original code from the current files
 and the patch, replays every step with the pinned rules, and checks that
-each reproduces the recorded change byte for byte. A verified certificate
+each reproduces the recorded change byte for byte. When a formatter laid a
+step out, the rule's output must match the recorded pre-formatting hash, and
+the layout is replayed with the same formatter version when it is
+installed; without it, verification accepts the layout only if it leaves
+the syntax tree unchanged (whitespace only), and fails otherwise. Verifying
+runs none of the project's code, so Prettier is never replayed. A verified
+certificate
 says the diff is exactly what those reviewed rules prove, given those
 recorded answers. What it cannot re-establish is the oracle's verdict; the
 recorded test counts are evidence to re-run, not a proof.

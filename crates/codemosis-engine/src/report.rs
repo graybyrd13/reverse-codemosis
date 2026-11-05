@@ -268,13 +268,51 @@ fn step_line(step: &Step, s: Style) -> String {
         None => String::new(),
     };
     format!(
-        "  {} {:>2}  {} {}{}",
+        "  {} {:>2}  {} {}{}{}",
         s.green("✓"),
         step.number,
         s.bold(&step.rule),
         what,
+        s.dim(&laid_out(step)),
         s.dim(&oracle)
     )
+}
+
+/// `  laid out by rustfmt` when a formatter laid the step's files out.
+fn laid_out(step: &Step) -> String {
+    let mut names: Vec<&str> = step.formatted.iter().map(|f| f.formatter.as_str()).collect();
+    names.dedup();
+    if names.is_empty() {
+        String::new()
+    } else {
+        format!("  laid out by {}", names.join(", "))
+    }
+}
+
+/// One line per formatter that held the corrections, for the result.
+fn formatting_lines(r: &Report) -> Vec<String> {
+    r.formatting
+        .iter()
+        .map(|u| match &u.not_run {
+            Some(why) => format!("{} ({}): not run: {why}", u.formatter, u.evidence),
+            None => {
+                let mut line = format!(
+                    "{} ({}): {} changed file{} kept formatted",
+                    u.formatter,
+                    u.evidence,
+                    u.files_checked,
+                    if u.files_checked == 1 { "" } else { "s" }
+                );
+                if u.files_not_formatted > 0 {
+                    line.push_str(&format!(
+                        "; {} not formatted to begin with, not held to it",
+                        u.files_not_formatted
+                    ));
+                }
+                line
+            }
+        })
+        .collect()
 }
 
 pub struct Header<'a> {
@@ -397,6 +435,9 @@ pub fn session_text(r: &Report, project: &Project, s: Style, show_diff: bool) ->
             s.yellow("stopped at the step limit; run again to continue")
         );
     }
+    for (i, line) in formatting_lines(r).iter().enumerate() {
+        let _ = writeln!(out, "  {:<9} {}", if i == 0 { "format" } else { "" }, s.dim(line));
+    }
 
     let questions: Vec<&Finding> = r
         .remaining
@@ -482,7 +523,15 @@ pub fn session_markdown(r: &Report, root: &str, packs: &[&Pack]) -> String {
             .semantics
             .map(|x| format!(" — {}: {}", x.as_str(), x.describe()))
             .unwrap_or_default();
-        let _ = writeln!(out, "{}. **{}** ({}){}", step.number, step.rule, step.title, sem);
+        let _ = writeln!(
+            out,
+            "{}. **{}** ({}){}{}",
+            step.number,
+            step.rule,
+            step.title,
+            sem,
+            laid_out(step).replace("  laid out", "; laid out")
+        );
         for f in &step.findings {
             let _ = writeln!(out, "   - `{}:{}` {}", f.file.display(), f.span.start.line, f.message);
         }
@@ -498,6 +547,13 @@ pub fn session_markdown(r: &Report, root: &str, packs: &[&Pack]) -> String {
                 rej.finding.span.start.line,
                 rej.reasons.join("; ")
             );
+        }
+    }
+    let formatting = formatting_lines(r);
+    if !formatting.is_empty() {
+        let _ = writeln!(out, "\n## Formatting\n");
+        for line in formatting {
+            let _ = writeln!(out, "- {line}");
         }
     }
     let questions: Vec<&Finding> = r

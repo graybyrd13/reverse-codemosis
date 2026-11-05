@@ -16,7 +16,7 @@ and exposed what to do next:
 
 | Evidence from the field test | Leads to |
 |---|---|
-| A correct ripgrep correction breaks its 79-column `rustfmt` check | formatter-aware corrections (M1) |
+| A correct ripgrep correction breaks its 79-column `rustfmt` check | formatter-aware corrections (M1, **done**) |
 | Projects' test suites were not run as the oracle (third-party code) | a sandboxed field-test job (M1) |
 | 105 of 160 facts are not proven necessary by any counterexample | proof coverage (M1) |
 | `bool(...)` and `not (a != b)` are kept because types are unknown | type facts (M2) |
@@ -29,7 +29,7 @@ and exposed what to do next:
 **Goal:** every correction passes the project's own test suite *and*
 formatter, demonstrated continuously on real repositories.
 
-1. **Formatter-aware acceptance.** Detect each project's formatter: rustfmt
+1. **Formatter-aware acceptance (done).** Detect each project's formatter: rustfmt
    (`rustfmt.toml`, Cargo projects), gofmt (always for Go), Black or Ruff
    format (`pyproject.toml`), Prettier (its config files) and clang-format
    (`.clang-format`). If a touched file was formatter-clean before a step,
@@ -39,6 +39,13 @@ formatter, demonstrated continuously on real repositories.
    *Exit:* the ripgrep correction is reformatted to 79 columns, or
    refused; a soundness test covers each formatter; no change to the two
    demonstrations' diffs.
+   *Delivered:* `engine/src/formatter.rs`, `[format] mode = "refuse" |
+   "reformat" | "off"`; reformatting is kept within three lines of the
+   correction and recorded in the certificate; `proof verify` replays it.
+   Both ripgrep outcomes are confirmed. Open: range formatting where a
+   formatter supports it (clang-format `--lines`, Prettier
+   `--range-start`), so a formatter that would also rewrite distant lines
+   can still lay out the correction alone.
 2. **Field test in CI, with real oracles.** A weekly workflow
    (`.github/workflows/field-test.yml`) runs `codemosis fix` on the pinned
    repositories inside per-ecosystem containers (dependencies installed,
@@ -125,9 +132,8 @@ monorepo.
 
 Concrete, ordered, each small enough for one pull request:
 
-1. `engine/src/formatter.rs`: detect rustfmt and gofmt, and check
-   formatter-cleanliness of touched files in `session.rs::try_step`
-   (M1.1). Start with refusing; reformatting can follow.
+1. ~~`engine/src/formatter.rs`~~ (done: all six formatters, refuse and
+   reformat).
 2. `.github/workflows/field-test.yml` for the Go and Rust repositories
    (cobra, gin, ripgrep), whose test suites need no services (M1.2).
 3. `scripts/field-test.sh --summary-json` and a committed baseline (M1.3).
@@ -138,9 +144,9 @@ Concrete, ordered, each small enough for one pull request:
 
 ## Decisions for the maintainers
 
-- **Formatter policy:** reformat changed lines (clearer diffs, but needs
-  formatters that support ranges) or refuse the step (simpler and
-  stricter). The plan starts with refusing.
+- **Formatter policy:** both are implemented; `refuse` is the default and
+  `reformat` is opt-in. Should `reformat` become the default once it has
+  run on the field test for a release?
 - **Upstream reports:** file the three genuine issues found in rich and
   Django, crediting the tool, or keep the field test private until 0.2.
 - **0.2 scope:** ship M1 alone, or wait for M2.1 (scope graphs for

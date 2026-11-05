@@ -156,7 +156,8 @@ override this). It then:
    corrections of one rule that do not overlap;
 3. applies them and checks the **acceptance contract**: every target is
    gone, nothing more serious appeared, every file still parses, no name
-   changed meaning, the build did not regress, and no passing test failed;
+   changed meaning, every formatted file is still formatted, the build did
+   not regress, and no passing test failed;
 4. keeps the step, or rolls it back. If a step with several corrections
    fails, it bisects to find the one at fault and reports it with the
    reasons;
@@ -177,6 +178,31 @@ detected commands to `codemosis.toml` for you to check.
 | `--report FILE` | write a Markdown (or `.json`) report, for example for a pull request |
 | `--rule ID` | only these rules or packs |
 
+### Formatting
+
+If your project keeps its code formatted, corrections keep it that way.
+`codemosis doctor` and `codemosis map` show which formatter governs which
+files and why: rustfmt (`rustfmt.toml` or `Cargo.toml`), gofmt (all Go),
+Black or Ruff (`pyproject.toml`, `ruff.toml`, pre-commit hooks), Prettier
+(its config or `package.json`), clang-format (`.clang-format`). A file the
+formatter would already rewrite is not held to it.
+
+By default a correction that would leave a formatted file unformatted is
+refused, with the line the formatter would change:
+
+```text
+  ✗     rust-core/manual-assert crates/ignore/src/dir.rs:208  rejected by verification
+          crates/ignore/src/dir.rs is kept formatted with rustfmt, and after the correction
+          rustfmt would rewrite line 208; set `[format] mode = "reformat"` to let rustfmt lay it out
+```
+
+With `[format] mode = "reformat"` the formatter lays out the corrected lines
+instead (`✓ 1 rust-core/manual-assert crates/ignore/src/dir.rs:208  laid out
+by rustfmt`), as long as every line it changes is within three lines of the
+correction. The formatter must be installed; Prettier runs only when the
+build and tests run too, because it can execute the project's
+configuration.
+
 ## Check the proof
 
 Every `fix` that changes code writes `.codemosis/proofs/<date>-<id>.json`.
@@ -190,7 +216,9 @@ Verification recovers the original code from the recorded patch and
 replays each step with the pinned rules, checking that every one reproduces
 the recorded change exactly. It confirms the diff is what the rules prove
 (given the recorded answers); the recorded test results are evidence to
-re-run, not something it can replay.
+re-run, not something it can replay. A step a formatter laid out is
+replayed with the same formatter version when it is installed; otherwise
+verification accepts the layout only if it changes whitespace alone.
 
 ## Configure
 
@@ -228,6 +256,10 @@ paths = ["legacy/**"]
 reason = "legacy worker, replaced in Q1"
 until = "2027-01-31"                # optional: stops applying after this day
 owner = "@payments"                 # optional
+
+[format]
+mode = "refuse"                     # refuse (default) | reformat | off
+disable = ["clang-format"]          # formatters never to run
 ```
 
 Editors can validate this file with `schemas/config.schema.json`.

@@ -30,6 +30,9 @@
       "items": {
         "$ref": "#/$defs/SuppressEntry"
       }
+    },
+    "format": {
+      "$ref": "#/$defs/FormatSection"
     }
   },
   "additionalProperties": false,
@@ -183,6 +186,46 @@
       "required": [
         "rule",
         "reason"
+      ]
+    },
+    "FormatSection": {
+      "description": "`[format]` in `codemosis.toml`.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "\"refuse\" (default): a step that would leave a formatted file\nunformatted is rolled back. \"reformat\": the formatter's output is\napplied when it only touches lines next to the correction. \"off\".",
+          "$ref": "#/$defs/Mode",
+          "default": "refuse"
+        },
+        "disable": {
+          "description": "Formatters never to run: rustfmt, gofmt, black, ruff, prettier,\nclang-format.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "Mode": {
+      "description": "What to do when a correction would leave a formatted file unformatted.",
+      "oneOf": [
+        {
+          "description": "Refuse the step and report why.",
+          "type": "string",
+          "const": "refuse"
+        },
+        {
+          "description": "Apply the formatter's output, if it only changes lines next to the\ncorrection; refuse otherwise.",
+          "type": "string",
+          "const": "reformat"
+        },
+        {
+          "description": "Do not check formatting.",
+          "type": "string",
+          "const": "off"
+        }
       ]
     }
   },

@@ -33,6 +33,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      # gofmt and rustfmt: the formatting contract's tests run against both.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check

@@ -333,6 +333,45 @@ fn count_errors(node: tree_sitter::Node) -> usize {
     n
 }
 
+/// Whether two texts have the same syntax tree: the same nodes in the same
+/// structure with the same tokens, differing at most in the whitespace
+/// between tokens. A change that keeps the tree is layout only. Both must
+/// parse without errors in `lang`.
+pub fn same_syntax(lang: &dyn Language, a: &str, b: &str) -> bool {
+    let (Some(ta), Some(tb)) = (parse_text(lang, a), parse_text(lang, b)) else {
+        return false;
+    };
+    let (ra, rb) = (ta.root_node(), tb.root_node());
+    if ra.has_error() || rb.has_error() {
+        return false;
+    }
+    let (mut ca, mut cb) = (ra.walk(), rb.walk());
+    loop {
+        let (na, nb) = (ca.node(), cb.node());
+        if na.kind_id() != nb.kind_id() || na.child_count() != nb.child_count() {
+            return false;
+        }
+        if na.child_count() == 0 && a.as_bytes()[na.byte_range()] != b.as_bytes()[nb.byte_range()] {
+            return false;
+        }
+        // Depth-first, both cursors in step (same structure so far).
+        if ca.goto_first_child() {
+            cb.goto_first_child();
+            continue;
+        }
+        loop {
+            if ca.goto_next_sibling() {
+                cb.goto_next_sibling();
+                break;
+            }
+            if !ca.goto_parent() {
+                return true;
+            }
+            cb.goto_parent();
+        }
+    }
+}
+
 pub fn parse_text(lang: &dyn Language, text: &str) -> Option<Tree> {
     let mut parser = Parser::new();
     parser.set_language(&lang.grammar()).ok()?;
@@ -650,6 +689,40 @@ mod purpose_tests {
             p("src/latest.py"),
             Purpose::Library,
             "a name ending in 'test' is not a test by itself"
+        );
+    }
+}
+
+#[cfg(test)]
+mod syntax_tests {
+    use super::*;
+
+    #[test]
+    fn layout_only_changes_keep_the_tree() {
+        let rust = crate::lang::by_id("rust").unwrap();
+        let a = "fn f() { g(a, b); }\n";
+        assert!(same_syntax(
+            rust,
+            a,
+            "fn f() {\n    g(\n        a,\n        b\n    );\n}\n"
+        ));
+        assert!(
+            !same_syntax(rust, a, "fn f() {\n    g(\n        a,\n        b,\n    );\n}\n"),
+            "a trailing comma is a token"
+        );
+        assert!(!same_syntax(rust, a, "fn f() { g(b, a); }\n"));
+        assert!(!same_syntax(rust, a, "fn f() { g(\"a \", b); }\n"));
+        assert!(!same_syntax(rust, a, "fn f() { g(a, b) }\n"));
+        assert!(!same_syntax(rust, a, "fn f( { g(a, b); }\n"), "both must parse");
+
+        // In Python, indentation is structure, not layout.
+        let py = crate::lang::by_id("python").unwrap();
+        let p = "if a:\n    b()\nc()\n";
+        assert!(same_syntax(py, p, "if a:\n  b()\nc()\n"));
+        assert!(!same_syntax(py, p, "if a:\n    b()\n    c()\n"));
+        assert!(
+            !same_syntax(py, "s = 'a  b'\n", "s = 'a b'\n"),
+            "whitespace in a string is content"
         );
     }
 }

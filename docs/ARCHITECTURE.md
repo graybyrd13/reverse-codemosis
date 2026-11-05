@@ -11,6 +11,7 @@
  │ Workspace  config, packs, policy    │   │ model     findings, status, distance  │
  │ Session    the correction loop      │──▶│ pack      manifest, rules, digests    │
  │ Oracle     build + test commands    │   │ rule      compile, match, edit, scan  │
+ │ formatter  rustfmt, gofmt, Black... │   │                                       │
  │ testparse  per-test results         │   │ expr/eval the fact language           │
  │ policy     suppress, severity, gate │   │ template  rewrite templates           │
  │ ci         SARIF, GitLab, GitHub    │   │ lang      17 grammars, bindings       │
@@ -115,8 +116,9 @@ changing anything on disk.
       pick the most serious category, then the first rule in pack order
       batch ← its fixable findings that do not overlap
       try the batch:
-          apply edits in memory → parse check → rescan touched files
-          → targets gone? nothing more serious introduced?
+          apply edits in memory → parse check → binding check
+          → formatted files still formatted? (or laid out, nearby only)
+          → rescan touched files → targets gone? nothing more serious introduced?
           → write → oracle.run() → no regression?
       accepted: record the step (diff, oracle delta)
       rejected: roll back; one finding → reject it with the reasons;
@@ -126,6 +128,11 @@ changing anything on disk.
 
   Every round either accepts or rejects at least one finding, so the loop
   terminates; `max_steps` is a further guard.
+- **`formatter`** detects each file's formatter from configuration (rustfmt,
+  gofmt, Black, Ruff, Prettier, clang-format), runs it over standard input
+  with a time limit, and holds a file to it only if it was formatted before
+  the step. `stray_reformatting` keeps `mode = "reformat"` next to the
+  correction. Results are cached by file and content hash.
 - **`answers`**: `.codemosis/answers.toml`. Questions are identified by a
   hash of rule, file and anchor; an answer is "yes", "no" or the name of one
   of the rule's options.

@@ -85,6 +85,10 @@ through everything else.
 - **Your tests have the last word**: each step is kept only if the build
   does not regress and no passing test fails; otherwise it is rolled back
   and reported with its evidence.
+- **Your formatter's too**: a file kept formatted by rustfmt, gofmt, Black,
+  Ruff, Prettier or clang-format stays formatted. A correction that would
+  break that is refused, or (if you allow it) laid out by the formatter,
+  next to the correction only.
 - **Some code is never touched**: comments, generated and vendored files,
   files whose language is a guess, code inside `#if` blocks or behind Rust
   `#[cfg]`, macro bodies, code the grammar could not parse, and (in Python)

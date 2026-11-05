@@ -32,12 +32,31 @@ impl CommandResult {
 
 /// Run `cmd`, killing it if it outlives `timeout`.
 pub fn run(cmd: &mut Command, timeout: Duration) -> std::io::Result<CommandResult> {
+    run_inner(cmd, None, timeout)
+}
+
+/// Run `cmd` with `input` on its standard input, killing it if it outlives
+/// `timeout`. Formatters read code this way, so nothing is written to disk.
+pub fn run_with_input(cmd: &mut Command, input: &str, timeout: Duration) -> std::io::Result<CommandResult> {
+    run_inner(cmd, Some(input.as_bytes().to_vec()), timeout)
+}
+
+fn run_inner(cmd: &mut Command, input: Option<Vec<u8>>, timeout: Duration) -> std::io::Result<CommandResult> {
     let start = Instant::now();
     let mut child = cmd
-        .stdin(Stdio::null())
+        .stdin(if input.is_some() { Stdio::piped() } else { Stdio::null() })
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
+    // Feed standard input from a thread, so a child that writes before it
+    // has read everything cannot deadlock against a full pipe.
+    let in_thread = input.map(|bytes| {
+        let mut pipe = child.stdin.take().expect("piped stdin");
+        std::thread::spawn(move || {
+            use std::io::Write;
+            let _ = pipe.write_all(&bytes);
+        })
+    });
     let mut out_pipe = child.stdout.take().expect("piped stdout");
     let mut err_pipe = child.stderr.take().expect("piped stderr");
     let out_thread = std::thread::spawn(move || {
@@ -63,6 +82,9 @@ pub fn run(cmd: &mut Command, timeout: Duration) -> std::io::Result<CommandResul
         }
         std::thread::sleep(Duration::from_millis(5));
     };
+    if let Some(t) = in_thread {
+        let _ = t.join();
+    }
     let stdout = String::from_utf8_lossy(&out_thread.join().unwrap_or_default()).into_owned();
     let stderr = String::from_utf8_lossy(&err_thread.join().unwrap_or_default()).into_owned();
     Ok(CommandResult {
@@ -221,5 +243,15 @@ mod tests {
         let size = std::fs::metadata(dir.path.join("big")).map(|m| m.len()).unwrap_or(0);
         assert!(size <= 64 * 1024 * 1024, "wrote {size} bytes");
         drop(r);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn input_reaches_the_child_without_deadlock() {
+        // Larger than any pipe buffer, echoed back while still being written.
+        let input = "line of code\n".repeat(50_000);
+        let r = run_with_input(&mut Command::new("cat"), &input, Duration::from_secs(30)).unwrap();
+        assert!(r.success(), "{r:?}");
+        assert_eq!(r.stdout, input);
     }
 }

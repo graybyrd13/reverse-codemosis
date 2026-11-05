@@ -249,6 +249,13 @@
               "type": "null"
             }
           ]
+        },
+        "formatted": {
+          "description": "Files the project's formatter laid out after the rule's edits.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FormatRecord"
+          }
         }
       },
       "required": [
@@ -337,6 +344,32 @@
         "passed_before",
         "passed_after",
         "failed_after"
+      ]
+    },
+    "FormatRecord": {
+      "description": "A file a formatter laid out after a rule corrected it.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "formatter": {
+          "type": "string"
+        },
+        "version": {
+          "description": "The formatter's version line, e.g. `rustfmt 1.9.0-stable (...)`.",
+          "type": "string"
+        },
+        "corrected_sha256": {
+          "description": "SHA-256 of the file as the rule's edits left it, before formatting.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "formatter",
+        "version",
+        "corrected_sha256"
       ]
     }
   },

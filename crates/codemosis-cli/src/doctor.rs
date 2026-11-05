@@ -236,6 +236,48 @@ pub fn run(root: &Path, s: Style) -> bool {
                     ),
                 );
             }
+            let section = cfg.as_ref().map(|c| c.format.clone()).unwrap_or_default();
+            let formatters = codemosis_engine::formatter::Formatters::new(root, &section, false);
+            let survey = formatters.survey(p.files.iter().filter_map(|f| Some((f.path.as_path(), f.lang?.id()))));
+            if section.mode == codemosis_engine::formatter::Mode::Off {
+                r.add(
+                    Mark::Info,
+                    "formatting",
+                    "[format] mode = \"off\": corrections are not held to a formatter",
+                );
+            }
+            for (g, n) in survey
+                .iter()
+                .filter(|_| section.mode != codemosis_engine::formatter::Mode::Off)
+            {
+                let what = format!("formatter {}", g.kind);
+                match formatters.tool(g.kind) {
+                    Ok(t) => r.add(
+                        Mark::Ok,
+                        what,
+                        format!(
+                            "{} ({}) governs {n} file(s); corrections keep formatted files formatted ({})",
+                            t.version,
+                            g.evidence,
+                            match section.mode {
+                                codemosis_engine::formatter::Mode::Reformat => "reformat",
+                                _ => "refuse",
+                            }
+                        ),
+                    ),
+                    Err(why) if g.kind.runs_project_code() => {
+                        r.add(Mark::Info, what, format!("{} governs {n} file(s); {why}", g.evidence))
+                    }
+                    Err(why) => r.add(
+                        Mark::Warn,
+                        what,
+                        format!(
+                            "{} governs {n} file(s), but {why}; formatting is not checked",
+                            g.evidence
+                        ),
+                    ),
+                }
+            }
             let damaged = codemosis_engine::ci::parse_hazards(&p);
             if !damaged.is_empty() {
                 r.add(

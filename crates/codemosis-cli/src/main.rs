@@ -984,12 +984,20 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
     let policy = ws.policy.clone();
     let answers_ledger = ws.answers.clone();
     let answers = |id: &str| answers_ledger.get(id);
+    // Formatters that can run the project's own code wait for the same
+    // consent as its build and tests.
+    let formatters = codemosis_engine::formatter::Formatters::new(
+        root,
+        &ws.config.format,
+        oracle.as_ref().is_some_and(|o| o.is_configured()),
+    );
     let session = Session {
         project: &mut ws.project,
         rules,
         answers: &answers,
         oracle: oracle.as_ref(),
         policy: Some(&policy),
+        formatters: Some(&formatters),
         options: Options {
             write: !dry_run,
             max_steps,
@@ -1509,7 +1517,10 @@ fn proof_verify(certificate: &Path, path: &Path, s: Style) -> Result<ExitCode> {
         cert.engine.version,
         cert.created
     );
-    let v = verify(&cert, &root, &mut project, &packs);
+    // Verifying runs none of the project's code: formatters that could are
+    // not replayed, and their layout must then be whitespace only.
+    let formatters = codemosis_engine::formatter::Formatters::new(&root, &cfg.format, false);
+    let v = verify(&cert, &root, &mut project, &packs, Some(&formatters));
     for (name, r) in &v.checks {
         match r {
             Ok(()) => println!("  {} {name}", s.green("✓")),

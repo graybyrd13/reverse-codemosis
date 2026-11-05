@@ -31,6 +31,13 @@ follows [Semantic Versioning](https://semver.org/) as described in
 
 - Field test on 20 open-source repositories (docs/FIELD_TEST.md,
   scripts/field-test.sh).
+- The formatting contract: a file kept formatted by rustfmt, gofmt, Black,
+  Ruff, Prettier or clang-format stays formatted. `[format] mode` refuses
+  the step (default) or lets the formatter lay out the corrected lines,
+  only next to the correction. Certificates record the layout, and
+  `proof verify` replays it with the same formatter version or accepts it
+  only if it changes whitespace alone. `doctor` and `map` show the
+  formatters and why.
 - Suppressions written for other tools are honoured through rules'
   `equivalents` (flake8/ruff, mypy, pyright, pylint, eslint, clang-tidy,
   golangci-lint, ShellCheck, clippy).

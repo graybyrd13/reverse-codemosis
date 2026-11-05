@@ -7,14 +7,18 @@
 //! 1. every finding it targets is gone afterwards;
 //! 2. it introduces no finding of a more serious category;
 //! 3. every file it touches still parses, with no new syntax errors;
-//! 4. the build does not regress;
-//! 5. no test that passed before stops passing.
+//! 4. every file it touches that the project's formatter left unchanged is
+//!    still left unchanged by it (or, with `[format] mode = "reformat"`, is
+//!    laid out by it, next to the correction only);
+//! 5. the build does not regress;
+//! 6. no test that passed before stops passing.
 //!
 //! A step that fails is rolled back. If it held several corrections, half of
 //! them are tried alone and the rest come back in later rounds, so a single
 //! bad correction is isolated and rejected with its evidence while the good
 //! ones are kept. The most serious categories are always closed first.
 
+use crate::formatter::{self, Check, Formatters, Mode};
 use crate::oracle::{regressions, Oracle, OracleRun};
 use codemosis_core::rule::scan;
 use codemosis_core::{edit, Category, CompiledRule, Distance, Edit, Finding, Project, Scan, Semantics};
@@ -59,10 +63,20 @@ pub struct Step {
     pub files: Vec<String>,
     pub diff: String,
     pub oracle: Option<StepOracle>,
+    /// Files the project's formatter laid out after the correction.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub formatted: Vec<FormattedFile>,
     /// Each touched file before and after the step, exactly (unredacted),
     /// for proof certificates.
     #[serde(skip)]
     pub changes: Vec<FileChange>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct FormattedFile {
+    pub path: String,
+    pub formatter: String,
+    pub version: String,
 }
 
 #[derive(Clone, Debug)]
@@ -70,6 +84,9 @@ pub struct FileChange {
     pub path: String,
     pub before: String,
     pub after: String,
+    /// When the formatter laid the file out: which one, and the text the
+    /// rule's edits produced before it did.
+    pub formatted: Option<(FormattedFile, String)>,
 }
 
 /// A correction that failed the acceptance contract, with the evidence.
@@ -96,6 +113,9 @@ pub struct Report {
     pub diff: String,
     pub files_changed: Vec<String>,
     pub step_limit_reached: bool,
+    /// How the project's formatters held the corrections.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub formatting: Vec<formatter::Usage>,
 }
 
 pub enum Event<'e> {
@@ -111,6 +131,8 @@ pub struct Session<'s> {
     pub oracle: Option<&'s Oracle>,
     /// The project's policy: its `[[suppress]]` entries apply to every scan.
     pub policy: Option<&'s crate::policy::Policy>,
+    /// The project's formatters: a formatted file must stay formatted.
+    pub formatters: Option<&'s Formatters>,
     pub options: Options,
 }
 
@@ -299,6 +321,7 @@ impl Session<'_> {
             diff,
             files_changed,
             step_limit_reached,
+            formatting: self.formatters.map(|f| f.usage()).unwrap_or_default(),
         })
     }
 
@@ -419,6 +442,62 @@ impl Session<'_> {
             return Ok(Err(reasons));
         }
 
+        // Formatting contract: a formatted file stays formatted.
+        let mut formatted: BTreeMap<usize, (FormattedFile, String)> = BTreeMap::new();
+        if let Some(fmt) = self.formatters {
+            for (idx, old_text) in &snapshot {
+                let f = &self.project.files[*idx];
+                let Some(lang) = f.lang else { continue };
+                let path = f.display_path();
+                match fmt.check(&f.path, lang.id(), old_text, &f.text) {
+                    Check::Skip | Check::Clean => {}
+                    Check::Rejected { kind, error } => reasons.push(format!(
+                        "{path}: {kind} formats the file before the correction and rejects it after:\n{error}"
+                    )),
+                    Check::Unformatted {
+                        kind,
+                        version,
+                        formatted: laid_out,
+                        line,
+                    } => {
+                        if fmt.mode() != Mode::Reformat {
+                            reasons.push(format!(
+                                "{path} is kept formatted with {kind}, and after the correction {kind} would rewrite line {line}; \
+                                 set `[format] mode = \"reformat\"` to let {kind} lay it out"
+                            ));
+                        } else if let Some(stray) = formatter::stray_reformatting(old_text, &f.text, &laid_out) {
+                            reasons.push(format!(
+                                "{path}: {kind} would also rewrite line {stray}, away from the correction; \
+                                 refused rather than change lines the rule did not touch"
+                            ));
+                        } else {
+                            let corrected = f.text.clone();
+                            self.project.set_text(*idx, laid_out);
+                            if self.project.files[*idx].syntax_errors() > errors_before[idx] {
+                                reasons.push(format!("{path}: the code {kind} produced does not parse here"));
+                            }
+                            formatted.insert(
+                                *idx,
+                                (
+                                    FormattedFile {
+                                        path,
+                                        formatter: kind.name().to_string(),
+                                        version,
+                                    },
+                                    corrected,
+                                ),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+        if !reasons.is_empty() {
+            codemosis_core::debug!("step: refused by the formatting contract: {}", reasons.join("; "));
+            self.restore(&snapshot)?;
+            return Ok(Err(reasons));
+        }
+
         // Structural contract: targets gone, nothing more serious introduced.
         let after = self.scan(Some(&touched), st);
         let touched_paths: BTreeSet<_> = touched.iter().map(|i| self.project.files[*i].path.clone()).collect();
@@ -496,6 +575,7 @@ impl Session<'_> {
                 path: f.display_path(),
                 before: old.clone(),
                 after: f.text.clone(),
+                formatted: formatted.get(idx).cloned(),
             });
         }
         let first = &batch[0];
@@ -509,6 +589,7 @@ impl Session<'_> {
             files,
             diff,
             oracle: step_oracle,
+            formatted: formatted.into_values().map(|(f, _)| f).collect(),
             changes,
         }))
     }

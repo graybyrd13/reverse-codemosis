@@ -205,6 +205,28 @@ pub fn render(ws: &Workspace, root: &str, s: Style) -> String {
     if let Some(t) = &section.test {
         let _ = writeln!(out, "    test      {t}");
     }
+    // Formatters, from configuration files only (nothing is run).
+    let formatters = codemosis_engine::formatter::Formatters::new(&ws.root, &ws.config.format, false);
+    let survey = formatters.survey(
+        project
+            .files
+            .iter()
+            .filter_map(|f| Some((f.path.as_path(), f.lang?.id()))),
+    );
+    if !survey.is_empty() && ws.config.format.mode != codemosis_engine::formatter::Mode::Off {
+        let list: Vec<String> = survey
+            .iter()
+            .map(|(g, n)| {
+                format!(
+                    "{} ({}, {n} file{})",
+                    g.kind,
+                    g.evidence,
+                    if *n == 1 { "" } else { "s" }
+                )
+            })
+            .collect();
+        let _ = writeln!(out, "  formatting  {}", list.join(" · "));
+    }
 
     // Definitions in deep files.
     let mut defs: BTreeMap<&'static str, BTreeMap<&'static str, usize>> = BTreeMap::new();

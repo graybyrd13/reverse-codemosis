@@ -29,6 +29,10 @@
 //! rule = "python-core/bare-except"
 //! paths = ["legacy/**"]
 //! reason = "legacy worker, replaced in Q1"
+//!
+//! [format]                  # see `formatter.rs`
+//! mode = "refuse"           # or "reformat", or "off"
+//! disable = ["prettier"]
 //! ```
 
 use codemosis_core::pack::{self, Pack, PackError, PackSource};
@@ -50,6 +54,7 @@ pub struct Config {
     pub policy: crate::policy::PolicySection,
     pub severity: BTreeMap<String, String>,
     pub suppress: Vec<crate::policy::SuppressEntry>,
+    pub format: crate::formatter::FormatSection,
 }
 
 #[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
@@ -102,6 +107,17 @@ impl Config {
         }
         let text = std::fs::read_to_string(&path).map_err(|e| ConfigError::Read(path.clone(), e))?;
         let cfg: Config = toml::from_str(&text).map_err(|e| ConfigError::Parse(path.clone(), e.to_string()))?;
+        let unknown = cfg.format.unknown_names();
+        if !unknown.is_empty() {
+            return Err(ConfigError::Parse(
+                path,
+                format!(
+                    "[format] disable: {} is not a formatter; known: {}",
+                    unknown.join(", "),
+                    crate::formatter::Kind::ALL.map(|k| k.name()).join(", ")
+                ),
+            ));
+        }
         Ok((cfg, Some(path)))
     }
 

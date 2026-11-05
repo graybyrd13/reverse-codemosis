@@ -9,6 +9,7 @@ pub mod answers;
 pub mod audit;
 pub mod ci;
 pub mod config;
+pub mod formatter;
 pub mod fsguard;
 pub mod lock;
 pub mod oracle;

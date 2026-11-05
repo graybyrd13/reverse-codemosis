@@ -118,8 +118,12 @@ a person would write, which the roadmap addresses:
 - The ripgrep `assert!` is 81 characters wide; ripgrep's `rustfmt.toml`
   allows 79. The file passed `rustfmt --check` before the correction and
   fails after it, so the correction would fail ripgrep's CI formatting check.
-  **Corrections are not yet checked against the project's formatter**; this
-  is the first item of the roadmap.
+  **Fixed since:** corrections are now held to the project's formatter. By
+  default this step is refused ("crates/ignore/src/dir.rs is kept formatted
+  with rustfmt, and after the correction rustfmt would rewrite line 208");
+  with `[format] mode = "reformat"` rustfmt lays the `assert!` out over four
+  lines, `rustfmt --check` passes, and `proof verify` replays the layout
+  with rustfmt (or, without it, confirms it changes whitespace only).
 
 `fix --no-verify` applied all of them on the eight repositories (Django: 53
 files, 175 lines removed). Every proof certificate verified, and every

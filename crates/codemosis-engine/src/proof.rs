@@ -139,6 +139,20 @@ pub struct StepRecord {
     pub files: Vec<FileRecord>,
     pub patch: String,
     pub oracle: Option<StepOracleRecord>,
+    /// Files the project's formatter laid out after the rule's edits.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub formatted: Vec<FormatRecord>,
+}
+
+/// A file a formatter laid out after a rule corrected it.
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
+pub struct FormatRecord {
+    pub path: String,
+    pub formatter: String,
+    /// The formatter's version line, e.g. `rustfmt 1.9.0-stable (...)`.
+    pub version: String,
+    /// SHA-256 of the file as the rule's edits left it, before formatting.
+    pub corrected_sha256: String,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, schemars::JsonSchema)]
@@ -196,7 +210,16 @@ impl Certificate {
             used_packs.insert(pack_id.to_string());
             let mut files = Vec::new();
             let mut step_patch = String::new();
+            let mut formatted = Vec::new();
             for c in &st.changes {
+                if let Some((f, corrected)) = &c.formatted {
+                    formatted.push(FormatRecord {
+                        path: c.path.clone(),
+                        formatter: f.formatter.clone(),
+                        version: f.version.clone(),
+                        corrected_sha256: sha256(corrected),
+                    });
+                }
                 first_before.entry(c.path.clone()).or_insert_with(|| c.before.clone());
                 last_after.insert(c.path.clone(), c.after.clone());
                 files.push(FileRecord {
@@ -247,6 +270,7 @@ impl Certificate {
                 files,
                 patch: step_patch,
                 oracle: st.oracle.as_ref().map(StepOracleRecord::from),
+                formatted,
             });
         }
         let mut files = Vec::new();
@@ -346,9 +370,71 @@ impl Verification {
     }
 }
 
+/// Check the formatting of one file in one step: the step's own patch gives
+/// the text the formatter produced, and that text must be what the same
+/// formatter makes of the rule's output, or (when that formatter is not
+/// available here) differ from it in layout only.
+fn replay_formatting(
+    st: &StepRecord,
+    rec: &FileRecord,
+    fr: &FormatRecord,
+    before: &str,
+    corrected: &str,
+    lang: Option<&'static dyn codemosis_core::lang::Language>,
+    formatters: Option<&crate::formatter::Formatters>,
+) -> Result<(String, String), String> {
+    let laid_out = patch::parse(&st.patch)?
+        .iter()
+        .find(|p| p.path == rec.path)
+        .ok_or_else(|| format!("{}: the step's patch does not cover this file", rec.path))
+        .and_then(|p| patch::apply(before, p))?;
+    if sha256(&laid_out) != rec.after_sha256 {
+        return Err(format!(
+            "{}: the step's patch does not give the recorded result",
+            rec.path
+        ));
+    }
+    let kind = crate::formatter::Kind::parse(&fr.formatter);
+    if let (Some(kind), Some(fmt)) = (kind, formatters) {
+        if fmt.tool(kind).is_ok_and(|t| t.version == fr.version) {
+            return match fmt.format(kind, Path::new(&rec.path), corrected) {
+                Ok(out) if out == laid_out => {
+                    Ok((laid_out, format!("{} laid out {} identically", fr.version, rec.path)))
+                }
+                Ok(_) => Err(format!(
+                    "{}: {} lays the corrected code out differently",
+                    rec.path, fr.version
+                )),
+                Err(e) => Err(format!(
+                    "{}: {} could not format the corrected code: {e}",
+                    rec.path, fr.version
+                )),
+            };
+        }
+    }
+    if lang.is_some_and(|l| codemosis_core::project::same_syntax(l, corrected, &laid_out)) {
+        return Ok((
+            laid_out,
+            format!("{}'s layout of {} changes whitespace only", fr.formatter, rec.path),
+        ));
+    }
+    Err(format!(
+        "{}: {}'s layout changes more than whitespace, so it can be replayed only with {}, which is not available here",
+        rec.path, fr.formatter, fr.version
+    ))
+}
+
 /// Verify a certificate against the project at `root` (whose files must be
-/// as the certificate left them) and the packs available now.
-pub fn verify(cert: &Certificate, root: &Path, project: &mut Project, packs: &[Pack]) -> Verification {
+/// as the certificate left them) and the packs available now. Formatting
+/// recorded in a step is replayed with `formatters` when the same version is
+/// installed.
+pub fn verify(
+    cert: &Certificate,
+    root: &Path,
+    project: &mut Project,
+    packs: &[Pack],
+    formatters: Option<&crate::formatter::Formatters>,
+) -> Verification {
     let mut v = Verification::default();
     let digest = cert.compute_digest();
     if !v.push(
@@ -461,6 +547,7 @@ pub fn verify(cert: &Certificate, root: &Path, project: &mut Project, packs: &[P
             return v;
         }
         let mut problems = Vec::new();
+        let mut notes = Vec::new();
         for rec in &st.files {
             let Some(idx) = project.index_of(Path::new(&rec.path)) else {
                 problems.push(format!("{} is not in the project", rec.path));
@@ -472,13 +559,24 @@ pub fn verify(cert: &Certificate, root: &Path, project: &mut Project, packs: &[P
                 continue;
             }
             let edits = per_file.remove(&rec.path).unwrap_or_default();
-            match edit::apply(&old, &edits) {
-                Ok(new) if sha256(&new) == rec.after_sha256 => project.set_text(idx, new),
-                Ok(_) => problems.push(format!(
+            let format_rec = st.formatted.iter().find(|f| f.path == rec.path);
+            match (edit::apply(&old, &edits), format_rec) {
+                (Ok(new), None) if sha256(&new) == rec.after_sha256 => project.set_text(idx, new),
+                (Ok(new), Some(fr)) if sha256(&new) == fr.corrected_sha256 => {
+                    let lang = project.files[idx].lang;
+                    match replay_formatting(st, rec, fr, &old, &new, lang, formatters) {
+                        Ok((laid_out, note)) => {
+                            project.set_text(idx, laid_out);
+                            notes.push(note);
+                        }
+                        Err(e) => problems.push(e),
+                    }
+                }
+                (Ok(_), _) => problems.push(format!(
                     "{}: the replayed correction differs from the recorded one",
                     rec.path
                 )),
-                Err(e) => problems.push(format!("{}: {e}", rec.path)),
+                (Err(e), _) => problems.push(format!("{}: {e}", rec.path)),
             }
         }
         if !problems.is_empty() || !per_file.is_empty() {
@@ -486,7 +584,11 @@ pub fn verify(cert: &Certificate, root: &Path, project: &mut Project, packs: &[P
             v.push(name, Err(problems.join("; ")));
             return v;
         }
-        v.push(name, Ok(()));
+        if notes.is_empty() {
+            v.push(name, Ok(()));
+        } else {
+            v.push(format!("{name}; {}", notes.join("; ")), Ok(()));
+        }
     }
     v
 }
