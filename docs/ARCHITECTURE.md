@@ -14,7 +14,7 @@
  │ formatter  rustfmt, gofmt, Black... │   │                                       │
  │ testparse  per-test results         │   │ expr/eval the fact language           │
  │ policy     suppress, severity, gate │   │ template  rewrite templates           │
- │ ci         SARIF, GitLab, GitHub    │   │ lang      17 grammars, bindings       │
+ │ ci         SARIF, GitLab, GitHub    │   │ lang      30 grammars, bindings       │
  │ proof      certificates + replay    │   │ linguist  845 languages, detection    │
  │ patch      exact unified diffs      │   │ lex       code/comment/string         │
  │ lock       pinned packs             │   │ guards    unverifiable regions        │
@@ -45,7 +45,7 @@ changing anything on disk.
   (`Certain`, `Heuristic`, `Guess`) and a role (`Source`, `Generated`,
   `Vendored`, `Documentation`); rules never run on a guess and never edit
   generated or vendored files.
-- **`lex`**: comment and string syntax for 343 languages, grouped into
+- **`lex`**: comment and string syntax for 343 languages (330 of them in the lexical tier), grouped into
   families keyed by Linguist's `ace_mode`, `codemirror_mode` and `tm_scope`.
   `segments()` splits a file into code, comment and string; text rules use
   it to know where a match starts.
@@ -57,8 +57,8 @@ changing anything on disk.
 
   | Tier | Languages | What the engine understands |
   |---|---|---|
-  | deep | 17 | the syntax tree: shapes, scopes, definitions, every fact |
-  | lexical | 343 | where code, comments and strings are; text rules |
+  | deep | 30 | the syntax tree: shapes, scopes, definitions, every fact |
+  | lexical | 330 | where code, comments and strings are; text rules |
   | recognized | 485 | the language and role; language-independent text rules |
 - **`pack`**: reading and validating packs. Built-in packs in `/packs` are
   embedded into the binary by `build.rs`. Compilation collects every problem

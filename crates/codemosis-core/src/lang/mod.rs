@@ -96,6 +96,16 @@ pub trait Language: Send + Sync + 'static {
         None
     }
 
+    /// What kind of definition a node is, for `codemosis map`: by default
+    /// its node kind, when it is a definition.
+    fn definition_label(&self, node: &Node, text: &str) -> Option<String> {
+        self.definition_name(node, text)?;
+        self.definition_kinds()
+            .iter()
+            .find(|(k, _)| *k == node.kind())
+            .map(|(k, _)| k.to_string())
+    }
+
     fn facts(&self) -> &'static [FactDoc] {
         &[]
     }
@@ -205,6 +215,22 @@ pub const STRING_KINDS: &[&str] = &[
     "regex",
     "system_lib_string",
     "concatenated_string",
+    // HCL, Nix, Elm, Elixir, OCaml, Solidity, PowerShell, Julia.
+    "string_lit",
+    "heredoc_template",
+    "string_expression",
+    "indented_string_expression",
+    "string_constant_expr",
+    "char_constant_expr",
+    "charlist",
+    "sigil",
+    "quoted_string",
+    "hex_string_literal",
+    "unicode_string_literal",
+    "expandable_string_literal",
+    "verbatim_string_characters",
+    "prefixed_string_literal",
+    "command_literal",
 ];
 
 static PYTHON: python::Python = python::Python;
@@ -279,6 +305,19 @@ pub fn grammar_crate(id: &str) -> &'static str {
         "scala" => "tree-sitter-scala",
         "lua" => "tree-sitter-lua",
         "swift" => "tree-sitter-swift",
+        "elixir" => "tree-sitter-elixir",
+        "haskell" => "tree-sitter-haskell",
+        "ocaml" => "tree-sitter-ocaml",
+        "zig" => "tree-sitter-zig",
+        "dart" => "tree-sitter-dart",
+        "r" => "tree-sitter-r",
+        "julia" => "tree-sitter-julia",
+        "erlang" => "tree-sitter-erlang",
+        "hcl" => "tree-sitter-hcl",
+        "powershell" => "tree-sitter-powershell",
+        "nix" => "tree-sitter-nix",
+        "elm" => "tree-sitter-elm",
+        "solidity" => "tree-sitter-solidity",
         _ => "",
     }
 }

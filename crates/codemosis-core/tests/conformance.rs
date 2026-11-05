@@ -81,10 +81,12 @@ fn every_grammar_conforms() {
             fail("the invalid file reports no damaged region".into());
         }
 
-        let ex = SourceFile::new(l.example_file(), String::new());
+        // Pack examples force their language, so an extension shared with
+        // another language is fine, as long as the code decides it.
+        let ex = SourceFile::new(l.example_file(), valid.text.clone());
         if ex.lang.map(|g| g.id()) != Some(id) {
             fail(format!(
-                "the example file name {} is not detected as {id}",
+                "the example file name {} is not detected as {id}, even holding {id} code",
                 l.example_file()
             ));
         }

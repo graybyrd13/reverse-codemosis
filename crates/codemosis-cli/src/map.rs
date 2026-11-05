@@ -244,7 +244,7 @@ pub fn render(ws: &Workspace, root: &str, s: Style) -> String {
     }
 
     // Definitions in deep files.
-    let mut defs: BTreeMap<&'static str, BTreeMap<&'static str, usize>> = BTreeMap::new();
+    let mut defs: BTreeMap<&'static str, BTreeMap<String, usize>> = BTreeMap::new();
     for f in &project.files {
         let (Some(l), Some(root)) = (f.lang, f.root()) else {
             continue;
@@ -252,11 +252,10 @@ pub fn render(ws: &Workspace, root: &str, s: Style) -> String {
         if !f.role.is_source() {
             continue;
         }
-        let kinds = l.definition_kinds();
         let mut stack = vec![root];
         let mut cursor = root.walk();
         while let Some(n) = stack.pop() {
-            if let Some((k, _)) = kinds.iter().find(|(k, _)| *k == n.kind()) {
+            if let Some(k) = l.definition_label(&n, &f.text) {
                 *defs.entry(f.language_name()).or_default().entry(k).or_insert(0) += 1;
             }
             stack.extend(n.children(&mut cursor));

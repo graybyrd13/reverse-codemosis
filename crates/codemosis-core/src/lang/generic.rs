@@ -106,7 +106,10 @@ pub struct TreeSitterLanguage {
     pub linguist: &'static [&'static str],
     pub grammar: fn() -> tree_sitter::Language,
     pub example_file: &'static str,
-    /// (node kind, field holding the name) of definitions.
+    /// (node kind, field holding the name) of definitions. A field of `*`
+    /// takes the first name inside the node, for grammars without a name
+    /// field. A kind `call@def|defp` is a `call` whose `target` is one of
+    /// those words (Elixir's `def greet(name)`), named by the field.
     pub definitions: &'static [(&'static str, &'static str)],
     /// (node kind, field holding the declared names, or "*" for the whole node).
     pub declarations: &'static [(&'static str, &'static str)],
@@ -120,7 +123,14 @@ const FACTS: &[FactDoc] = &[FactDoc {
 }];
 
 fn first_identifier<'a>(node: Node<'a>, text: &'a str) -> Option<&'a str> {
-    if node.kind().contains("identifier") || node.kind() == "name" || node.kind() == "constant" {
+    let k = node.kind();
+    if k.contains("identifier")
+        || k == "name"
+        || k == "constant"
+        || k == "function_name"
+        || k == "value_name"
+        || k == "alias"
+    {
         return Some(&text[node.byte_range()]);
     }
     let mut cursor = node.walk();
@@ -173,6 +183,29 @@ fn declared(lang: &TreeSitterLanguage, file: &SourceFile) -> BTreeSet<String> {
 
 struct Declared(BTreeSet<String>);
 
+impl TreeSitterLanguage {
+    /// The definition entry a node matches: (label, field).
+    fn definition_entry<'s>(&self, node: &Node, text: &'s str) -> Option<(&'s str, &'static str)>
+    where
+        'static: 's,
+    {
+        for (kind, field) in self.definitions {
+            match kind.split_once('@') {
+                None if *kind == node.kind() => return Some((kind, field)),
+                Some((k, targets)) if k == node.kind() => {
+                    let target = node.child_by_field_name("target")?;
+                    let word = &text[target.byte_range()];
+                    if targets.split('|').any(|t| t == word) {
+                        return Some((word, field));
+                    }
+                }
+                _ => {}
+            }
+        }
+        None
+    }
+}
+
 impl Language for TreeSitterLanguage {
     fn id(&self) -> &'static str {
         self.id
@@ -199,7 +232,14 @@ impl Language for TreeSitterLanguage {
     }
 
     fn definition_name(&self, node: &Node, text: &str) -> Option<String> {
-        let (_, field) = self.definitions.iter().find(|(k, _)| *k == node.kind())?;
+        let (_, field) = self.definition_entry(node, text)?;
+        if field == "*" {
+            let mut cursor = node.walk();
+            return node
+                .named_children(&mut cursor)
+                .find_map(|c| first_identifier(c, text))
+                .map(String::from);
+        }
         let target = node.child_by_field_name(field)?;
         // A leaf in the name field is the name, whatever the grammar calls
         // it (Bash's `word`, for instance).
@@ -207,6 +247,11 @@ impl Language for TreeSitterLanguage {
             return Some(text[target.byte_range()].to_string());
         }
         first_identifier(target, text).map(|s| s.to_string())
+    }
+
+    fn definition_label(&self, node: &Node, text: &str) -> Option<String> {
+        self.definition_name(node, text)?;
+        self.definition_entry(node, text).map(|(label, _)| label.to_string())
     }
 
     fn facts(&self) -> &'static [FactDoc] {
@@ -634,5 +679,209 @@ pub static LANGUAGES: &[TreeSitterLanguage] = &[
             ("import_declaration", "*"),
         ],
         runner: Some(&SWIFT),
+    },
+    TreeSitterLanguage {
+        id: "elixir",
+        prefix: "ex",
+        linguist: &["Elixir"],
+        grammar: || tree_sitter_elixir::LANGUAGE.into(),
+        example_file: "example.exs",
+        definitions: &[
+            ("call@defmodule|defprotocol|defimpl", "*"),
+            ("call@def|defp|defmacro|defmacrop|defguard|defdelegate", "*"),
+        ],
+        declarations: &[("binary_operator", "left"), ("arguments", "*")],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "haskell",
+        prefix: "hs",
+        linguist: &["Haskell"],
+        grammar: || tree_sitter_haskell::LANGUAGE.into(),
+        example_file: "example.hs",
+        definitions: &[
+            ("function", "name"),
+            ("bind", "name"),
+            ("data_type", "name"),
+            ("class", "name"),
+        ],
+        declarations: &[
+            ("function", "name"),
+            ("bind", "name"),
+            ("patterns", "*"),
+            ("import", "*"),
+            ("signature", "name"),
+        ],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "ocaml",
+        prefix: "ml",
+        linguist: &["OCaml"],
+        grammar: || tree_sitter_ocaml::LANGUAGE_OCAML.into(),
+        example_file: "example.ml",
+        definitions: &[
+            ("let_binding", "pattern"),
+            ("module_binding", "*"),
+            ("type_binding", "*"),
+        ],
+        declarations: &[("let_binding", "pattern"), ("parameter", "*"), ("open_module", "*")],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "zig",
+        prefix: "zig",
+        linguist: &["Zig"],
+        grammar: || tree_sitter_zig::LANGUAGE.into(),
+        example_file: "example.zig",
+        definitions: &[("function_declaration", "name"), ("variable_declaration", "*")],
+        declarations: &[
+            ("function_declaration", "name"),
+            ("variable_declaration", "*"),
+            ("parameter", "*"),
+        ],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "dart",
+        prefix: "dart",
+        linguist: &["Dart"],
+        grammar: || tree_sitter_dart::LANGUAGE.into(),
+        example_file: "example.dart",
+        definitions: &[
+            ("class_definition", "name"),
+            ("function_signature", "name"),
+            ("method_signature", "*"),
+        ],
+        declarations: &[
+            ("class_definition", "name"),
+            ("function_signature", "name"),
+            ("initialized_variable_definition", "name"),
+            ("static_final_declaration", "*"),
+            ("formal_parameter", "*"),
+            ("import_or_export", "*"),
+        ],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "r",
+        prefix: "r",
+        linguist: &["R"],
+        grammar: || tree_sitter_r::LANGUAGE.into(),
+        example_file: "example.R",
+        definitions: &[("binary_operator", "lhs")],
+        declarations: &[
+            ("binary_operator", "lhs"),
+            ("parameter", "name"),
+            ("for_statement", "variable"),
+        ],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "julia",
+        prefix: "jl",
+        linguist: &["Julia"],
+        grammar: || tree_sitter_julia::LANGUAGE.into(),
+        example_file: "example.jl",
+        definitions: &[
+            ("function_definition", "*"),
+            ("macro_definition", "*"),
+            ("struct_definition", "*"),
+            ("module_definition", "*"),
+        ],
+        declarations: &[
+            ("assignment", "*"),
+            ("function_definition", "*"),
+            ("const_statement", "*"),
+            ("using_statement", "*"),
+            ("import_statement", "*"),
+        ],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "erlang",
+        prefix: "erl",
+        linguist: &["Erlang"],
+        grammar: || tree_sitter_erlang::LANGUAGE.into(),
+        example_file: "example.erl",
+        definitions: &[("function_clause", "name")],
+        declarations: &[("function_clause", "name"), ("match_expr", "lhs"), ("expr_args", "*")],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "hcl",
+        prefix: "hcl",
+        linguist: &["HCL"],
+        grammar: || tree_sitter_hcl::LANGUAGE.into(),
+        example_file: "example.tf",
+        definitions: &[("block", "*")],
+        declarations: &[("attribute", "*"), ("block", "*")],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "powershell",
+        prefix: "ps",
+        linguist: &["PowerShell"],
+        grammar: || tree_sitter_powershell::LANGUAGE.into(),
+        example_file: "example.ps1",
+        definitions: &[("function_statement", "*"), ("class_statement", "*")],
+        declarations: &[
+            ("function_statement", "*"),
+            ("assignment_expression", "value"),
+            ("param_block", "*"),
+        ],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "nix",
+        prefix: "nix",
+        linguist: &["Nix"],
+        grammar: || tree_sitter_nix::LANGUAGE.into(),
+        example_file: "example.nix",
+        definitions: &[("binding", "attrpath")],
+        declarations: &[("binding", "attrpath"), ("formal", "name"), ("inherit", "*")],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "elm",
+        prefix: "elm",
+        linguist: &["Elm"],
+        grammar: || tree_sitter_elm::LANGUAGE.into(),
+        example_file: "example.elm",
+        definitions: &[
+            ("value_declaration", "functionDeclarationLeft"),
+            ("type_declaration", "name"),
+            ("type_alias_declaration", "name"),
+        ],
+        declarations: &[
+            ("value_declaration", "functionDeclarationLeft"),
+            ("import_clause", "*"),
+            ("type_declaration", "name"),
+        ],
+        runner: None,
+    },
+    TreeSitterLanguage {
+        id: "solidity",
+        prefix: "sol",
+        linguist: &["Solidity"],
+        grammar: || tree_sitter_solidity::LANGUAGE.into(),
+        example_file: "example.sol",
+        definitions: &[
+            ("contract_declaration", "name"),
+            ("interface_declaration", "name"),
+            ("library_declaration", "name"),
+            ("function_definition", "name"),
+            ("modifier_definition", "name"),
+            ("event_definition", "name"),
+        ],
+        declarations: &[
+            ("state_variable_declaration", "name"),
+            ("variable_declaration", "name"),
+            ("parameter", "name"),
+            ("function_definition", "name"),
+            ("contract_declaration", "name"),
+            ("import_directive", "*"),
+        ],
+        runner: None,
     },
 ];

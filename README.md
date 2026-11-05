@@ -101,10 +101,12 @@ The precise model is in [docs/SEMANTICS.md](docs/SEMANTICS.md).
 
 ## What it covers today
 
-- **Languages**: all 845 languages GitHub knows. 17 are understood deeply
-  (Python, JavaScript, TypeScript, Go, Java, C, C++, C#, Rust, Ruby, PHP,
-  Shell, Kotlin, Scala, Lua, Swift, TSX), 343 lexically (comments and
-  strings), the rest by identity. [Details](docs/LANGUAGES.md).
+- **Languages**: all 845 languages GitHub knows. 30 are understood deeply
+  (Python, JavaScript, TypeScript, TSX, Go, Java, C, C++, C#, Rust, Ruby,
+  PHP, Shell, Kotlin, Scala, Lua, Swift, Elixir, Erlang, Haskell, OCaml,
+  Zig, Dart, R, Julia, Elm, Nix, HCL/Terraform, PowerShell, Solidity), 330
+  lexically (comments and strings), the rest by identity.
+  [Details](docs/LANGUAGES.md).
 - **Rules**: 16 built-in packs with 62 rules: missing imports, identity
   comparisons with literals, `=== NaN`, unreachable code, unused imports,
   vacuous asserts, empty catches, debugging leftovers, fixed waits in 48

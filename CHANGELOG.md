@@ -44,6 +44,11 @@ follows [Semantic Versioning](https://semver.org/) as described in
 - `.github/workflows/field-test.yml`: the ledger on pull requests, and
   `codemosis fix` on cobra, gin and ripgrep with their own tests as the
   oracle, re-checked independently (`scripts/field-test-oracle.sh`).
+- 13 more languages in the deep tier (30 in all): Elixir, Erlang, Haskell,
+  OCaml, Zig, Dart, R, Julia, Elm, Nix, HCL/Terraform, PowerShell and
+  Solidity, each with a conformance corpus. Heuristics for `.ex` (Elixir
+  or Euphoria), `.ml` (OCaml or Standard ML) and `.sol` (Solidity or
+  Gerber); definitions named by `*` or by call targets (Elixir's `def`).
 - Agentic coding tools: `codemosis mcp` (an MCP server with check, fix,
   answer, explain, map, rules and verify_proof), `codemosis hook` (reports
   findings on the lines an agent just changed, with what to do; exit 2 feeds

@@ -15,7 +15,7 @@ reverse-codemosis/
 │   │   ├── src/linguist.rs      the 845 languages and file detection
 │   │   ├── src/lex.rs           code / comment / string for 343 languages
 │   │   ├── src/project.rs       every file of a project, parsed once
-│   │   ├── src/lang/            the 17 grammars: python.rs (+ python_scope.rs),
+│   │   ├── src/lang/            the 30 grammars: python.rs (+ python_scope.rs),
 │   │   │                        rust.rs, generic.rs (a table of 15 more)
 │   │   ├── src/pack.rs          reading and compiling packs
 │   │   ├── src/rule.rs          matching a rule, building its edits, scan()

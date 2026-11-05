@@ -175,17 +175,26 @@ Write-Host "FIXME is only text here"
 /// An explain-only rule on FIXME comments, for a grammar without a richer
 /// template.
 fn comment_rule(language: &str) -> Option<String> {
-    let (kind, marker) = match language {
-        "java" | "kotlin" | "rust" => ("line_comment", "//"),
-        "ruby" | "bash" | "python" => ("comment", "#"),
-        "lua" => ("comment", "--"),
-        "go" | "c" | "cpp" | "csharp" | "php" | "scala" | "swift" | "javascript" | "typescript" | "tsx" => {
-            ("comment", "//")
-        }
+    let (kind, marker, close) = match language {
+        "java" | "kotlin" | "rust" => ("line_comment", "//", ""),
+        "ruby" | "bash" | "python" | "elixir" | "r" | "hcl" | "powershell" | "nix" => ("comment", "#", ""),
+        "julia" => ("line_comment", "#", ""),
+        "lua" | "haskell" => ("comment", "--", ""),
+        "elm" => ("line_comment", "--", ""),
+        "erlang" => ("comment", "%", ""),
+        "ocaml" => ("comment", "(*", " *)"),
+        "go" | "c" | "cpp" | "csharp" | "php" | "scala" | "swift" | "javascript" | "typescript" | "tsx" | "zig"
+        | "dart" | "solidity" => ("comment", "//", ""),
         _ => return None,
     };
     let file = codemosis_core::lang::by_id(language)?.example_file();
     let prelude = if language == "php" { "<?php\n" } else { "" };
+    // tree-sitter-powershell does not parse a file that is only a comment.
+    let trailer = if language == "powershell" {
+        "\nWrite-Output 'ok'"
+    } else {
+        ""
+    };
     let mut rule = String::from(
         r#"id = "fixme-comment"
 title = "FIXME left in a comment"
@@ -202,8 +211,8 @@ corrects code (see docs/TUTORIAL.md).
     rule.push_str(&format!(
         "# Run `codemosis tree {file}` to see the node names of any code to match.\n\
          shape = '(({kind}) @note (#match? @note \"FIXME\"))'\nfocus = \"@note\"\n\n\
-         [[example]]\npath = \"{file}\"\nbefore = '''\n{prelude}{marker} FIXME: handle the empty case\n'''\n\n\
-         [[counterexample]]\npath = \"{file}\"\ncode = '''\n{prelude}{marker} a finished note\n'''\n"
+         [[example]]\npath = \"{file}\"\nbefore = '''\n{prelude}{marker} FIXME: handle the empty case{close}{trailer}\n'''\n\n\
+         [[counterexample]]\npath = \"{file}\"\ncode = '''\n{prelude}{marker} a finished note{close}{trailer}\n'''\n"
     ));
     Some(rule)
 }

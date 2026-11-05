@@ -339,6 +339,47 @@ fn heuristic(ext: &str, candidates: &[&'static LinguistLanguage], text: &str) ->
             }
         }
         "cs" => pick("C#"),
+        "ex" => {
+            if has(
+                text,
+                r"(?m)(^\s*(defmodule|defprotocol|defimpl|defp?|use|alias|import|require)\s|@moduledoc)",
+            ) {
+                pick("Elixir")
+            } else if has(
+                text,
+                r"(?m)^\s*(include\s+std/|procedure\s|end\s+(procedure|function|while|for|if)\b)",
+            ) {
+                pick("Euphoria")
+            } else {
+                None
+            }
+        }
+        "ml" => {
+            // Markers only one of the two has: OCaml's `;;`, `let rec`,
+            // `module` and `match ... with`; Standard ML's `fun`, `val`,
+            // `structure`, `signature` and `datatype` declarations.
+            let sml = has(text, r"(?m)^\s*(fun|val|structure|signature|datatype|functor)\s");
+            let ocaml = has(text, r"(?m)(;;|^\s*(let\s+rec\s|module\s)|\bmatch\b[^\n]*\bwith\b)");
+            if ocaml || (!sml && has(text, r"(?m)^\s*let\s")) {
+                pick("OCaml")
+            } else if sml {
+                pick("Standard ML")
+            } else {
+                None
+            }
+        }
+        "sol" => {
+            if has(
+                text,
+                r"(?m)(^\s*pragma\s+solidity\b|^\s*(abstract\s+)?(contract|library|interface)\s+\w+|SPDX-License-Identifier)",
+            ) {
+                pick("Solidity")
+            } else if has(text, r"(?m)^(G04|%FS|%MO)") {
+                pick("Gerber Image")
+            } else {
+                None
+            }
+        }
         "php" => {
             if has(text, r"<\?hh") {
                 pick("Hack")
@@ -613,6 +654,34 @@ mod tests {
     }
 
     #[test]
+    fn elixir_ocaml_and_solidity_need_evidence() {
+        let name = |p: &str, t: &str| d(p, t).language.map(|l| l.name);
+        assert_eq!(
+            name("lib/greeter.ex", "defmodule Greeter do\n  def hi, do: :ok\nend\n"),
+            Some("Elixir")
+        );
+        assert_eq!(
+            name("lib/app.ex", "include std/io.e\nprocedure hi()\nend procedure\n"),
+            Some("Euphoria")
+        );
+        assert_eq!(d("lib/x.ex", "").confidence, Confidence::Guess);
+        assert_eq!(name("main.ml", "(* hi *)\nlet greet name = name\n"), Some("OCaml"));
+        assert_eq!(
+            name(
+                "main.ml",
+                "(* hi *)\nstructure S = struct\n  fun f x = x\n  val y = 1\nend\n"
+            ),
+            Some("Standard ML")
+        );
+        assert_eq!(name("main.ml", "let rec f x = match x with _ -> 0\n"), Some("OCaml"));
+        assert_eq!(
+            name("Token.sol", "pragma solidity ^0.8.0;\ncontract T {}\n"),
+            Some("Solidity")
+        );
+        assert_eq!(name("board.sol", "G04 layer*\n%FSLAX24Y24*%\n"), Some("Gerber Image"));
+    }
+
+    #[test]
     fn shared_extensions_need_evidence() {
         let h = d("api.h", "#include <vector>\nclass Api {};\n");
         assert_eq!(h.language.unwrap().name, "C++");
@@ -637,18 +706,23 @@ mod tests {
         );
     }
 
+    /// A file name alone decides every deep language through at least one of
+    /// its extensions. Solidity's only extension, `.sol`, is shared with
+    /// Gerber images: there the code decides (see the heuristics test).
     #[test]
-    fn every_grammar_owns_its_primary_extension() {
+    fn every_grammar_owns_an_extension() {
+        const DECIDED_BY_CONTENT: &[&str] = &["Solidity"];
         for lang in crate::lang::all() {
             for name in lang.linguist_names() {
                 let l = by_name(name).unwrap();
-                let ext = l.extensions.first().unwrap();
-                let det = d(&format!("file{ext}"), "");
+                let owned = l.extensions.iter().any(|ext| {
+                    let det = d(&format!("file{ext}"), "");
+                    det.trusted() && det.language.is_some_and(|x| x.name == *name)
+                });
                 assert!(
-                    det.trusted() && det.language.unwrap().name == *name,
-                    "{name}: a file ending in {ext} is detected as {:?} ({:?})",
-                    det.language.map(|l| l.name),
-                    det.confidence
+                    owned || DECIDED_BY_CONTENT.contains(name),
+                    "{name}: no extension of {:?} is detected from the file name alone",
+                    l.extensions
                 );
             }
         }

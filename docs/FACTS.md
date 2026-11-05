@@ -133,4 +133,43 @@ lua facts (lua.*)
 
 swift facts (swift.*)
   swift.defines(name) -> bool                    True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+elixir facts (ex.*)
+  ex.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+haskell facts (hs.*)
+  hs.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+ocaml facts (ml.*)
+  ml.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+zig facts (zig.*)
+  zig.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+dart facts (dart.*)
+  dart.defines(name) -> bool                     True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+r facts (r.*)
+  r.defines(name) -> bool                        True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+julia facts (jl.*)
+  jl.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+erlang facts (erl.*)
+  erl.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+hcl facts (hcl.*)
+  hcl.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+powershell facts (ps.*)
+  ps.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+nix facts (nix.*)
+  nix.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+elm facts (elm.*)
+  elm.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+solidity facts (sol.*)
+  sol.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
 ```
