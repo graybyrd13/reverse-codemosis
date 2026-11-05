@@ -50,3 +50,10 @@ code = '''
 <?php
 echo json_encode(["ok" => true]);
 '''
+
+[[counterexample]]
+name = "a dump that shares its line"
+code = '''
+<?php
+function total($xs) { var_dump($xs); return array_sum($xs); }
+'''

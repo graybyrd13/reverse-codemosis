@@ -22,7 +22,7 @@ reported.
 shape = "(block [(return_statement) (raise_statement) (break_statement) (continue_statement)] @jump)"
 focus = "@dead"
 where = [
-  "exists(@dead)",
+  # occupies_lines() of a missing capture is false: there must be dead code.
   "occupies_lines(@dead)",
   "py.removal_preserves_scope(@dead)",
 ]

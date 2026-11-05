@@ -6,9 +6,9 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`bool-literal-comparison`](#bool-literal-comparison) Comparison with true or false | simplification | corrects (preserved) | 1 ex. · 1 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 2 counter |
-| [`needless-return`](#needless-return) Bare return at the end of a function | simplification | corrects (preserved) | 1 ex. · 1 counter |
+| [`bool-literal-comparison`](#bool-literal-comparison) Comparison with true or false | simplification | corrects (preserved) | 1 ex. · 2 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 5 counter |
+| [`needless-return`](#needless-return) Bare return at the end of a function | simplification | corrects (preserved) | 1 ex. · 3 counter |
 
 ## bool-literal-comparison
 
@@ -70,6 +70,14 @@ package main
 func f(a, b int) bool {
 	return a == b
 }
+```
+
+**Counterexample: two literals: there is no expression to keep** (no finding)
+
+```go
+package main
+
+var always = true == false
 ```
 
 
@@ -150,6 +158,54 @@ func main() {
 }
 ```
 
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```go
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	start := time.Now()
+	fmt.Println("started")
+	time.Sleep(5 * time.Millisecond)
+	fmt.Println("finished", start.Before(time.Now().Add(time.Hour)))
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```go
+package main
+
+import "time"
+
+var start = time.Now()
+
+func flush() {}
+
+func settle() { flush(); time.Sleep(time.Second) }
+```
+
+**Counterexample: a polling interval inside a loop** (no finding)
+
+```go
+package main
+
+import "time"
+
+var start = time.Now()
+
+func poll(ready func() bool) {
+	for !ready() {
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+```
+
 
 ## needless-return
 
@@ -205,6 +261,24 @@ func f(n int) {
 		return
 	}
 	println(n)
+}
+```
+
+**Counterexample: a return that shares its line: deleting the line would delete the call too** (no finding)
+
+```go
+package main
+
+func flush(w func()) { w(); return }
+```
+
+**Counterexample: a return with a value in a function with no results: a compile error the rule must not hide** (no finding)
+
+```go
+package main
+
+func done() {
+	return 1
 }
 ```
 

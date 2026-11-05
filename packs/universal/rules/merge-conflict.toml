@@ -105,3 +105,17 @@ b
 >>>>>>> main
 """
 '''
+
+[[counterexample]]
+name = "conflict markers inside a comment, documenting a merge"
+path = "merge_notes.c"
+code = '''
+/*
+<<<<<<< HEAD
+int x = 1;
+=======
+int x = 2;
+>>>>>>> feature
+*/
+int y = 0;
+'''

@@ -60,3 +60,55 @@ until curl -s localhost:8080 >/dev/null; do
   sleep 1
 done
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.sh"
+code = '''
+echo "starting the server"
+sleep 0.01
+echo "server started"
+'''
+
+[[counterexample]]
+name = "several durations"
+code = '''
+#!/bin/bash
+sleep 1m 30s
+'''
+
+[[counterexample]]
+name = "a wait chained to another command: deleting the line would delete both"
+code = '''
+#!/bin/bash
+sleep 2 && echo done
+'''
+
+[[counterexample]]
+name = "a wait inside a loop"
+code = '''
+#!/bin/bash
+while ! ready; do
+  {
+    echo waiting
+    sleep 1
+  }
+done
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+#!/bin/bash
+echo start; sleep 1
+echo end
+'''
+
+[[counterexample]]
+name = "the only command of a then branch: deleting it would leave the if empty"
+code = '''
+#!/bin/bash
+if [ -n "$SLOW" ]; then
+  sleep 1
+fi
+'''

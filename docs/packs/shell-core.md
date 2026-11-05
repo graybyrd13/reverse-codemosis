@@ -6,7 +6,7 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 7 counter |
 | [`unquoted-rm`](#unquoted-rm) Unquoted variable in rm | hazard | asks, corrects on yes (corrected) | 1 ex. · 1 counter |
 
 ## fixed-wait
@@ -63,6 +63,57 @@ Examples, documentation and benchmarks are left alone (see `file_purpose()`): a 
 until curl -s localhost:8080 >/dev/null; do
   sleep 1
 done
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```bash
+echo "starting the server"
+sleep 0.01
+echo "server started"
+```
+
+**Counterexample: several durations** (no finding)
+
+```bash
+#!/bin/bash
+sleep 1m 30s
+```
+
+**Counterexample: a wait chained to another command: deleting the line would delete both** (no finding)
+
+```bash
+#!/bin/bash
+sleep 2 && echo done
+```
+
+**Counterexample: a wait inside a loop** (no finding)
+
+```bash
+#!/bin/bash
+while ! ready; do
+  {
+    echo waiting
+    sleep 1
+  }
+done
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```bash
+#!/bin/bash
+echo start; sleep 1
+echo end
+```
+
+**Counterexample: the only command of a then branch: deleting it would leave the if empty** (no finding)
+
+```bash
+#!/bin/bash
+if [ -n "$SLOW" ]; then
+  sleep 1
+fi
 ```
 
 

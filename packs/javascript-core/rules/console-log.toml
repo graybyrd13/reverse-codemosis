@@ -84,3 +84,12 @@ path = "scripts/build.mjs"
 code = '''
 console.log("built");
 '''
+
+[[counterexample]]
+name = "the only statement of an if: deleting its line would delete the if"
+code = '''
+export function load(config) {
+  if (config.verbose) console.log("loading", config.name);
+  return config;
+}
+'''

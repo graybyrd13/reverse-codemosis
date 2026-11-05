@@ -50,3 +50,11 @@ code = '''
 def stub():
     pass
 '''
+
+[[counterexample]]
+name = "a pass that shares its line: deleting the line would delete the statement too"
+code = '''
+def reset(state):
+    state.clear(); pass
+    return state
+'''

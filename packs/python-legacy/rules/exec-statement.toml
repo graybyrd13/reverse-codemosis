@@ -29,3 +29,10 @@ output = "42\n"
 code = '''
 exec("print(1)")
 '''
+
+[[counterexample]]
+name = "an exec with a namespace: exec(code) alone would run in the wrong scope"
+code = '''
+namespace = {}
+exec "x = 1" in namespace
+'''

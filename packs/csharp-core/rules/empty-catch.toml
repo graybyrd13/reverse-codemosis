@@ -32,3 +32,18 @@ class Loader {
     }
 }
 '''
+
+[[counterexample]]
+name = "a catch that handles the exception"
+code = '''
+class Loader {
+    void Load() {
+        try {
+            Read();
+        } catch (System.Exception e) {
+            System.Console.Error.WriteLine(e);
+        }
+    }
+    void Read() {}
+}
+'''

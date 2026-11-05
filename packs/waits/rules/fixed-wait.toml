@@ -19,7 +19,9 @@ Examples, documentation and benchmarks are left alone (see `file_purpose()`): a 
 """
 patterns = "wait_patterns"
 focus = "@match"
-where = ["occupies_lines(@match)", "file_purpose() not in ['example', 'docs', 'benchmark']"]
+# Every pattern in wait_patterns matches whole lines (^...$), so the match
+# always occupies its lines; a test in codemosis-core keeps it so.
+where = ["file_purpose() not in ['example', 'docs', 'benchmark']"]
 
 [ask]
 question = "Keep this fixed wait?"
@@ -131,4 +133,20 @@ path = "app.py"
 code = '''
 import time
 time.sleep(5)
+'''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/deploy.ps1"
+code = '''
+Write-Host "Deploying"
+Start-Sleep -Seconds 5
+Write-Host "Done"
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+path = "deploy.ps1"
+code = '''
+Write-Host "deploying"; Start-Sleep -Seconds 5
 '''

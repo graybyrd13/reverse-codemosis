@@ -19,7 +19,7 @@ If the unreachable statements declare anything at all, nothing is reported.
 shape = "(statement_block [(return_statement) (throw_statement) (break_statement) (continue_statement)] @jump)"
 focus = "@dead"
 where = [
-  "exists(@dead)",
+  # occupies_lines() of a missing capture is false: there must be dead code.
   "occupies_lines(@dead)",
   "!contains(@dead, 'function_declaration', 'generator_function_declaration', 'class_declaration', 'variable_declaration', 'lexical_declaration', 'abstract_class_declaration', 'enum_declaration')",
 ]
@@ -78,4 +78,29 @@ function show() {
   let x = 1;
 }
 show();
+'''
+
+[[counterexample]]
+name = "jumps that end their block leave nothing behind them"
+code = '''
+function sign(x) {
+  if (x < 0) {
+    return -1;
+  }
+  for (const y of [x]) {
+    if (y === 0) {
+      break;
+    }
+  }
+  return 1;
+}
+'''
+
+[[counterexample]]
+name = "dead code that shares the jump's line: deleting the line would delete the jump"
+code = '''
+function first(list) {
+  if (list.length) { return list[0]; cleanup(); }
+  return undefined;
+}
 '''

@@ -59,3 +59,19 @@ public class Snippet {
     static boolean isAdmin(String role) { return "admin".equals(role); }
 }
 '''
+
+[[counterexample]]
+name = "two literals: a constant expression, interned, not a reference bug"
+code = '''
+public class Snippet {
+    static final boolean SAME = "a" == "a";
+}
+'''
+
+[[counterexample]]
+name = "null is compared by reference on purpose"
+code = '''
+public class Snippet {
+    static final boolean UNSET = null == "";
+}
+'''

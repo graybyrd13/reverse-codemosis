@@ -6,7 +6,7 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 5 counter |
 
 ## fixed-wait
 
@@ -67,6 +67,42 @@ fun waitReady() {
     while (!ready()) {
         Thread.sleep(100)
     }
+}
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```kotlin
+suspend fun checkout() {
+    charge()
+    delay(2000)
+    confirm()
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```kotlin
+fun settle() { flush(); Thread.sleep(100) }
+fun flush() {}
+```
+
+**Counterexample: a wait whose value is used: deleting the line would delete the declaration** (no finding)
+
+```kotlin
+fun pause() {
+    val unit = Thread.sleep(100)
+    println(unit)
+}
+```
+
+**Counterexample: a wait on its own line as an argument: deleting the line would break the call** (no finding)
+
+```kotlin
+fun pause() {
+    println(
+        Thread.sleep(100)
+    )
 }
 ```
 

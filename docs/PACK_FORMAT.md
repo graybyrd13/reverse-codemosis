@@ -378,7 +378,9 @@ unrunnable. Three commands go further:
   `engine` ranges. `--deny-warnings` makes warnings fail.
 - `codemosis pack test --mutations` removes each `where` fact in turn and
   reruns the proofs. A fact whose removal no check notices is unproven: add
-  the counterexample that needs it, or remove the fact.
+  the counterexample that needs it, or remove the fact (if another fact
+  implies it, say so in a comment). `--max-unproven N` fails when more
+  than N are unproven; CI holds the built-in packs to it.
 - `codemosis pack docs --output DIR` writes a reference page per pack,
   generated from the rules and their proofs (the built-in ones are in
   [docs/packs](packs/README.md)).

@@ -34,3 +34,16 @@ try {
   // invalid input is reported by the caller
 }
 '''
+
+[[counterexample]]
+name = "a catch that handles the error"
+code = '''
+function parse(text) {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("not JSON:", err.message);
+    return null;
+  }
+}
+'''

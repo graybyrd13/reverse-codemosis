@@ -6,8 +6,8 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 1 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
+| [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 2 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 3 counter |
 
 ## empty-catch
 
@@ -47,6 +47,21 @@ class Loader {
     void Load() {
         try { Read(); } catch (Exception) { /* optional */ }
     }
+}
+```
+
+**Counterexample: a catch that handles the exception** (no finding)
+
+```csharp
+class Loader {
+    void Load() {
+        try {
+            Read();
+        } catch (System.Exception e) {
+            System.Console.Error.WriteLine(e);
+        }
+    }
+    void Read() {}
 }
 ```
 
@@ -115,6 +130,28 @@ class Poller {
             await Task.Delay(100);
         }
     }
+}
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```csharp
+class Checkout {
+    async Task Pay() {
+        Charge();
+        await Task.Delay(2000);
+        Confirm();
+    }
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```csharp
+using System.Threading;
+class Worker {
+    void Settle() { Flush(); Thread.Sleep(100); }
+    void Flush() {}
 }
 ```
 

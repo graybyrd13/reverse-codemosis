@@ -13,11 +13,11 @@ soft-space mechanism) are left alone.
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
 | [`diamond-operator`](#diamond-operator) Python 2 <> operator | broken | corrects (repaired) | 1 ex. · 1 counter |
-| [`except-comma`](#except-comma) Python 2 except clause with a comma | broken | corrects (repaired) | 1 ex. · 3 counter |
-| [`exec-statement`](#exec-statement) Python 2 exec statement | broken | corrects (repaired) | 1 ex. · 1 counter |
-| [`print-chevron`](#print-chevron) Python 2 print to a file | broken | corrects (repaired) | 1 ex. · 1 counter |
-| [`print-statement`](#print-statement) Python 2 print statement | broken | corrects (repaired) | 1 ex. · 2 counter |
-| [`renamed-builtin`](#renamed-builtin) Python 2 builtin renamed in Python 3 | broken | corrects (repaired) | 1 ex. · 1 counter |
+| [`except-comma`](#except-comma) Python 2 except clause with a comma | broken | corrects (repaired) | 1 ex. · 4 counter |
+| [`exec-statement`](#exec-statement) Python 2 exec statement | broken | corrects (repaired) | 1 ex. · 2 counter |
+| [`print-chevron`](#print-chevron) Python 2 print to a file | broken | corrects (repaired) | 1 ex. · 3 counter |
+| [`print-statement`](#print-statement) Python 2 print statement | broken | corrects (repaired) | 1 ex. · 3 counter |
+| [`renamed-builtin`](#renamed-builtin) Python 2 builtin renamed in Python 3 | broken | corrects (repaired) | 1 ex. · 3 counter |
 
 ## diamond-operator
 
@@ -125,6 +125,16 @@ except ValueError, ParseError:
     pass
 ```
 
+**Counterexample: exec may read the exception name after the handler** (no finding)
+
+```python
+try:
+    run()
+except ValueError, err:
+    pass
+exec("print(err)")
+```
+
 
 ## exec-statement
 
@@ -162,6 +172,13 @@ operand there and the translation depends on which was meant.
 
 ```python
 exec("print(1)")
+```
+
+**Counterexample: an exec with a namespace: exec(code) alone would run in the wrong scope** (no finding)
+
+```python
+namespace = {}
+exec "x = 1" in namespace
 ```
 
 
@@ -206,6 +223,20 @@ import sys
 print("x", file=sys.stderr)
 ```
 
+**Counterexample: a chevron with nothing to print** (no finding)
+
+```python
+import sys
+print >>sys.stderr
+```
+
+**Counterexample: a trailing comma suppresses the newline** (no finding)
+
+```python
+import sys
+print >>sys.stderr, "progress:",
+```
+
 
 ## print-statement
 
@@ -226,7 +257,6 @@ through Python 2's soft-space mechanism, which has no exact Python 3 form.
 
 **Facts that must hold**
 
-- `exists(@args)`
 - `!contains(@stmt, 'chevron')`
 - `!ends_with(text(@stmt), ',')`
 
@@ -251,6 +281,13 @@ print("hello")
 
 ```python
 print "no newline",
+```
+
+**Counterexample: a chevron is the print-chevron rule's** (no finding)
+
+```python
+import sys
+print >>sys.stderr, "warning"
 ```
 
 
@@ -300,5 +337,22 @@ except NameError:
     xrange = range
 
 print(list(xrange(3)))
+```
+
+**Counterexample: input is redefined here** (no finding)
+
+```python
+def input(prompt=""):
+    return "scripted"
+
+answer = raw_input("name? ")
+```
+
+**Counterexample: a star import may redefine range or input** (no finding)
+
+```python
+from compat import *
+for i in xrange(3):
+    print(i)
 ```
 

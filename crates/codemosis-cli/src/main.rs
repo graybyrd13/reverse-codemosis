@@ -312,6 +312,9 @@ enum PackCommand {
         /// facts no example or counterexample needs.
         #[arg(long)]
         mutations: bool,
+        /// With --mutations: fail (exit 1) if more facts than this are unproven.
+        #[arg(long, value_name = "N", requires = "mutations")]
+        max_unproven: Option<usize>,
     },
     /// Find weaknesses in packs that still load: unused captures and tables,
     /// unproven semantics, thin explanations, missing keep options.
@@ -521,9 +524,10 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
                 rule,
                 verbose,
                 mutations,
+                max_unproven,
             } => {
                 if mutations {
-                    pack_mutations(&dirs, rule.as_deref(), verbose, s)
+                    pack_mutations(&dirs, rule.as_deref(), verbose, max_unproven, s)
                 } else {
                     pack_test(&dirs, !no_run, rule.as_deref(), verbose, s)
                 }
@@ -1447,7 +1451,13 @@ fn pack_lint(dirs: &[PathBuf], deny_warnings: bool, verbose: bool, s: Style) -> 
     })
 }
 
-fn pack_mutations(dirs: &[PathBuf], filter: Option<&str>, verbose: bool, s: Style) -> Result<ExitCode> {
+fn pack_mutations(
+    dirs: &[PathBuf],
+    filter: Option<&str>,
+    verbose: bool,
+    max_unproven: Option<usize>,
+    s: Style,
+) -> Result<ExitCode> {
     let packs = packs_from(dirs)?;
     let (mut total, mut survived) = (0, 0);
     for p in &packs {
@@ -1493,6 +1503,13 @@ fn pack_mutations(dirs: &[PathBuf], filter: Option<&str>, verbose: bool, s: Styl
         total,
         survived
     );
+    if let Some(max) = max_unproven.filter(|m| survived > *m) {
+        println!(
+            "{} {survived} unproven facts, more than the {max} allowed: add the counterexamples above",
+            s.red("error:")
+        );
+        return Ok(ExitCode::from(1));
+    }
     Ok(ExitCode::SUCCESS)
 }
 

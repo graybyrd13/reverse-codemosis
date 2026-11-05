@@ -17,7 +17,7 @@ and delete or rename the other.
 shape = "(dictionary (pair key: (_) @second) @pair)"
 focus = "@second"
 where = [
-  "exists(@first)",
+  # kind() of a missing capture is "", so this also requires an earlier key.
   "kind(@first) in ['string', 'integer', 'float', 'true', 'false', 'none']",
   "!contains(@first, 'interpolation')",
 ]
@@ -49,4 +49,12 @@ name = "computed keys may differ at run time"
 code = '''
 counter = iter(range(10))
 d = {next(counter): "a", next(counter): "b"}
+'''
+
+[[counterexample]]
+name = "f-string keys are evaluated each time and may differ"
+code = '''
+counter = iter(range(10))
+ids = {f"id{next(counter)}": "a", f"id{next(counter)}": "b"}
+print(ids)
 '''

@@ -15,7 +15,7 @@ so nothing is changed.
 shape = "(object (pair key: (_) @second) @pair)"
 focus = "@second"
 where = [
-  "exists(@first)",
+  # kind() of a missing capture is "", so this also requires an earlier key.
   "kind(@first) in ['property_identifier', 'string', 'number']",
 ]
 
@@ -38,4 +38,19 @@ const limits = {
 [[counterexample]]
 code = '''
 const limits = { retries: 3, timeout: 1000 };
+'''
+
+[[counterexample]]
+name = "distinct keys"
+code = '''
+const limits = { min: 1, max: 10, "default": 5 };
+'''
+
+[[counterexample]]
+name = "computed keys are evaluated each time and may differ"
+code = '''
+let n = 0;
+const next = () => `id${n++}`;
+const ids = { [next()]: "a", [next()]: "b" };
+console.log(Object.keys(ids));
 '''

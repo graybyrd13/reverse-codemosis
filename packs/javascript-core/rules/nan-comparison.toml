@@ -72,3 +72,9 @@ code = '''
 const Number = { parse: (s) => +s };
 console.log(Number.parse("1") === NaN);
 '''
+
+[[counterexample]]
+name = "NaN against itself: a demonstration of IEEE 754, not a mistaken check"
+code = '''
+console.log(NaN === NaN);
+'''

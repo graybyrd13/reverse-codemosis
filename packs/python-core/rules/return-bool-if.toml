@@ -31,7 +31,8 @@ shape = '''
 ]
 '''
 focus = "@whole"
-where = ["occupies_lines(@whole)"]
+# No occupies_lines(@whole) fact: an if statement always starts its line and
+# the return must end its block, so the match always spans whole lines.
 
 [fix]
 edits = [{ replace = "@whole", with = "return ${cond|py.as_bool}" }]

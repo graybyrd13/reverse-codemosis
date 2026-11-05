@@ -74,3 +74,26 @@ class Poller {
     }
 }
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.cs"
+code = '''
+class Checkout {
+    async Task Pay() {
+        Charge();
+        await Task.Delay(2000);
+        Confirm();
+    }
+}
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+using System.Threading;
+class Worker {
+    void Settle() { Flush(); Thread.Sleep(100); }
+    void Flush() {}
+}
+'''

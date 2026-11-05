@@ -6,8 +6,8 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`assignment-in-condition`](#assignment-in-condition) Assignment of a constant in a condition | contradiction | asks, corrects on yes (corrected) | 2 ex. · 1 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 2 ex. · 1 counter |
+| [`assignment-in-condition`](#assignment-in-condition) Assignment of a constant in a condition | contradiction | asks, corrects on yes (corrected) | 2 ex. · 5 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 2 ex. · 3 counter |
 
 ## assignment-in-condition
 
@@ -28,9 +28,7 @@ so the engine asks.
 
 **Facts that must hold**
 
-- `exists(@assign)`
-- `kind(@assign) == 'assignment_expression'`
-- `text(field(@assign, 'operator')) == '='`
+- `kind(@assign) == 'assignment_expression' && text(field(@assign, 'operator')) == '='`
 - `kind(field(@assign, 'left')) == 'identifier'`
 - `kind(field(@assign, 'right')) in ['number_literal', 'char_literal', 'true', 'false']`
 
@@ -76,6 +74,43 @@ int main(void) {
     int c;
     if ((c = getchar()) != EOF) putchar(c);
     return 0;
+}
+```
+
+**Counterexample: a comparison** (no finding)
+
+```c
+int is_zero(int x) {
+    if (x == 0) return 1;
+    return 0;
+}
+```
+
+**Counterexample: a compound assignment is not a mistyped comparison** (no finding)
+
+```c
+int next(int x) {
+    if (x += 1) return x;
+    return 0;
+}
+```
+
+**Counterexample: assignment through a pointer is left to a person** (no finding)
+
+```c
+void clear(int *p) {
+    if (*p = 0) return;
+}
+```
+
+**Counterexample: assigning a call's result and testing it is an idiom** (no finding)
+
+```c
+int read_byte(void);
+int first(void) {
+    int b;
+    if (b = read_byte()) return b;
+    return -1;
 }
 ```
 
@@ -154,5 +189,27 @@ void wait_ready(void) {
         usleep(1000);
     }
 }
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```c
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+    puts("start");
+    usleep(1000);
+    puts("done");
+    return 0;
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```c
+#include <unistd.h>
+void flush_all(void);
+void settle(void) { flush_all(); sleep(1); }
 ```
 

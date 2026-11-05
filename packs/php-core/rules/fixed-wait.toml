@@ -56,3 +56,20 @@ while (!file_exists("ready")) {
     usleep(100000);
 }
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.php"
+code = '''
+<?php
+echo "start\n";
+usleep(1000);
+echo "done\n";
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+<?php
+function settle() { flush(); sleep(1); }
+'''

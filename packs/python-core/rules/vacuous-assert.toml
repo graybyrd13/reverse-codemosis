@@ -67,3 +67,17 @@ code = '''
 pair = (1, 2)
 assert (1, 2) == pair
 '''
+
+[[counterexample]]
+name = "an assignment expression cannot stand unparenthesized in an assert"
+code = '''
+def check(load):
+    assert (data := load(), "loaded")
+'''
+
+[[counterexample]]
+name = "nor in its message"
+code = '''
+def check(ready, explain):
+    assert (ready, why := explain())
+'''

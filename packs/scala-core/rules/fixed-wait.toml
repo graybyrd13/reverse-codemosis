@@ -67,3 +67,48 @@ object Poller {
   }
 }
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.scala"
+code = '''
+object Checkout {
+  def pay(): Unit = {
+    charge()
+    Thread.sleep(500)
+    confirm()
+  }
+}
+'''
+
+[[counterexample]]
+name = "a wait whose value is bound: deleting the line would delete the definition"
+code = '''
+object Worker {
+  def pause(): Unit = {
+    val done = Thread.sleep(100)
+    println(done)
+  }
+}
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+object Worker {
+  def flush(): Unit = ()
+  def settle(): Unit = { flush(); Thread.sleep(100) }
+}
+'''
+
+[[counterexample]]
+name = "a wait on its own line as an argument: deleting the line would break the call"
+code = '''
+object Worker {
+  def pause(): Unit = {
+    println(
+      Thread.sleep(100)
+    )
+  }
+}
+'''

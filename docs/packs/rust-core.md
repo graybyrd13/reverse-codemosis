@@ -11,9 +11,9 @@ and `cargo test` configured and no step is kept unless both still pass.
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
-| [`manual-assert`](#manual-assert) if !condition { panic!(..) } | simplification | corrects (preserved) | 1 ex. · 2 counter |
-| [`needless-return`](#needless-return) return as the last statement of a function | simplification | corrects (preserved) | 1 ex. · 2 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 4 counter |
+| [`manual-assert`](#manual-assert) if !condition { panic!(..) } | simplification | corrects (preserved) | 1 ex. · 5 counter |
+| [`needless-return`](#needless-return) return as the last statement of a function | simplification | corrects (preserved) | 1 ex. · 3 counter |
 | [`redundant-field-init`](#redundant-field-init) Redundant field name in struct initializer | simplification | corrects (preserved) | 1 ex. · 1 counter |
 | [`unfinished-stub`](#unfinished-stub) todo!() or unimplemented!() left in code | hazard | explains | 1 ex. · 1 counter |
 | [`unit-return-type`](#unit-return-type) Explicit unit return type | simplification | corrects (preserved) | 1 ex. · 1 counter |
@@ -80,6 +80,33 @@ fn wait(ready: impl Fn() -> bool) {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```rust
+use std::time::Duration;
+
+fn main() {
+    println!("started");
+    std::thread::sleep(Duration::from_millis(5));
+    println!("finished");
+}
+```
+
+**Counterexample: a call through a path that is not a sleep** (no finding)
+
+```rust
+fn release(guard: String) {
+    std::mem::drop(guard);
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```rust
+fn flush() {}
+fn settle() { flush(); std::thread::sleep(std::time::Duration::from_millis(5)); }
 ```
 
 
@@ -152,6 +179,36 @@ fn check(ok: bool) {
 }
 ```
 
+**Counterexample: not a panic: the program goes on** (no finding)
+
+```rust
+fn check(ok: bool) {
+    if !ok {
+        println!("not ok");
+    }
+}
+```
+
+**Counterexample: a bare panic!() has a different message from assert!** (no finding)
+
+```rust
+fn check(ok: bool) {
+    if !ok {
+        panic!();
+    }
+}
+```
+
+**Counterexample: brackets are not an argument list** (no finding)
+
+```rust
+fn check(ok: bool) {
+    if !ok {
+        panic!["bad"];
+    }
+}
+```
+
 
 ## needless-return
 
@@ -214,6 +271,15 @@ fn first_even(v: &[i32]) -> Option<i32> {
 fn one() -> i32 {
     return 1;
     // done
+}
+```
+
+**Counterexample: a value that starts with a block-like expression and continues** (no finding)
+
+```rust
+fn score(x: i32) -> i32 {
+    let base = 10;
+    return match x { 0 => 1, _ => 2 } + base;
 }
 ```
 

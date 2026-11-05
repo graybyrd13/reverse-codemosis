@@ -6,10 +6,10 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`bool-literal-comparison`](#bool-literal-comparison) Comparison with true or false | simplification | corrects (preserved) | 1 ex. · 1 counter |
-| [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 1 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
-| [`string-reference-equality`](#string-reference-equality) String compared with == | contradiction | corrects (corrected) | 1 ex. · 1 counter |
+| [`bool-literal-comparison`](#bool-literal-comparison) Comparison with true or false | simplification | corrects (preserved) | 1 ex. · 2 counter |
+| [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 2 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 4 counter |
+| [`string-reference-equality`](#string-reference-equality) String compared with == | contradiction | corrects (corrected) | 1 ex. · 3 counter |
 
 ## bool-literal-comparison
 
@@ -64,6 +64,14 @@ public class Snippet {
 }
 ```
 
+**Counterexample: two literals: there is no expression to keep** (no finding)
+
+```java
+public class Snippet {
+    static final boolean NEVER = true == false;
+}
+```
+
 
 ## empty-catch
 
@@ -110,6 +118,21 @@ class Loader {
             read();
         } catch (Exception e) {
             // optional file; absence is fine
+        }
+    }
+    void read() throws Exception {}
+}
+```
+
+**Counterexample: a catch that handles the exception** (no finding)
+
+```java
+class Loader {
+    void load() {
+        try {
+            read();
+        } catch (Exception e) {
+            System.err.println("cannot load: " + e);
         }
     }
     void read() throws Exception {}
@@ -187,6 +210,40 @@ public class Snippet {
 }
 ```
 
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```java
+public class Snippet {
+    public static void main(String[] args) throws Exception {
+        System.out.println("start");
+        Thread.sleep(10);
+        System.out.println("done");
+    }
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```java
+class Worker {
+    void settle() throws InterruptedException { flush(); Thread.sleep(100); }
+    void flush() {}
+}
+```
+
+**Counterexample: a polling interval inside a loop** (no finding)
+
+```java
+class Worker {
+    void poll() throws InterruptedException {
+        while (!ready()) {
+            Thread.sleep(10);
+        }
+    }
+    boolean ready() { return true; }
+}
+```
+
 
 ## string-reference-equality
 
@@ -240,6 +297,22 @@ rather than throwing when `s` is null, exactly as `==` was.
 ```java
 public class Snippet {
     static boolean isAdmin(String role) { return "admin".equals(role); }
+}
+```
+
+**Counterexample: two literals: a constant expression, interned, not a reference bug** (no finding)
+
+```java
+public class Snippet {
+    static final boolean SAME = "a" == "a";
+}
+```
+
+**Counterexample: null is compared by reference on purpose** (no finding)
+
+```java
+public class Snippet {
+    static final boolean UNSET = null == "";
 }
 ```
 

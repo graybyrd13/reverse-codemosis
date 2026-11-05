@@ -100,3 +100,28 @@ void wait_ready(void) {
     }
 }
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.c"
+language = "c"
+code = '''
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+    puts("start");
+    usleep(1000);
+    puts("done");
+    return 0;
+}
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+language = "c"
+code = '''
+#include <unistd.h>
+void flush_all(void);
+void settle(void) { flush_all(); sleep(1); }
+'''

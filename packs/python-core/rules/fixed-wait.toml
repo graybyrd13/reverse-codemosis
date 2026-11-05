@@ -137,6 +137,7 @@ import time
 
 def wait_until(ready):
     while not ready():
+        print("waiting")
         time.sleep(0.1)
 '''
 
@@ -178,4 +179,24 @@ import time
 print("step 1")
 time.sleep(1)
 print("step 2")
+'''
+
+[[counterexample]]
+name = "a polling interval inside a loop"
+code = '''
+import time
+
+def wait_for(ready):
+    while not ready():
+        time.sleep(0.1)
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+import time
+
+def settle(slow):
+    if slow: print("slow"); time.sleep(1)
+    return slow
 '''

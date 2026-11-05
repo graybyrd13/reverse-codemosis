@@ -42,3 +42,18 @@ class Loader {
     void read() throws Exception {}
 }
 '''
+
+[[counterexample]]
+name = "a catch that handles the exception"
+code = '''
+class Loader {
+    void load() {
+        try {
+            read();
+        } catch (Exception e) {
+            System.err.println("cannot load: " + e);
+        }
+    }
+    void read() throws Exception {}
+}
+'''

@@ -19,11 +19,12 @@ shape = "(attribute object: (identifier) @name) @_use"
 focus = "@name"
 anchor = ["${name}"]
 where = [
-  "py.is_reference(@name)",
+  # No py.is_reference(@name): the object of an attribute is always read.
   "!py.bound(text(@name))",
-  "!py.builtin(text(@name))",
+  # No builtin is in stdlib_modules (a test in codemosis-core keeps it so).
   "!py.dynamic_names()",
-  "in_table('stdlib_modules', text(@name))",
+  # Membership in stdlib_modules is implied by the next fact: a name not in
+  # the table has no attributes there.
   "subset(py.attributes(text(@name)), table('stdlib_modules', text(@name)))",
   "!py.defined_in_project(text(@name), text(@name))",
 ]

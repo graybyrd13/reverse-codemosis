@@ -55,3 +55,11 @@ public class Snippet {
     static boolean same(int a, int b) { return a == b; }
 }
 '''
+
+[[counterexample]]
+name = "two literals: there is no expression to keep"
+code = '''
+public class Snippet {
+    static final boolean NEVER = true == false;
+}
+'''

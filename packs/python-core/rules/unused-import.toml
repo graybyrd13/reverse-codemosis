@@ -95,3 +95,37 @@ try:
 except ImportError:
     json = None
 '''
+
+[[counterexample]]
+name = "an import inside try is a feature test"
+code = '''
+try:
+    import zlib
+    HAVE_ZLIB = True
+except ImportError:
+    HAVE_ZLIB = False
+'''
+
+[[counterexample]]
+name = "deleting the name needs the import"
+code = '''
+import json
+del json
+'''
+
+[[counterexample]]
+name = "exec may use any name"
+code = '''
+import json
+plugin = open("plugin.py").read()
+exec(plugin)
+'''
+
+[[counterexample]]
+name = "a module that declares its public names is left to a person"
+code = '''
+import json
+__all__ = ["dump"]
+def dump(x):
+    return repr(x)
+'''

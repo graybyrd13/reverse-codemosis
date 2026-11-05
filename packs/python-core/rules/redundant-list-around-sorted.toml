@@ -61,3 +61,10 @@ def list(xs):
 
 print(list(sorted([3, 1])))
 '''
+
+[[counterexample]]
+name = "a star import may redefine list or sorted"
+code = '''
+from compat import *
+names = list(sorted(["b", "a"]))
+'''

@@ -57,3 +57,55 @@ until File.exist?("ready")
   sleep 0.1
 end
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.rb"
+code = '''
+puts "start"
+sleep 0.01
+puts "done"
+'''
+
+[[counterexample]]
+name = "a method named sleep on some other object"
+code = '''
+def idle(machine)
+  machine.sleep(5)
+end
+'''
+
+[[counterexample]]
+name = "a wait whose value is used: deleting the line would delete the assignment"
+code = '''
+def pause
+  slept = sleep(1)
+  puts slept
+end
+'''
+
+[[counterexample]]
+name = "a wait inside a block runs once per iteration"
+code = '''
+def drip
+  3.times do
+    sleep 1
+  end
+end
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+def settle; flush; sleep 1; end
+'''
+
+[[counterexample]]
+name = "a wait on its own line as an argument: deleting the line would break the call"
+code = '''
+def pause
+  puts(
+    sleep(1)
+  )
+end
+'''

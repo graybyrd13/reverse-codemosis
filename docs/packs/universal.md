@@ -10,7 +10,7 @@ comment syntax. They never touch generated or vendored files.
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`merge-conflict`](#merge-conflict) Unresolved merge conflict | broken | asks, then corrects as chosen (repaired) | 2 ex. · 2 counter |
+| [`merge-conflict`](#merge-conflict) Unresolved merge conflict | broken | asks, then corrects as chosen (repaired) | 2 ex. · 3 counter |
 | [`private-key`](#private-key) Private key committed | hazard | explains | 1 ex. · 1 counter |
 
 ## merge-conflict
@@ -96,6 +96,19 @@ a
 b
 >>>>>>> main
 """
+```
+
+**Counterexample: conflict markers inside a comment, documenting a merge** (no finding)
+
+```text
+/*
+<<<<<<< HEAD
+int x = 1;
+=======
+int x = 2;
+>>>>>>> feature
+*/
+int y = 0;
 ```
 
 

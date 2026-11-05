@@ -11,14 +11,14 @@ Every example is executed with Node (TypeScript with type stripping).
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
 | [`assignment-in-condition`](#assignment-in-condition) Assignment of a constant in a condition | contradiction | asks, corrects on yes (corrected) | 1 ex. · 1 counter |
-| [`console-log`](#console-log) console.log left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 4 counter |
-| [`debugger-statement`](#debugger-statement) debugger statement | waste | corrects (preserved) | 1 ex. · 1 counter |
-| [`duplicate-object-key`](#duplicate-object-key) Object key given twice | contradiction | explains | 1 ex. · 1 counter |
-| [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 1 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 2 ex. · 2 counter |
-| [`nan-comparison`](#nan-comparison) Comparison with NaN | contradiction | corrects (corrected) | 1 ex. · 3 counter |
-| [`return-bool-if`](#return-bool-if) if/else that returns true or false | simplification | corrects (preserved) | 1 ex. · 1 counter |
-| [`unreachable-code`](#unreachable-code) Unreachable code | waste | corrects (preserved) | 1 ex. · 2 counter |
+| [`console-log`](#console-log) console.log left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 5 counter |
+| [`debugger-statement`](#debugger-statement) debugger statement | waste | corrects (preserved) | 1 ex. · 2 counter |
+| [`duplicate-object-key`](#duplicate-object-key) Object key given twice | contradiction | explains | 1 ex. · 3 counter |
+| [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 2 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 2 ex. · 4 counter |
+| [`nan-comparison`](#nan-comparison) Comparison with NaN | contradiction | corrects (corrected) | 1 ex. · 4 counter |
+| [`return-bool-if`](#return-bool-if) if/else that returns true or false | simplification | corrects (preserved) | 1 ex. · 3 counter |
+| [`unreachable-code`](#unreachable-code) Unreachable code | waste | corrects (preserved) | 1 ex. · 4 counter |
 
 ## assignment-in-condition
 
@@ -144,6 +144,15 @@ console.log("listening on", port);
 console.log("built");
 ```
 
+**Counterexample: the only statement of an if: deleting its line would delete the if** (no finding)
+
+```javascript
+export function load(config) {
+  if (config.verbose) console.log("loading", config.name);
+  return config;
+}
+```
+
 
 ## debugger-statement
 
@@ -186,6 +195,16 @@ const debuggerEnabled = false;
 console.log(debuggerEnabled);
 ```
 
+**Counterexample: the only statement of an if: deleting its line would drop the condition's side effect** (no finding)
+
+```javascript
+function check(items) {
+  if (validate(items)) debugger;
+  return items;
+}
+function validate(items) { return items.length > 0; }
+```
+
 
 ## duplicate-object-key
 
@@ -205,7 +224,6 @@ so nothing is changed.
 
 **Facts that must hold**
 
-- `exists(@first)`
 - `kind(@first) in ['property_identifier', 'string', 'number']`
 
 **Example: 1**
@@ -222,6 +240,21 @@ const limits = {
 
 ```javascript
 const limits = { retries: 3, timeout: 1000 };
+```
+
+**Counterexample: distinct keys** (no finding)
+
+```javascript
+const limits = { min: 1, max: 10, "default": 5 };
+```
+
+**Counterexample: computed keys are evaluated each time and may differ** (no finding)
+
+```javascript
+let n = 0;
+const next = () => `id${n++}`;
+const ids = { [next()]: "a", [next()]: "b" };
+console.log(Object.keys(ids));
 ```
 
 
@@ -263,6 +296,19 @@ try {
   JSON.parse(input);
 } catch (e) {
   // invalid input is reported by the caller
+}
+```
+
+**Counterexample: a catch that handles the error** (no finding)
+
+```javascript
+function parse(text) {
+  try {
+    return JSON.parse(text);
+  } catch (err) {
+    console.error("not JSON:", err.message);
+    return null;
+  }
 }
 ```
 
@@ -390,6 +436,24 @@ async function waitFor(ready) {
 setTimeout(() => console.log("later"), 1000);
 ```
 
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```javascript
+async function checkout(cart) {
+  console.log("charging", cart.total);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  console.log("charged");
+}
+
+await checkout({ total: 42 });
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```javascript
+async function settle() { flush(); await sleep(100); }
+```
+
 
 ## nan-comparison
 
@@ -456,6 +520,12 @@ console.log(1 === NaN);
 ```javascript
 const Number = { parse: (s) => +s };
 console.log(Number.parse("1") === NaN);
+```
+
+**Counterexample: NaN against itself: a demonstration of IEEE 754, not a mistaken check** (no finding)
+
+```javascript
+console.log(NaN === NaN);
 ```
 
 
@@ -529,6 +599,24 @@ function check(n) {
 }
 ```
 
+**Counterexample: a one-line function is left as written** (no finding)
+
+```javascript
+function big(x) { if (x > 1) { return true; } return false; }
+```
+
+**Counterexample: Boolean is redefined here, so Boolean(...) would not be the builtin** (no finding)
+
+```javascript
+const Boolean = (x) => (x ? "yes" : "no");
+function has(list) {
+  if (list.length) {
+    return true;
+  }
+  return false;
+}
+```
+
 
 ## unreachable-code
 
@@ -554,7 +642,6 @@ If the unreachable statements declare anything at all, nothing is reported.
 
 **Facts that must hold**
 
-- `exists(@dead)`
 - `occupies_lines(@dead)`
 - `!contains(@dead, 'function_declaration', 'generator_function_declaration', 'class_declaration', 'variable_declaration', 'lexical_declaration', 'abstract_class_declaration', 'enum_declaration')`
 
@@ -601,5 +688,30 @@ function show() {
   let x = 1;
 }
 show();
+```
+
+**Counterexample: jumps that end their block leave nothing behind them** (no finding)
+
+```javascript
+function sign(x) {
+  if (x < 0) {
+    return -1;
+  }
+  for (const y of [x]) {
+    if (y === 0) {
+      break;
+    }
+  }
+  return 1;
+}
+```
+
+**Counterexample: dead code that shares the jump's line: deleting the line would delete the jump** (no finding)
+
+```javascript
+function first(list) {
+  if (list.length) { return list[0]; cleanup(); }
+  return undefined;
+}
 ```
 

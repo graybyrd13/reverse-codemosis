@@ -13,23 +13,23 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
 | [`bare-except`](#bare-except) Bare except clause | hazard | asks, corrects on yes (corrected) | 1 ex. · 2 counter |
-| [`duplicate-dict-key`](#duplicate-dict-key) Dictionary key given twice | contradiction | explains | 1 ex. · 2 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 3 ex. · 5 counter |
+| [`duplicate-dict-key`](#duplicate-dict-key) Dictionary key given twice | contradiction | explains | 1 ex. · 3 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 3 ex. · 7 counter |
 | [`fstring-without-placeholders`](#fstring-without-placeholders) f-string without placeholders | waste | corrects (preserved) | 1 ex. · 2 counter |
 | [`is-literal`](#is-literal) Identity comparison with a literal | contradiction | corrects (corrected) | 2 ex. · 3 counter |
-| [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 7 counter |
+| [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 8 counter |
 | [`missing-module-import`](#missing-module-import) Module used without being imported | broken | corrects (repaired) | 2 ex. · 3 counter |
-| [`missing-name-import`](#missing-name-import) Standard-library name used without being imported | broken | corrects (repaired) | 2 ex. · 2 counter |
-| [`mutable-default`](#mutable-default) Mutable default argument | hazard | asks, corrects on yes (corrected) | 2 ex. · 2 counter |
+| [`missing-name-import`](#missing-name-import) Standard-library name used without being imported | broken | corrects (repaired) | 2 ex. · 4 counter |
+| [`mutable-default`](#mutable-default) Mutable default argument | hazard | asks, corrects on yes (corrected) | 2 ex. · 3 counter |
 | [`none-equality`](#none-equality) Equality comparison with None | hazard | asks, corrects on yes (preserved) | 1 ex. · 2 counter |
-| [`redundant-list-around-sorted`](#redundant-list-around-sorted) list() around sorted() | waste | corrects (preserved) | 1 ex. · 3 counter |
-| [`redundant-pass`](#redundant-pass) Redundant pass | waste | corrects (preserved) | 1 ex. · 1 counter |
+| [`redundant-list-around-sorted`](#redundant-list-around-sorted) list() around sorted() | waste | corrects (preserved) | 1 ex. · 4 counter |
+| [`redundant-pass`](#redundant-pass) Redundant pass | waste | corrects (preserved) | 1 ex. · 2 counter |
 | [`return-bool-if-negated`](#return-bool-if-negated) if/else that returns False or True | simplification | corrects (preserved) | 2 ex. · 1 counter |
 | [`return-bool-if`](#return-bool-if) if/else that returns True or False | simplification | corrects (preserved) | 1 ex. · 2 counter |
-| [`undefined-name`](#undefined-name) Name that is never defined | broken | explains | 2 ex. · 3 counter |
+| [`undefined-name`](#undefined-name) Name that is never defined | broken | explains | 2 ex. · 5 counter |
 | [`unreachable-code`](#unreachable-code) Unreachable code | waste | corrects (preserved) | 2 ex. · 3 counter |
-| [`unused-import`](#unused-import) Unused import | waste | corrects (preserved) | 1 ex. · 5 counter |
-| [`vacuous-assert`](#vacuous-assert) Assertion that can never fail | contradiction | corrects (corrected) | 1 ex. · 2 counter |
+| [`unused-import`](#unused-import) Unused import | waste | corrects (preserved) | 1 ex. · 9 counter |
+| [`vacuous-assert`](#vacuous-assert) Assertion that can never fail | contradiction | corrects (corrected) | 1 ex. · 4 counter |
 
 ## bare-except
 
@@ -120,7 +120,6 @@ and delete or rename the other.
 
 **Facts that must hold**
 
-- `exists(@first)`
 - `kind(@first) in ['string', 'integer', 'float', 'true', 'false', 'none']`
 - `!contains(@first, 'interpolation')`
 
@@ -145,6 +144,14 @@ PRICES = {"apple": 0.5, "pear": 0.75}
 ```python
 counter = iter(range(10))
 d = {next(counter): "a", next(counter): "b"}
+```
+
+**Counterexample: f-string keys are evaluated each time and may differ** (no finding)
+
+```python
+counter = iter(range(10))
+ids = {f"id{next(counter)}": "a", f"id{next(counter)}": "b"}
+print(ids)
 ```
 
 
@@ -250,6 +257,7 @@ import time
 
 def wait_until(ready):
     while not ready():
+        print("waiting")
         time.sleep(0.1)
 ```
 
@@ -292,6 +300,26 @@ time.sleep(1)
 print("step 2")
 ```
 
+**Counterexample: a polling interval inside a loop** (no finding)
+
+```python
+import time
+
+def wait_for(ready):
+    while not ready():
+        time.sleep(0.1)
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```python
+import time
+
+def settle(slow):
+    if slow: print("slow"); time.sleep(1)
+    return slow
+```
+
 
 ## fstring-without-placeholders
 
@@ -317,7 +345,6 @@ concatenation has a placeholder (as pyflakes does).
 
 **Facts that must hold**
 
-- `matches(py.string_prefix(@s), 'f')`
 - `!contains(@s, 'interpolation')`
 - `!(kind(parent(@s)) == 'concatenated_string' && contains(parent(@s), 'interpolation'))`
 
@@ -466,7 +493,6 @@ somewhere else, so the decision is yours. Answering yes adds the `f` prefix.
 **Facts that must hold**
 
 - `py.placeholders_bound(@s)`
-- `!py.is_docstring(@s)`
 - `!py.used_as_template(@s)`
 - `kind(parent(@s)) not in ['attribute', 'binary_operator', 'concatenated_string', 'pair', 'subscript']`
 
@@ -542,6 +568,14 @@ class Shell:
     """Shown as {name} in the completion script."""
 ```
 
+**Counterexample: a docstring that shows a placeholder** (no finding)
+
+```python
+def greet(name):
+    """Return the greeting for {name}."""
+    return f"hello {name}"
+```
+
 
 ## missing-module-import
 
@@ -567,11 +601,8 @@ called `name`. Then exactly one statement makes the code run: `import name`.
 
 **Facts that must hold**
 
-- `py.is_reference(@name)`
 - `!py.bound(text(@name))`
-- `!py.builtin(text(@name))`
 - `!py.dynamic_names()`
-- `in_table('stdlib_modules', text(@name))`
 - `subset(py.attributes(text(@name)), table('stdlib_modules', text(@name)))`
 - `!py.defined_in_project(text(@name), text(@name))`
 
@@ -656,7 +687,6 @@ added to that line.
 - `in_table('stdlib_names', text(@name))`
 - `py.is_reference(@name)`
 - `!py.bound(text(@name))`
-- `!py.builtin(text(@name))`
 - `!py.dynamic_names()`
 - `!py.defined_in_project(text(@name), lookup('stdlib_names', text(@name)))`
 
@@ -700,6 +730,19 @@ print(Path())
 ```python
 def wait():
     sleep(1)
+```
+
+**Counterexample: a keyword argument's name is not a reference** (no finding)
+
+```python
+options = dict(defaultdict=False)
+```
+
+**Counterexample: a star import may provide the name** (no finding)
+
+```python
+from helpers import *
+counts = defaultdict(int)
 ```
 
 
@@ -785,6 +828,13 @@ def f(items=(), name="x", limit=None):
 
 ```python
 def f(items=[]): return items
+```
+
+**Counterexample: a body that is only a docstring has no statement to guard** (no finding)
+
+```python
+def configure(options={}):
+    """Reserved for future use."""
 ```
 
 
@@ -917,6 +967,13 @@ def list(xs):
 print(list(sorted([3, 1])))
 ```
 
+**Counterexample: a star import may redefine list or sorted** (no finding)
+
+```python
+from compat import *
+names = list(sorted(["b", "a"]))
+```
+
 
 ## redundant-pass
 
@@ -965,6 +1022,14 @@ def stub():
     pass
 ```
 
+**Counterexample: a pass that shares its line: deleting the line would delete the statement too** (no finding)
+
+```python
+def reset(state):
+    state.clear(); pass
+    return state
+```
+
 
 ## return-bool-if-negated
 
@@ -994,10 +1059,6 @@ defines a direct opposite (`not (a in b)` is `a not in b`, `not (a is b)` is
     (return_statement (true)) @whole)
 ]
 ```
-
-**Facts that must hold**
-
-- `occupies_lines(@whole)`
 
 **Example: 1**
 
@@ -1082,10 +1143,6 @@ real bool.
     (return_statement (false)) @whole)
 ]
 ```
-
-**Facts that must hold**
-
-- `occupies_lines(@whole)`
 
 **Example: 1**
 
@@ -1211,6 +1268,19 @@ class Box[T]:
 print(Alias, Pair, first, Box)
 ```
 
+**Counterexample: a star import may provide any name** (no finding)
+
+```python
+from settings import *
+print(DEBUG)
+```
+
+**Counterexample: a standard-library name is left to missing-name-import, which adds its import** (no finding)
+
+```python
+counts = defaultdict(int)
+```
+
 
 ## unreachable-code
 
@@ -1239,7 +1309,6 @@ reported.
 
 **Facts that must hold**
 
-- `exists(@dead)`
 - `occupies_lines(@dead)`
 - `py.removal_preserves_scope(@dead)`
 
@@ -1407,6 +1476,40 @@ except ImportError:
     json = None
 ```
 
+**Counterexample: an import inside try is a feature test** (no finding)
+
+```python
+try:
+    import zlib
+    HAVE_ZLIB = True
+except ImportError:
+    HAVE_ZLIB = False
+```
+
+**Counterexample: deleting the name needs the import** (no finding)
+
+```python
+import json
+del json
+```
+
+**Counterexample: exec may use any name** (no finding)
+
+```python
+import json
+plugin = open("plugin.py").read()
+exec(plugin)
+```
+
+**Counterexample: a module that declares its public names is left to a person** (no finding)
+
+```python
+import json
+__all__ = ["dump"]
+def dump(x):
+    return repr(x)
+```
+
 
 ## vacuous-assert
 
@@ -1461,5 +1564,19 @@ assert x > 0, "positive"
 ```python
 pair = (1, 2)
 assert (1, 2) == pair
+```
+
+**Counterexample: an assignment expression cannot stand unparenthesized in an assert** (no finding)
+
+```python
+def check(load):
+    assert (data := load(), "loaded")
+```
+
+**Counterexample: nor in its message** (no finding)
+
+```python
+def check(ready, explain):
+    assert (ready, why := explain())
 ```
 

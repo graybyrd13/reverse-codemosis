@@ -76,3 +76,11 @@ func f(a, b int) bool {
 	return a == b
 }
 '''
+
+[[counterexample]]
+name = "two literals: there is no expression to keep"
+code = '''
+package main
+
+var always = true == false
+'''

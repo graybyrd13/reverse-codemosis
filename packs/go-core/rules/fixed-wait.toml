@@ -98,3 +98,52 @@ func main() {
 	time.Sleep(10)
 }
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.go"
+code = '''
+package main
+
+import (
+	"fmt"
+	"time"
+)
+
+func main() {
+	start := time.Now()
+	fmt.Println("started")
+	time.Sleep(5 * time.Millisecond)
+	fmt.Println("finished", start.Before(time.Now().Add(time.Hour)))
+}
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+package main
+
+import "time"
+
+var start = time.Now()
+
+func flush() {}
+
+func settle() { flush(); time.Sleep(time.Second) }
+'''
+
+[[counterexample]]
+name = "a polling interval inside a loop"
+code = '''
+package main
+
+import "time"
+
+var start = time.Now()
+
+func poll(ready func() bool) {
+	for !ready() {
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+'''

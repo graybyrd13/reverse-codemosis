@@ -14,9 +14,7 @@ so the engine asks.
 shape = "(if_statement condition: (_) @condition)"
 focus = "@assign"
 where = [
-  "exists(@assign)",
-  "kind(@assign) == 'assignment_expression'",
-  "text(field(@assign, 'operator')) == '='",
+  "kind(@assign) == 'assignment_expression' && text(field(@assign, 'operator')) == '='",
   "kind(field(@assign, 'left')) == 'identifier'",
   "kind(field(@assign, 'right')) in ['number_literal', 'char_literal', 'true', 'false']",
 ]
@@ -83,5 +81,46 @@ int main(void) {
     int c;
     if ((c = getchar()) != EOF) putchar(c);
     return 0;
+}
+'''
+
+[[counterexample]]
+name = "a comparison"
+language = "c"
+code = '''
+int is_zero(int x) {
+    if (x == 0) return 1;
+    return 0;
+}
+'''
+
+[[counterexample]]
+name = "a compound assignment is not a mistyped comparison"
+language = "c"
+code = '''
+int next(int x) {
+    if (x += 1) return x;
+    return 0;
+}
+'''
+
+[[counterexample]]
+name = "assignment through a pointer is left to a person"
+language = "c"
+code = '''
+void clear(int *p) {
+    if (*p = 0) return;
+}
+'''
+
+[[counterexample]]
+name = "assigning a call's result and testing it is an idiom"
+language = "c"
+code = '''
+int read_byte(void);
+int first(void) {
+    int b;
+    if (b = read_byte()) return b;
+    return -1;
 }
 '''

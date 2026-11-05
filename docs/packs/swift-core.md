@@ -6,7 +6,7 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 5 counter |
 
 ## fixed-wait
 
@@ -79,6 +79,45 @@ func waitReady() {
     while !ready() {
         sleep(1)
     }
+}
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```swift
+func refresh() async throws {
+    print("refreshing")
+    try await Task.sleep(nanoseconds: 1_000_000)
+    print("refreshed")
+}
+```
+
+**Counterexample: a wait whose value is bound: deleting the line would delete the binding** (no finding)
+
+```swift
+import Foundation
+func pause() {
+    let left = sleep(1)
+    print(left)
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```swift
+import Foundation
+func flush() {}
+func settle() { flush(); sleep(1) }
+```
+
+**Counterexample: a wait on its own line as an argument: deleting the line would break the call** (no finding)
+
+```swift
+import Foundation
+func pause() {
+    print(
+        sleep(1)
+    )
 }
 ```
 

@@ -13,7 +13,7 @@ one line in tables/waits.toml.
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 5 ex. · 3 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 5 ex. · 5 counter |
 
 ## fixed-wait
 
@@ -37,7 +37,6 @@ Examples, documentation and benchmarks are left alone (see `file_purpose()`): a 
 
 **Facts that must hold**
 
-- `occupies_lines(@match)`
 - `file_purpose() not in ['example', 'docs', 'benchmark']`
 
 **Question:** Keep this fixed wait?
@@ -120,5 +119,19 @@ Start-Sleep 5
 ```text
 import time
 time.sleep(5)
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```powershell
+Write-Host "Deploying"
+Start-Sleep -Seconds 5
+Write-Host "Done"
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```powershell
+Write-Host "deploying"; Start-Sleep -Seconds 5
 ```
 

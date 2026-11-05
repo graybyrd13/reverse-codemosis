@@ -104,3 +104,10 @@ name = "a one-line function has no room for the guard"
 code = '''
 def f(items=[]): return items
 '''
+
+[[counterexample]]
+name = "a body that is only a docstring has no statement to guard"
+code = '''
+def configure(options={}):
+    """Reserved for future use."""
+'''

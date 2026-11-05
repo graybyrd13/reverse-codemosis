@@ -17,7 +17,7 @@ concatenation has a placeholder (as pyflakes does).
 """
 shape = "((string) @s (#match? @s \"^[rRbBuUtT]*[fF]\"))"
 where = [
-  "matches(py.string_prefix(@s), 'f')",
+  # The shape's #match? already requires an f in the prefix.
   "!contains(@s, 'interpolation')",
   "!(kind(parent(@s)) == 'concatenated_string' && contains(parent(@s), 'interpolation'))",
 ]

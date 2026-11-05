@@ -37,3 +37,13 @@ code = '''
 const debuggerEnabled = false;
 console.log(debuggerEnabled);
 '''
+
+[[counterexample]]
+name = "the only statement of an if: deleting its line would drop the condition's side effect"
+code = '''
+function check(items) {
+  if (validate(items)) debugger;
+  return items;
+}
+function validate(items) { return items.length > 0; }
+'''

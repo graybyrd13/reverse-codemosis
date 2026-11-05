@@ -67,3 +67,28 @@ code = '''
 debugger_enabled = false
 puts debugger_enabled
 '''
+
+[[counterexample]]
+name = "a conditional breakpoint is deliberate"
+code = '''
+def run
+  debugger if ENV["DEBUG"]
+  work
+end
+'''
+
+[[counterexample]]
+name = "a breakpoint that shares its line"
+code = '''
+def run; work; byebug; end
+'''
+
+[[counterexample]]
+name = "a breakpoint on its own line as an argument: deleting the line would break the call"
+code = '''
+def run
+  log(
+    byebug
+  )
+end
+'''

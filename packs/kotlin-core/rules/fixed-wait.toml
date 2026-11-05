@@ -67,3 +67,40 @@ fun waitReady() {
     }
 }
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.kt"
+code = '''
+suspend fun checkout() {
+    charge()
+    delay(2000)
+    confirm()
+}
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+fun settle() { flush(); Thread.sleep(100) }
+fun flush() {}
+'''
+
+[[counterexample]]
+name = "a wait whose value is used: deleting the line would delete the declaration"
+code = '''
+fun pause() {
+    val unit = Thread.sleep(100)
+    println(unit)
+}
+'''
+
+[[counterexample]]
+name = "a wait on its own line as an argument: deleting the line would break the call"
+code = '''
+fun pause() {
+    println(
+        Thread.sleep(100)
+    )
+}
+'''

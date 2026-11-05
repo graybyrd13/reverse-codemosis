@@ -80,3 +80,33 @@ fn check(ok: bool) {
     }
 }
 '''
+
+[[counterexample]]
+name = "not a panic: the program goes on"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        println!("not ok");
+    }
+}
+'''
+
+[[counterexample]]
+name = "a bare panic!() has a different message from assert!"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        panic!();
+    }
+}
+'''
+
+[[counterexample]]
+name = "brackets are not an argument list"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        panic!["bad"];
+    }
+}
+'''

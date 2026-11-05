@@ -141,3 +141,24 @@ name = "a deferred callback is not a wait"
 code = '''
 setTimeout(() => console.log("later"), 1000);
 '''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.js"
+language = "javascript"
+code = '''
+async function checkout(cart) {
+  console.log("charging", cart.total);
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  console.log("charged");
+}
+
+await checkout({ total: 42 });
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+language = "javascript"
+code = '''
+async function settle() { flush(); await sleep(100); }
+'''

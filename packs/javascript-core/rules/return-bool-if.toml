@@ -79,3 +79,21 @@ function check(n) {
   return false;
 }
 '''
+
+[[counterexample]]
+name = "a one-line function is left as written"
+code = '''
+function big(x) { if (x > 1) { return true; } return false; }
+'''
+
+[[counterexample]]
+name = "Boolean is redefined here, so Boolean(...) would not be the builtin"
+code = '''
+const Boolean = (x) => (x ? "yes" : "no");
+function has(list) {
+  if (list.length) {
+    return true;
+  }
+  return false;
+}
+'''

@@ -16,7 +16,8 @@ somewhere else, so the decision is yours. Answering yes adds the `f` prefix.
 shape = "(string) @s"
 where = [
   "py.placeholders_bound(@s)",
-  "!py.is_docstring(@s)",
+  # No !py.is_docstring(@s): a docstring is a string statement, which
+  # py.used_as_template already excludes.
   "!py.used_as_template(@s)",
   "kind(parent(@s)) not in ['attribute', 'binary_operator', 'concatenated_string', 'pair', 'subscript']",
 ]
@@ -96,4 +97,12 @@ code = '''
 class Shell:
     name = "bash"
     """Shown as {name} in the completion script."""
+'''
+
+[[counterexample]]
+name = "a docstring that shows a placeholder"
+code = '''
+def greet(name):
+    """Return the greeting for {name}."""
+    return f"hello {name}"
 '''

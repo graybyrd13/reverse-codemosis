@@ -39,3 +39,17 @@ code = '''
 import sys
 print("x", file=sys.stderr)
 '''
+
+[[counterexample]]
+name = "a chevron with nothing to print"
+code = '''
+import sys
+print >>sys.stderr
+'''
+
+[[counterexample]]
+name = "a trailing comma suppresses the newline"
+code = '''
+import sys
+print >>sys.stderr, "progress:",
+'''

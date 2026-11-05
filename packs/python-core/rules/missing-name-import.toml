@@ -23,7 +23,7 @@ where = [
   "in_table('stdlib_names', text(@name))",
   "py.is_reference(@name)",
   "!py.bound(text(@name))",
-  "!py.builtin(text(@name))",
+  # No builtin is in stdlib_names (a test in codemosis-core keeps it so).
   "!py.dynamic_names()",
   "!py.defined_in_project(text(@name), lookup('stdlib_names', text(@name)))",
 ]
@@ -97,4 +97,17 @@ name = "the name is ambiguous in the standard library"
 code = '''
 def wait():
     sleep(1)
+'''
+
+[[counterexample]]
+name = "a keyword argument's name is not a reference"
+code = '''
+options = dict(defaultdict=False)
+'''
+
+[[counterexample]]
+name = "a star import may provide the name"
+code = '''
+from helpers import *
+counts = defaultdict(int)
 '''

@@ -70,3 +70,12 @@ fn one() -> i32 {
     // done
 }
 '''
+
+[[counterexample]]
+name = "a value that starts with a block-like expression and continues"
+code = '''
+fn score(x: i32) -> i32 {
+    let base = 10;
+    return match x { 0 => 1, _ => 2 } + base;
+}
+'''

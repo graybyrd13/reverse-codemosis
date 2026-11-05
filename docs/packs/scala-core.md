@@ -6,7 +6,7 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 5 counter |
 
 ## fixed-wait
 
@@ -64,6 +64,50 @@ object Poller {
     while (!ready()) {
       Thread.sleep(100)
     }
+  }
+}
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```scala
+object Checkout {
+  def pay(): Unit = {
+    charge()
+    Thread.sleep(500)
+    confirm()
+  }
+}
+```
+
+**Counterexample: a wait whose value is bound: deleting the line would delete the definition** (no finding)
+
+```scala
+object Worker {
+  def pause(): Unit = {
+    val done = Thread.sleep(100)
+    println(done)
+  }
+}
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```scala
+object Worker {
+  def flush(): Unit = ()
+  def settle(): Unit = { flush(); Thread.sleep(100) }
+}
+```
+
+**Counterexample: a wait on its own line as an argument: deleting the line would break the call** (no finding)
+
+```scala
+object Worker {
+  def pause(): Unit = {
+    println(
+      Thread.sleep(100)
+    )
   }
 }
 ```

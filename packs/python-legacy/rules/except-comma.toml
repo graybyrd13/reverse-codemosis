@@ -70,3 +70,13 @@ try:
 except ValueError, ParseError:
     pass
 '''
+
+[[counterexample]]
+name = "exec may read the exception name after the handler"
+code = '''
+try:
+    run()
+except ValueError, err:
+    pass
+exec("print(err)")
+'''

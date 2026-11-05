@@ -6,8 +6,8 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`breakpoint`](#breakpoint) Breakpoint left in the code | waste | asks, corrects on yes (corrected) | 2 ex. · 1 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
+| [`breakpoint`](#breakpoint) Breakpoint left in the code | waste | asks, corrects on yes (corrected) | 2 ex. · 4 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 7 counter |
 
 ## breakpoint
 
@@ -73,6 +73,31 @@ debugger_enabled = false
 puts debugger_enabled
 ```
 
+**Counterexample: a conditional breakpoint is deliberate** (no finding)
+
+```ruby
+def run
+  debugger if ENV["DEBUG"]
+  work
+end
+```
+
+**Counterexample: a breakpoint that shares its line** (no finding)
+
+```ruby
+def run; work; byebug; end
+```
+
+**Counterexample: a breakpoint on its own line as an argument: deleting the line would break the call** (no finding)
+
+```ruby
+def run
+  log(
+    byebug
+  )
+end
+```
+
 
 ## fixed-wait
 
@@ -124,6 +149,57 @@ Examples, documentation and benchmarks are left alone (see `file_purpose()`): a 
 ```ruby
 until File.exist?("ready")
   sleep 0.1
+end
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```ruby
+puts "start"
+sleep 0.01
+puts "done"
+```
+
+**Counterexample: a method named sleep on some other object** (no finding)
+
+```ruby
+def idle(machine)
+  machine.sleep(5)
+end
+```
+
+**Counterexample: a wait whose value is used: deleting the line would delete the assignment** (no finding)
+
+```ruby
+def pause
+  slept = sleep(1)
+  puts slept
+end
+```
+
+**Counterexample: a wait inside a block runs once per iteration** (no finding)
+
+```ruby
+def drip
+  3.times do
+    sleep 1
+  end
+end
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```ruby
+def settle; flush; sleep 1; end
+```
+
+**Counterexample: a wait on its own line as an argument: deleting the line would break the call** (no finding)
+
+```ruby
+def pause
+  puts(
+    sleep(1)
+  )
 end
 ```
 

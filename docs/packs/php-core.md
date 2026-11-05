@@ -6,8 +6,8 @@
 
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
-| [`debug-dump`](#debug-dump) Debugging dump left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 1 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 1 counter |
+| [`debug-dump`](#debug-dump) Debugging dump left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 2 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 1 ex. · 3 counter |
 
 ## debug-dump
 
@@ -54,6 +54,13 @@ script), so the engine asks.
 ```php
 <?php
 echo json_encode(["ok" => true]);
+```
+
+**Counterexample: a dump that shares its line** (no finding)
+
+```php
+<?php
+function total($xs) { var_dump($xs); return array_sum($xs); }
 ```
 
 
@@ -107,5 +114,21 @@ Examples, documentation and benchmarks are left alone (see `file_purpose()`): a 
 while (!file_exists("ready")) {
     usleep(100000);
 }
+```
+
+**Counterexample: the same wait in an example: pausing there is usually the point** (no finding)
+
+```php
+<?php
+echo "start\n";
+usleep(1000);
+echo "done\n";
+```
+
+**Counterexample: a wait that shares its line** (no finding)
+
+```php
+<?php
+function settle() { flush(); sleep(1); }
 ```
 

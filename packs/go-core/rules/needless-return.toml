@@ -70,3 +70,21 @@ func f(n int) {
 	println(n)
 }
 '''
+
+[[counterexample]]
+name = "a return that shares its line: deleting the line would delete the call too"
+code = '''
+package main
+
+func flush(w func()) { w(); return }
+'''
+
+[[counterexample]]
+name = "a return with a value in a function with no results: a compile error the rule must not hide"
+code = '''
+package main
+
+func done() {
+	return 1
+}
+'''
