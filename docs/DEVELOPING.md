@@ -47,6 +47,7 @@ reverse-codemosis/
 ├── examples/                  the two demonstrations and their golden diffs
 ├── docs/                      this documentation; FACTS.md, LANGUAGES.md, packs/ are generated
 ├── schemas/                   generated JSON Schemas of the file formats
+├── scripts/                   demo.sh; field-test.sh (+ pins, baseline, summary); field-test-oracle.sh
 ├── action.yml, templates/, .pre-commit-hooks.yaml   CI integrations
 └── rfcs/, GOVERNANCE.md, SECURITY.md, CHANGELOG.md
 ```

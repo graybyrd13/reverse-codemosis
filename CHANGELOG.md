@@ -38,6 +38,12 @@ follows [Semantic Versioning](https://semver.org/) as described in
   `proof verify` replays it with the same formatter version or accepts it
   only if it changes whitespace alone. `doctor` and `map` show the
   formatters and why.
+- The precision ledger: `scripts/field-test.sh --summary-json/--compare`
+  and a reviewed baseline of every proven correction on the field test;
+  CI fails on an unreviewed correction or a >10% rise in noise.
+- `.github/workflows/field-test.yml`: the ledger on pull requests, and
+  `codemosis fix` on cobra, gin and ripgrep with their own tests as the
+  oracle, re-checked independently (`scripts/field-test-oracle.sh`).
 - Suppressions written for other tools are honoured through rules'
   `equivalents` (flake8/ruff, mypy, pyright, pylint, eslint, clang-tidy,
   golangci-lint, ShellCheck, clippy).

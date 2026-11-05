@@ -1,0 +1,1267 @@
+{
+  "schema": "codemosis/field-test/v1",
+  "engine": "0.1.0",
+  "totals": {
+    "files": 10780,
+    "proven": 127,
+    "questions": 128,
+    "explained": 9,
+    "refused": 2,
+    "suppressed": 11,
+    "unparsed": 44,
+    "rule_errors": 0,
+    "questions_per_kfile": 11.87,
+    "explained_per_kfile": 0.83
+  },
+  "repositories": {
+    "requests": {
+      "commit": "3c7baaa05ab4aa49cc819ce3a819d260de19c157",
+      "files": 122,
+      "proven": 2,
+      "questions": 3,
+      "explained": 4,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "python-core/fixed-wait": {
+          "proven": 0,
+          "questions": 3,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/redundant-pass": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/return-bool-if": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "universal/private-key": {
+          "proven": 0,
+          "questions": 0,
+          "explained": 4,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "src/requests/adapters.py",
+          "line": 611,
+          "fingerprint": "9e465167c7f93b896fdd5c74fa59becc"
+        },
+        {
+          "rule": "python-core/return-bool-if",
+          "file": "src/requests/utils.py",
+          "line": 867,
+          "fingerprint": "c91cbe4c8774674115e5318a27d5781c"
+        }
+      ]
+    },
+    "flask": {
+      "commit": "49943b5a94413a530761350f04e896f76e8d620e",
+      "files": 231,
+      "proven": 0,
+      "questions": 5,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "python-core/fixed-wait": {
+          "proven": 0,
+          "questions": 5,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": []
+    },
+    "click": {
+      "commit": "2247b35ea1c47c727d7a06e51fa280e12a863ff6",
+      "files": 176,
+      "proven": 6,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "python-core/redundant-pass": {
+          "proven": 5,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/return-bool-if": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "examples/termui/termui.py",
+          "line": 11,
+          "fingerprint": "73d46cafc389e7b7cfaff5e4cab123c0"
+        },
+        {
+          "rule": "python-core/return-bool-if",
+          "file": "src/click/core.py",
+          "line": 2797,
+          "fingerprint": "3209f93e9293e791c42cc59156d74aae"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/test_basic.py",
+          "line": 839,
+          "fingerprint": "00bced9fbdf971cf8704d87fbcafb4b8"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/test_chain.py",
+          "line": 51,
+          "fingerprint": "383659054868d8902a260c6202bc3ddb"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/test_defaults.py",
+          "line": 473,
+          "fingerprint": "a7635e2411c71d460e7576ab97c88dd1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/test_formatting.py",
+          "line": 400,
+          "fingerprint": "00565e3ecdd47b78b45e5b521d96de2b"
+        }
+      ]
+    },
+    "httpx": {
+      "commit": "b5addb64f0161ff6bfe94c124ef76f6a1fba5254",
+      "files": 115,
+      "proven": 1,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "python-core/return-bool-if-negated": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "python-core/return-bool-if-negated",
+          "file": "httpx/_utils.py",
+          "line": 201,
+          "fingerprint": "24a1cf80e94f3078624a6b6cbca8a8e3"
+        }
+      ]
+    },
+    "rich": {
+      "commit": "9d8f9a372cc5916fd4781fec207ced7ddac2f08f",
+      "files": 531,
+      "proven": 3,
+      "questions": 16,
+      "explained": 2,
+      "refused": 0,
+      "suppressed": 4,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "python-core/bare-except": {
+          "proven": 0,
+          "questions": 6,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/fstring-without-placeholders": {
+          "proven": 2,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/none-equality": {
+          "proven": 0,
+          "questions": 10,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/redundant-pass": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/undefined-name": {
+          "proven": 0,
+          "questions": 0,
+          "explained": 2,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "python-core/fstring-without-placeholders",
+          "file": "rich/console.py",
+          "line": 2579,
+          "fingerprint": "b553002305eb2b54844bc56badd3ad0f"
+        },
+        {
+          "rule": "python-core/fstring-without-placeholders",
+          "file": "rich/progress.py",
+          "line": 1268,
+          "fingerprint": "f28bdd26edf92fb803525c815785a3b3"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/test_inspect.py",
+          "line": 392,
+          "fingerprint": "b80bdf86e65c836ffc81184805317a8e"
+        }
+      ]
+    },
+    "django": {
+      "commit": "a7629749fa2886d0dcb8ddf2df1842fd85511093",
+      "files": 5716,
+      "proven": 109,
+      "questions": 49,
+      "explained": 0,
+      "refused": 2,
+      "suppressed": 6,
+      "unparsed": 2,
+      "rule_errors": 0,
+      "by_rule": {
+        "python-core/fixed-wait": {
+          "proven": 0,
+          "questions": 39,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/missing-f-prefix": {
+          "proven": 0,
+          "questions": 1,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/mutable-default": {
+          "proven": 0,
+          "questions": 9,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/redundant-pass": {
+          "proven": 103,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/return-bool-if": {
+          "proven": 2,
+          "questions": 0,
+          "explained": 0,
+          "refused": 2
+        },
+        "python-core/return-bool-if-negated": {
+          "proven": 3,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "python-core/unreachable-code": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/admin/exceptions.py",
+          "line": 7,
+          "fingerprint": "81ef82236e823968f0a8eaca91f8d253"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/admin/exceptions.py",
+          "line": 13,
+          "fingerprint": "6f56af0546e818df16311f157afce8b2"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/admin/exceptions.py",
+          "line": 19,
+          "fingerprint": "84a787dbdd164216d9980a0eed698895"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/admin/exceptions.py",
+          "line": 25,
+          "fingerprint": "a8a1c7f36c10fd497aa9312470c2ca38"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/admin/utils.py",
+          "line": 34,
+          "fingerprint": "c2ca61f59674598295ddaf08a4278c81"
+        },
+        {
+          "rule": "python-core/return-bool-if-negated",
+          "file": "django/contrib/auth/tokens.py",
+          "line": 79,
+          "fingerprint": "df8a620e7d2c6bec33b0fa74f5d6622f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/gis/geos/error.py",
+          "line": 4,
+          "fingerprint": "6210b4d80ea75bf4b61fea7a6122cc6f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/sessions/backends/base.py",
+          "line": 24,
+          "fingerprint": "2a085d4d6856bf5f6c3ee96c6f78009a"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/sessions/backends/base.py",
+          "line": 32,
+          "fingerprint": "54ee32edf3d82df63c489cb89d76291d"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/sessions/exceptions.py",
+          "line": 7,
+          "fingerprint": "e176b8ce4cae6276471daab09cd26fe1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/sessions/exceptions.py",
+          "line": 13,
+          "fingerprint": "d009dad832d4d379a28721b2c925ed62"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/sessions/exceptions.py",
+          "line": 19,
+          "fingerprint": "2e79d62b6eee89f8bf28f859c6fa004b"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/contrib/staticfiles/storage.py",
+          "line": 620,
+          "fingerprint": "2ecfa7a46a369fdea8af81e2483ce8a1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/cache/backends/base.py",
+          "line": 415,
+          "fingerprint": "14e642b2238710799c72bbea582aa8f8"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 13,
+          "fingerprint": "5bf83cd1c782e6e92f276306492d355e"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 19,
+          "fingerprint": "03f501127cc5c3022ad525e1492c03cd"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 35,
+          "fingerprint": "d3ced5a127b7a2275630c4f3c49d90c0"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 45,
+          "fingerprint": "625cf453253bf78b66a9f28d58637ee8"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 51,
+          "fingerprint": "baaeb1729b8cb3dce50b286c32c3fe0f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 57,
+          "fingerprint": "5cd131cee208066c97caefc715893917"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 63,
+          "fingerprint": "d89a4050beab818a84aa52631626a4d5"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 72,
+          "fingerprint": "9afd90cfd1f334a0ab14817ac73663c3"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 81,
+          "fingerprint": "6729920b7c50e53cc60c30d53274fb17"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 90,
+          "fingerprint": "834138b22b22d349ff3d522798aaa95e"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 96,
+          "fingerprint": "748ee2dd3a47bf9a5eefbc40d0325ed1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 102,
+          "fingerprint": "23d7049c4e3136522988601989019c59"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 108,
+          "fingerprint": "415245a98609620290b64d5af85b7ccd"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 114,
+          "fingerprint": "123921cdfcd19a321a06d5fe685cd3b1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 120,
+          "fingerprint": "3da2cbe623f3bfba0890717c5c057755"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 126,
+          "fingerprint": "7006559409601c2f4bc80c72c986188a"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 132,
+          "fingerprint": "c29cc96abdab62c81af4fe6e578120a3"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 138,
+          "fingerprint": "1c89df79fae6f69ac8872ee050d3c5fd"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 253,
+          "fingerprint": "3af7651edf709c36bb55d74f58545f75"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 259,
+          "fingerprint": "555b043bf4e555d2d6b625406076b631"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/exceptions.py",
+          "line": 265,
+          "fingerprint": "e47b289436633cdaa255354e3ff66a05"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/files/uploadhandler.py",
+          "line": 29,
+          "fingerprint": "3eac9d81bc5b88752ee9a7cc41389508"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/files/uploadhandler.py",
+          "line": 58,
+          "fingerprint": "da17b608fd4a45480c184d4bf6e90c8b"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/files/uploadhandler.py",
+          "line": 67,
+          "fingerprint": "deb53f785b2fbf1deda640784fd9b24a"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/files/uploadhandler.py",
+          "line": 103,
+          "fingerprint": "9f9cc5dbe25fcd841bbe65925f36cd0f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/files/uploadhandler.py",
+          "line": 152,
+          "fingerprint": "127427825d4d04831e34c370d2e43e2e"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/files/uploadhandler.py",
+          "line": 159,
+          "fingerprint": "e1486e01b4af6e8cbe14f7a82ea0a98f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/mail/backends/base.py",
+          "line": 103,
+          "fingerprint": "960cd18ee1b2541cb45125a6630854ff"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/mail/backends/base.py",
+          "line": 107,
+          "fingerprint": "71a2fa768e01cc289b2c59985ffaf243"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/management/base.py",
+          "line": 46,
+          "fingerprint": "19b493ef5aea7f444794de30f1c21faf"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/management/base.py",
+          "line": 389,
+          "fingerprint": "7c5bcd7008ca0b872bc5ea4daffe9f2e"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/serializers/base.py",
+          "line": 16,
+          "fingerprint": "d8693e27300c8b8e2f5b7fdd03066c5d"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/serializers/base.py",
+          "line": 22,
+          "fingerprint": "b8f5a4185155d733536d243fe0454ec2"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/serializers/base.py",
+          "line": 164,
+          "fingerprint": "691ac4115cc62e55e0ef7ba70732de88"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/serializers/base.py",
+          "line": 178,
+          "fingerprint": "41d2cd60f5b20a8e5dda17212c43efb1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/signing.py",
+          "line": 59,
+          "fingerprint": "e32da125e365681a64d6334afc177e31"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/core/signing.py",
+          "line": 65,
+          "fingerprint": "a017e9d4dec7a22a4c81952720dbe5b9"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/backends/base/base.py",
+          "line": 553,
+          "fingerprint": "d6dbde51a611f75f53453af21f48477e"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/backends/base/base.py",
+          "line": 561,
+          "fingerprint": "eacdbaa4acdb72ec649ac37020aabe3f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/backends/base/base.py",
+          "line": 659,
+          "fingerprint": "f4a9f5e39a4031b8fa41f02d9d205d3b"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/backends/base/operations.py",
+          "line": 718,
+          "fingerprint": "9c1cbec696a3b2f0cca61bafa120c68b"
+        },
+        {
+          "rule": "python-core/return-bool-if",
+          "file": "django/db/backends/base/operations.py",
+          "line": 738,
+          "fingerprint": "b9965b5afd50f2f3687da9ee135f91f8"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/backends/ddl_references.py",
+          "line": 34,
+          "fingerprint": "30844086dac9ec93f8a4c3b83b773af2"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/backends/ddl_references.py",
+          "line": 40,
+          "fingerprint": "7cd66fc9219ab0f9e7a456b6dc14b632"
+        },
+        {
+          "rule": "python-core/return-bool-if-negated",
+          "file": "django/db/backends/mysql/features.py",
+          "line": 209,
+          "fingerprint": "b0a3b0e0b7cbd184e1ba9804ddc6e317"
+        },
+        {
+          "rule": "python-core/return-bool-if",
+          "file": "django/db/backends/mysql/schema.py",
+          "line": 66,
+          "fingerprint": "fb12d7534ed620db11b86847a69c2cbe"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/migrations/exceptions.py",
+          "line": 7,
+          "fingerprint": "ce55bf9ff3e4eb9e48c5456575038a7d"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/migrations/exceptions.py",
+          "line": 13,
+          "fingerprint": "339cf6f412b53a6c767a3781796722e7"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/migrations/exceptions.py",
+          "line": 19,
+          "fingerprint": "25ac979eaa967589abeddb40d355481c"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/migrations/exceptions.py",
+          "line": 25,
+          "fingerprint": "52f9f6232759d4b0c3a7065bdabb6003"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/migrations/exceptions.py",
+          "line": 31,
+          "fingerprint": "ad938cfa8684a2e634ec40051b2f7e7d"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/migrations/exceptions.py",
+          "line": 37,
+          "fingerprint": "6c2d3ce351aa705171beb6136490c918"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/models/base.py",
+          "line": 1466,
+          "fingerprint": "0fdc27829d37095be9f09e908dd42642"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/models/enums.py",
+          "line": 71,
+          "fingerprint": "df39b3ad05bda46e7475a608bd75c621"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/db/transaction.py",
+          "line": 20,
+          "fingerprint": "49619961481ac3dc75092cc799a71ec7"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/forms/forms.py",
+          "line": 366,
+          "fingerprint": "facb87f1de8567ed1b2f10cf709078d0"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/forms/formsets.py",
+          "line": 472,
+          "fingerprint": "10e72bdec70dedf71dfe2589ebbe03de"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/http/multipartparser.py",
+          "line": 38,
+          "fingerprint": "e637cef99388303f77eb69f614443394"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/http/request.py",
+          "line": 51,
+          "fingerprint": "0fe7d48ec9b50e4fe69269e3ad6b126c"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/template/base.py",
+          "line": 1182,
+          "fingerprint": "3a01c284cd7492908eabef4bb23a618b"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/template/context.py",
+          "line": 11,
+          "fingerprint": "b4a04e7307cd02f9f4e34f75c2d246f0"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/template/exceptions.py",
+          "line": 44,
+          "fingerprint": "f74eefc3bc5740c27cf0eadbb0694a55"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/template/loaders/base.py",
+          "line": 51,
+          "fingerprint": "9f9c9c62eee99fb37b620904d2a8342e"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/test/runner.py",
+          "line": 550,
+          "fingerprint": "6c7fee03e664d554b8918c999a41bc0f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/test/testcases.py",
+          "line": 392,
+          "fingerprint": "d143ee58f0b5e95c2d9799f484d1c167"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/test/testcases.py",
+          "line": 1464,
+          "fingerprint": "485f48429794cd11ba1612d3fb3132ca"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/utils/crypto.py",
+          "line": 19,
+          "fingerprint": "5985e5957973e89795db847b98d374bc"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/utils/feedgenerator.py",
+          "line": 230,
+          "fingerprint": "dfd701821eb5701430718e9e12901bd7"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/utils/feedgenerator.py",
+          "line": 236,
+          "fingerprint": "00c99f2129e9d12fbf1117f3a3950ec0"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/utils/feedgenerator.py",
+          "line": 249,
+          "fingerprint": "0fbdb7a7401cce97494ca3d701679a3c"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/utils/functional.py",
+          "line": 87,
+          "fingerprint": "431369a1b0a8ce2af147ca328a82a535"
+        },
+        {
+          "rule": "python-core/return-bool-if-negated",
+          "file": "django/utils/inspect.py",
+          "line": 108,
+          "fingerprint": "b2194250ab87dd4e490ecf68f498883d"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "django/views/generic/__init__.py",
+          "line": 39,
+          "fingerprint": "8a4c5874cc0c1f116ba671b37ac3f952"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/admin_views/models.py",
+          "line": 710,
+          "fingerprint": "326449b185920cead23841b5a0c67515"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/auth_tests/test_validators.py",
+          "line": 246,
+          "fingerprint": "973ae3ec589bde610779a3d8d0f55470"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/decorators/tests.py",
+          "line": 212,
+          "fingerprint": "4eb3b1ce5e7c05b5840136f7b012e8f4"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/decorators/tests.py",
+          "line": 222,
+          "fingerprint": "a6faf9062b4a6d3366a7e51535024a98"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/decorators/tests.py",
+          "line": 229,
+          "fingerprint": "76494892751f676308ab058a221ffedc"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/decorators/tests.py",
+          "line": 238,
+          "fingerprint": "c487d9a938f1fc3ece765c0d25291dc1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/decorators/tests.py",
+          "line": 280,
+          "fingerprint": "e3feb9026cbfb589132c8ac48051d130"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/invalid_models_tests/test_models.py",
+          "line": 2186,
+          "fingerprint": "8daa0451d15e7a840406fb15b4bae62f"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/migrations/migrations_test_apps/unmigrated_app_simple/models.py",
+          "line": 10,
+          "fingerprint": "0ae24707b22ec7855c194a7f949b4782"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/migrations/models.py",
+          "line": 31,
+          "fingerprint": "603468f6861dbc6041efb5791124a163"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/migrations/models.py",
+          "line": 48,
+          "fingerprint": "ab5b7e52ed58ad4b17e42ac9aa315b62"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/migrations/test_migrations_plan/0001_initial.py",
+          "line": 6,
+          "fingerprint": "5020b6223eab4c215169c5de4cf86f92"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/migrations/test_migrations_plan/0001_initial.py",
+          "line": 11,
+          "fingerprint": "97ddd624a69d3effee0294a494c026f8"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/migrations/test_migrations_plan/0005_fifth.py",
+          "line": 10,
+          "fingerprint": "6d1595cebdb93286c1aca57f8ff8b6d1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/model_forms/tests.py",
+          "line": 686,
+          "fingerprint": "f22341a58b396b85d34acc6a6eb80478"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/sessions_tests/no_clear_expired.py",
+          "line": 7,
+          "fingerprint": "d6710e7ea17e41f2ad11690bbff0c85d"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/sessions_tests/tests.py",
+          "line": 1294,
+          "fingerprint": "5aee00603e04563e61278ab979c284a1"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/sessions_tests/tests.py",
+          "line": 1306,
+          "fingerprint": "3af3f13cfff3ae692fc41f4ac243647e"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/staticfiles_tests/test_storage.py",
+          "line": 45,
+          "fingerprint": "d4cafced4f51fc0910b63c559f8884ce"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/test_client/auth_backends.py",
+          "line": 15,
+          "fingerprint": "155c0d08ca4d6a3a2ca0cdfa99c8498d"
+        },
+        {
+          "rule": "python-core/unreachable-code",
+          "file": "tests/test_runner/test_parallel.py",
+          "line": 95,
+          "fingerprint": "cea6b89a9ad7529d1f25fcc1a6d8d392"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "tests/urlpatterns_reverse/nonimported_module.py",
+          "line": 3,
+          "fingerprint": "5b098d2bdda6b65d149386fdd81adcb4"
+        }
+      ]
+    },
+    "express": {
+      "commit": "43fca52d28a422c8be48fd489cbd4f2d6152bab6",
+      "files": 216,
+      "proven": 0,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {},
+      "proven_corrections": []
+    },
+    "axios": {
+      "commit": "fb88a1b133c1a2d774713070b8ca25f7bcd382ac",
+      "files": 513,
+      "proven": 0,
+      "questions": 1,
+      "explained": 1,
+      "refused": 0,
+      "suppressed": 1,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "javascript-core/fixed-wait": {
+          "proven": 0,
+          "questions": 1,
+          "explained": 0,
+          "refused": 0
+        },
+        "universal/private-key": {
+          "proven": 0,
+          "questions": 0,
+          "explained": 1,
+          "refused": 0
+        }
+      },
+      "proven_corrections": []
+    },
+    "chalk": {
+      "commit": "72110019e147683f60e13fa0ff5c14a0c27cd9fe",
+      "files": 33,
+      "proven": 0,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {},
+      "proven_corrections": []
+    },
+    "ms": {
+      "commit": "4ff48cec099f0514c3e9bbca18706c9c21122bfb",
+      "files": 23,
+      "proven": 0,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {},
+      "proven_corrections": []
+    },
+    "cobra": {
+      "commit": "adbc8813901bba65827259daa8e22ff94ec1f30e",
+      "files": 65,
+      "proven": 1,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "go-core/bool-literal-comparison": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "go-core/bool-literal-comparison",
+          "file": "completions_test.go",
+          "line": 2598,
+          "fingerprint": "5075d72690bb3cb6df4c4dc29da091ed"
+        }
+      ]
+    },
+    "gin": {
+      "commit": "0f09c3a9b4626d9fe9979cf4d0521d6ae32ab646",
+      "files": 130,
+      "proven": 1,
+      "questions": 8,
+      "explained": 1,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {
+        "go-core/bool-literal-comparison": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "go-core/fixed-wait": {
+          "proven": 0,
+          "questions": 8,
+          "explained": 0,
+          "refused": 0
+        },
+        "universal/private-key": {
+          "proven": 0,
+          "questions": 0,
+          "explained": 1,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "go-core/bool-literal-comparison",
+          "file": "tree_test.go",
+          "line": 709,
+          "fingerprint": "d1527b9baf224bd349a1797f5aaefc3a"
+        }
+      ]
+    },
+    "ripgrep": {
+      "commit": "91f5d22ef48bde459d90a8c7dbeab416e97d0f2b",
+      "files": 217,
+      "proven": 2,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 3,
+      "rule_errors": 0,
+      "by_rule": {
+        "rust-core/manual-assert": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        },
+        "rust-core/needless-return": {
+          "proven": 1,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "rust-core/needless-return",
+          "file": "crates/cli/src/decompress.rs",
+          "line": 487,
+          "fingerprint": "b570a91e31dbd151db718bc5b88efa7c"
+        },
+        {
+          "rule": "rust-core/manual-assert",
+          "file": "crates/ignore/src/dir.rs",
+          "line": 208,
+          "fingerprint": "7dafa7623f1a925f9afd8b0f9579e7b2"
+        }
+      ]
+    },
+    "gson": {
+      "commit": "65df6e5a99747f73d386f3a61d887a0257255e0f",
+      "files": 314,
+      "proven": 0,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {},
+      "proven_corrections": []
+    },
+    "sinatra": {
+      "commit": "cb22afd7902b566b6eaba6c4ea89739494a65d12",
+      "files": 290,
+      "proven": 0,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {},
+      "proven_corrections": []
+    },
+    "guzzle": {
+      "commit": "7d9b1f430bb65ac664e120af227bf9a795ad6333",
+      "files": 183,
+      "proven": 0,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 0,
+      "rule_errors": 0,
+      "by_rule": {},
+      "proven_corrections": []
+    },
+    "jq": {
+      "commit": "5c001b18d7237cce1fdba63608732163f978dd23",
+      "files": 431,
+      "proven": 2,
+      "questions": 0,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 26,
+      "rule_errors": 0,
+      "by_rule": {
+        "python-core/redundant-pass": {
+          "proven": 2,
+          "questions": 0,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": [
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "docs/build_manpage.py",
+          "line": 191,
+          "fingerprint": "bca828d988eb95e73a5c94b7636433ae"
+        },
+        {
+          "rule": "python-core/redundant-pass",
+          "file": "docs/build_manpage.py",
+          "line": 195,
+          "fingerprint": "907bf0c5f24b202d464d1e3724561170"
+        }
+      ]
+    },
+    "nvm": {
+      "commit": "4e8758a801eea9479b32a904f31093e410ddaba4",
+      "files": 528,
+      "proven": 0,
+      "questions": 15,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 2,
+      "rule_errors": 0,
+      "by_rule": {
+        "shell-core/unquoted-rm": {
+          "proven": 0,
+          "questions": 15,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": []
+    },
+    "Alamofire": {
+      "commit": "6c2892ea5adb5a03fa81c510933dd782c5ddd9cb",
+      "files": 533,
+      "proven": 0,
+      "questions": 1,
+      "explained": 0,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 5,
+      "rule_errors": 0,
+      "by_rule": {
+        "swift-core/fixed-wait": {
+          "proven": 0,
+          "questions": 1,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": []
+    },
+    "okio": {
+      "commit": "1926f022425ccd85ee558c558f0a5b7b24826a57",
+      "files": 413,
+      "proven": 0,
+      "questions": 30,
+      "explained": 1,
+      "refused": 0,
+      "suppressed": 0,
+      "unparsed": 6,
+      "rule_errors": 0,
+      "by_rule": {
+        "java-core/empty-catch": {
+          "proven": 0,
+          "questions": 0,
+          "explained": 1,
+          "refused": 0
+        },
+        "kotlin-core/fixed-wait": {
+          "proven": 0,
+          "questions": 28,
+          "explained": 0,
+          "refused": 0
+        },
+        "shell-core/unquoted-rm": {
+          "proven": 0,
+          "questions": 2,
+          "explained": 0,
+          "refused": 0
+        }
+      },
+      "proven_corrections": []
+    }
+  }
+}

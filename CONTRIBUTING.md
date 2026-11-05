@@ -49,7 +49,13 @@ $ cargo clippy --all-targets -- -D warnings
 $ cargo test --workspace
 $ cargo run -q -- pack lint --deny-warnings     # if packs changed
 $ UPDATE_GOLDEN=1 cargo test -p codemosis-cli --test demo   # if generated docs changed; review the diff
+$ scripts/field-test.sh --compare scripts/field-test-baseline.json   # if rules or the engine changed
 ```
+
+The last one checks 20 real projects (about a minute, executing nothing of
+theirs). If it reports a new proven correction, read it; if it is right,
+update the baseline with `--summary-json scripts/field-test-baseline.json`
+in the same pull request, so the reviewer reads it too.
 
 Then open a pull request using the template, and add a line to
 [CHANGELOG.md](CHANGELOG.md) for anything users will notice.

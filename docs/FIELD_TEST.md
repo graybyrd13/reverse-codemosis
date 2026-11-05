@@ -232,4 +232,46 @@ $ scripts/field-test.sh /tmp/field       # or anywhere else
 
 It prints the results table above; the JSON reports sit next to the clones.
 To add a repository, add a line with its name, `owner/repo` and full commit
-hash to the script.
+hash to `scripts/field-test-pins.txt`.
+
+### The precision ledger
+
+`scripts/field-test-baseline.json` records these results as reviewed: the
+counts per repository and rule, and every proven correction by fingerprint
+(each one read and judged correct). CI's field-test workflow compares every
+change to the engine or the packs against it:
+
+```console
+$ scripts/field-test.sh --compare scripts/field-test-baseline.json
+...
+Precision ledger against scripts/field-test-baseline.json
+  proven corrections                  127 → 127
+  questions per 1000 files          11.87 → 11.87
+  explanations per 1000 files        0.83 → 0.83
+  corrections refused                   2 → 2
+  files the grammar cannot parse       44 → 44
+  rule errors                           0 → 0
+ok: no unreviewed correction and no unexplained rise in noise
+```
+
+It fails on a proven correction that is not in the baseline (read it, then
+update the baseline in the same pull request), on a rise of more than 10%
+in questions or explanations per thousand files (say why in the pull
+request), and on more parse failures or rule errors. Fewer questions or a
+lost correction is reported for the baseline to be updated. To update it:
+
+```console
+$ scripts/field-test.sh --summary-json scripts/field-test-baseline.json
+```
+
+### Real oracles
+
+`scripts/field-test-oracle.sh NAME` runs `codemosis fix` on cobra, gin or
+ripgrep with the project's own build and tests as the oracle, then checks
+without trusting the engine: `proof verify` replays the certificate, the
+tests run again and must pass if they passed before, and every file the
+formatter accepted before must still be accepted. **It runs the project's
+code**, so it is meant for CI's disposable runners (the `oracle` job of
+`.github/workflows/field-test.yml`, weekly and on pull requests that touch
+the engine or the packs). `--from DIR` runs it on a local repository
+instead, for example your own.

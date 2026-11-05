@@ -17,7 +17,7 @@ and exposed what to do next:
 | Evidence from the field test | Leads to |
 |---|---|
 | A correct ripgrep correction breaks its 79-column `rustfmt` check | formatter-aware corrections (M1, **done**) |
-| Projects' test suites were not run as the oracle (third-party code) | a sandboxed field-test job (M1) |
+| Projects' test suites were not run as the oracle (third-party code) | a sandboxed field-test job (M1, **built**) |
 | 105 of 160 facts are not proven necessary by any counterexample | proof coverage (M1) |
 | `bool(...)` and `not (a != b)` are kept because types are unknown | type facts (M2) |
 | Binding analysis exists only for Python | scope graphs for more languages (M2) |
@@ -46,7 +46,7 @@ formatter, demonstrated continuously on real repositories.
    formatter supports it (clang-format `--lines`, Prettier
    `--range-start`), so a formatter that would also rewrite distant lines
    can still lay out the correction alone.
-2. **Field test in CI, with real oracles.** A weekly workflow
+2. **Field test in CI, with real oracles (built; first runs pending).** A weekly workflow
    (`.github/workflows/field-test.yml`) runs `codemosis fix` on the pinned
    repositories inside per-ecosystem containers (dependencies installed,
    then the network cut off), with each project's own test command as the
@@ -54,13 +54,23 @@ formatter, demonstrated continuously on real repositories.
    any accepted step that regressed a test.
    *Exit:* at least six repositories in four ecosystems run end to end;
    zero accepted regressions over four consecutive weeks.
-3. **Precision ledger.** `scripts/field-test.sh` writes a machine-readable
+   *Delivered:* `scripts/field-test-oracle.sh` and the `oracle` job for
+   cobra, gin and ripgrep (Go and Cargo: dependencies fetched, then the
+   package managers offline); each run ends with `proof verify`, an
+   independent re-run of the tests and the formatter check. Next: Python
+   and JavaScript projects (requests, click, express), which need their
+   test dependencies installed per project.
+3. **Precision ledger (done).** `scripts/field-test.sh` writes a machine-readable
    summary, and CI compares it with a checked-in baseline: questions per
    thousand files, explanations per thousand files, proven corrections,
    and corrections reviewed correct. A rise in noise needs a stated reason
    in the pull request.
    *Exit:* the baseline is committed, and CI fails on an unexplained
    increase of more than 10%.
+   *Delivered:* `--summary-json` and `--compare`;
+   `scripts/field-test-baseline.json` holds all 127 reviewed corrections by
+   fingerprint, so any new proven correction fails CI until someone has read
+   it.
 4. **Proof coverage.** Every `where` fact in the built-in packs either has
    a counterexample that needs it (`pack test --mutations`) or is removed.
    These are ideal first contributions; see the list it prints.
@@ -134,9 +144,9 @@ Concrete, ordered, each small enough for one pull request:
 
 1. ~~`engine/src/formatter.rs`~~ (done: all six formatters, refuse and
    reformat).
-2. `.github/workflows/field-test.yml` for the Go and Rust repositories
-   (cobra, gin, ripgrep), whose test suites need no services (M1.2).
-3. `scripts/field-test.sh --summary-json` and a committed baseline (M1.3).
+2. ~~`.github/workflows/field-test.yml`~~ (built for cobra, gin and
+   ripgrep; watch its first runs).
+3. ~~`scripts/field-test.sh --summary-json` and a committed baseline~~ (done).
 4. Counterexamples for the unproven facts in `javascript-core` and
    `go-core`, tagged "good first issue" (M1.4).
 5. zsh detection and routing to the lexical tier (M2.3).
