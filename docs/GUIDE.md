@@ -320,7 +320,7 @@ link, and never touches generated or vendored files.
 
 | Command | What it does |
 |---|---|
-| `check [PATH]` | report every finding; changes nothing |
+| `check [PATH]` | report every finding; changes nothing (`--file F`, `--changed`, `--format compact`) |
 | `fix [PATH]` | apply every provable correction, verifying each step |
 | `ask [PATH]` | ask the open questions one at a time |
 | `answer ID ANSWER` | record one answer |
@@ -333,7 +333,10 @@ link, and never touches generated or vendored files.
 | `proof verify CERT` | replay a proof certificate |
 | `doctor [PATH]` | check configuration, packs, oracle and toolchains |
 | `init [PATH]` | write a `codemosis.toml` with the detected commands |
-| `lsp` | the language server, for editors |
+| `lsp` | the language server, for editors ([editors](EDITORS.md)) |
+| `mcp` | the MCP server, for agentic coding tools ([agent tools](AGENT_TOOLS.md)) |
+| `hook` | for agents' hooks: check what the agent just changed |
+| `integrate [TOOL]` | connect an agent or editor: Claude Code, Cursor, VS Code, Gemini CLI, Zed, Aider... |
 | `pack test\|lint\|docs\|new` | work with packs ([tutorial](TUTORIAL.md)) |
 | `tree FILE` | print a syntax tree, to write rule shapes |
 | `facts` | the fact vocabulary for rules |

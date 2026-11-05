@@ -1,0 +1,17 @@
+[package]
+name = "zed-codemosis"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Reverse Codemosis for Zed: the language server and the MCP context server."
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[dependencies]
+zed_extension_api = "0.7.0"
+
+# Built on its own (for wasm32-wasip1), not as part of the main workspace.
+[workspace]

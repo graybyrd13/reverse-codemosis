@@ -1,0 +1,10 @@
+{
+  "name": "codemosis",
+  "version": "0.1.0",
+  "description": "Reverse Codemosis for Claude Code: checks every edit, applies only corrections it can prove (verified by your build and tests), and brings the decisions that are yours back to you.",
+  "author": { "name": "Reverse Codemosis contributors" },
+  "homepage": "https://github.com/graybyrd13/reverse-codemosis",
+  "repository": "https://github.com/graybyrd13/reverse-codemosis",
+  "license": "MIT OR Apache-2.0",
+  "keywords": ["static-analysis", "correctness", "linting", "mcp", "proofs"]
+}

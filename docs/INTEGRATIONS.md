@@ -74,49 +74,17 @@ repos:
 Every format carries a stable fingerprint per finding (independent of line
 numbers), so hosts track findings across commits.
 
+## Agentic coding tools
+
+`codemosis mcp` (an MCP server), `codemosis hook` (for agents' hooks) and `codemosis integrate <tool>` connect
+Claude Code, Cursor, GitHub Copilot, Codex, Gemini CLI, Zed, Aider and others. See the
+[agent tools guide](AGENT_TOOLS.md).
+
 ## Editors
 
-`codemosis lsp` is a Language Server: diagnostics as you type, hover for the
-rule's explanation, proven corrections as quick fixes, "fix all" as a source
-action, and questions answered from the editor (recorded in
-`.codemosis/answers.toml` exactly as `codemosis answer` would). It never runs
-your build or tests and never writes files itself; `codemosis fix` remains
-the command that verifies corrections.
-
-**Neovim** (0.10+):
-
-```lua
-vim.api.nvim_create_autocmd("FileType", {
-  callback = function(args)
-    vim.lsp.start({
-      name = "codemosis",
-      cmd = { "codemosis", "lsp" },
-      root_dir = vim.fs.root(args.buf, { "codemosis.toml", ".git" }),
-    })
-  end,
-})
-```
-
-**Helix** (`languages.toml`):
-
-```toml
-[language-server.codemosis]
-command = "codemosis"
-args = ["lsp"]
-
-[[language]]
-name = "python"
-language-servers = ["pyright", "codemosis"]
-```
-
-**Emacs** (eglot):
-
-```elisp
-(add-to-list 'eglot-server-programs '((python-mode js-mode rust-mode) . ("codemosis" "lsp")))
-```
-
-**VS Code**: any generic LSP client extension can run `codemosis lsp`; point
-its server command at the `codemosis` binary.
+`codemosis lsp` is a language server: findings as you type, proven corrections as quick fixes, questions
+answered from the editor, hover explanations. There are extensions for VS Code and Zed, a Neovim plugin, an
+Emacs package, and setups for Vim, Helix, Sublime Text and JetBrains IDEs: see [Editors](EDITORS.md).
 
 ## Editing configuration and packs
 

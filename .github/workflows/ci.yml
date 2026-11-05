@@ -72,6 +72,34 @@ jobs:
       - name: One broken repository, one command, a green test suite
         run: scripts/demo.sh
 
+  editors:
+    name: editor extensions (VS Code, Zed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: VS Code extension (type-check, bundle, package)
+        working-directory: editors/vscode
+        run: |
+          npm ci --no-audit --no-fund
+          npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codemosis-vscode
+          path: editors/vscode/codemosis.vsix
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+          components: clippy, rustfmt
+      - name: Zed extension (WebAssembly)
+        working-directory: editors/zed
+        run: |
+          cargo fmt --check
+          cargo clippy --target wasm32-wasip1 -- -D warnings
+          cargo build --release --target wasm32-wasip1
+
   docs:
     name: API documentation
     runs-on: ubuntu-latest

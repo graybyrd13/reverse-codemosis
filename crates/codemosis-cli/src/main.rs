@@ -2,6 +2,7 @@
 
 mod agent;
 mod doctor;
+mod integrate;
 mod interactive;
 mod lsp;
 mod map;
@@ -260,6 +261,17 @@ enum Command {
         /// Project directory (default: the current directory).
         #[arg(long)]
         path: Option<PathBuf>,
+    },
+    /// Connect Reverse Codemosis to an agentic coding tool or editor by writing
+    /// its project configuration (merged, never replaced). Without a tool,
+    /// lists them: claude-code, cursor, vscode, gemini, zed, continue,
+    /// opencode, aider, agents-md, codex, windsurf, cline.
+    Integrate {
+        /// The tool to connect.
+        tool: Option<String>,
+        /// Project root.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
     },
     /// For agentic coding tools' hooks: check what the agent just changed.
     /// Reads the tool's hook payload (JSON) from standard input; checks the
@@ -623,6 +635,10 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         Command::Lock { path, check } => lock_cmd(&path, check),
         Command::Lsp => {
             lsp::serve()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Integrate { tool, path } => {
+            integrate::integrate(&canonical(&path)?, tool.as_deref())?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Mcp { path } => {

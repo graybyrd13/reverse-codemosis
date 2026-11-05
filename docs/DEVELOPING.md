@@ -40,14 +40,20 @@ reverse-codemosis/
 │   │   └── tests/formatting.rs  the formatting contract end to end (needs gofmt)
 │   └── codemosis-cli/         the `codemosis` command
 │       ├── src/main.rs          commands and their options
-│       ├── src/lsp.rs, doctor.rs, map.rs, interactive.rs, packdocs.rs, scaffold.rs
-│       └── tests/               demo (goldens), policy, proof, lsp
+│       ├── src/lsp.rs           the language server, for editors
+│       ├── src/mcp.rs           the MCP server, for agentic coding tools
+│       ├── src/agent.rs         scoped checks, compact output, `codemosis hook`
+│       ├── src/integrate.rs     `codemosis integrate <tool>`
+│       ├── src/doctor.rs, map.rs, interactive.rs, packdocs.rs, scaffold.rs
+│       └── tests/               demo (goldens), policy, proof, lsp, mcp, agent, docs_links
 ├── packs/                     built-in packs, embedded into the binary at build time
 ├── data/linguist/             Linguist's languages.yml, read by build.rs
 ├── examples/                  the two demonstrations and their golden diffs
 ├── docs/                      this documentation; FACTS.md, LANGUAGES.md, packs/ are generated
 ├── schemas/                   generated JSON Schemas of the file formats
 ├── scripts/                   demo.sh; field-test.sh (+ pins, baseline, summary); field-test-oracle.sh
+├── editors/                   VS Code and Zed extensions, Neovim, Emacs, Helix, Sublime
+├── integrations/              agentic coding tools: the Claude Code plugin (.claude-plugin/ lists it)
 ├── action.yml, templates/, .pre-commit-hooks.yaml   CI integrations
 └── rfcs/, GOVERNANCE.md, SECURITY.md, CHANGELOG.md
 ```

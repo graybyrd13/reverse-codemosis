@@ -5,7 +5,9 @@
 | Document | For |
 |---|---|
 | [User guide](GUIDE.md) | everything about `map`, `check`, questions, `fix`, proofs, configuration and adoption |
-| [Integrations](INTEGRATIONS.md) | GitHub Actions, GitLab, pre-commit, SARIF, editors (LSP), schemas, shells |
+| [Integrations](INTEGRATIONS.md) | GitHub Actions, GitLab, pre-commit, SARIF, schemas, shells |
+| [Agent tools](AGENT_TOOLS.md) | Claude Code, Cursor, Copilot, Codex, Gemini CLI, Aider...: the MCP server, the hook, `integrate` |
+| [Editors](EDITORS.md) | VS Code, Zed, Neovim, Helix, Emacs, Sublime Text, JetBrains: the language server and extensions |
 | [Languages](LANGUAGES.md) | what each of the 845 languages gets (generated) |
 | [Built-in packs](packs/README.md) | every rule, with its explanation and proof (generated) |
 | [Field test](FIELD_TEST.md) | what it found, and did not find, on real open-source projects |

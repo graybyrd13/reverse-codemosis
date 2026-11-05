@@ -110,10 +110,17 @@ The precise model is in [docs/SEMANTICS.md](docs/SEMANTICS.md).
   vacuous asserts, empty catches, debugging leftovers, fixed waits in 48
   languages, merge conflicts, committed keys, and more.
   [Reference](docs/packs/README.md).
+- **Agents**: an MCP server (`codemosis mcp`) and a hook (`codemosis hook`)
+  for Claude Code, Cursor, Copilot, Codex, Gemini CLI, Zed, Aider and more.
+  Agents get the proven corrections, and bring the questions back to you.
+  `codemosis integrate <tool>` sets it up. [Agent tools](docs/AGENT_TOOLS.md).
+- **Editors**: a language server with extensions for VS Code and Zed, and
+  setups for Neovim, Helix, Emacs, Sublime Text and JetBrains.
+  [Editors](docs/EDITORS.md).
 - **Workflows**: SARIF for code scanning, GitLab Code Quality, GitHub
-  annotations and suggested changes, a GitHub Action, pre-commit hooks, a
-  language server for editors, baselines and suppressions for adopting it
-  on an existing codebase. [Integrations](docs/INTEGRATIONS.md).
+  annotations and suggested changes, a GitHub Action, pre-commit hooks,
+  baselines and suppressions for adopting it on an existing codebase.
+  [Integrations](docs/INTEGRATIONS.md).
 
 The rules are deliberately narrow: each corrects one well-understood
 mistake, and only where it can prove the correction. On twenty well-known
@@ -138,7 +145,9 @@ that begins only once correction is trusted completely.
 | I want to... | Read |
 |---|---|
 | use it on my project | [User guide](docs/GUIDE.md) |
-| run it in CI or my editor | [Integrations](docs/INTEGRATIONS.md) |
+| run it in CI | [Integrations](docs/INTEGRATIONS.md) |
+| use it with Claude Code, Cursor, Copilot or another agent | [Agent tools](docs/AGENT_TOOLS.md) |
+| use it in my editor | [Editors](docs/EDITORS.md) |
 | write a rule | [Tutorial](docs/TUTORIAL.md), then [pack format](docs/PACK_FORMAT.md) and [facts](docs/FACTS.md) |
 | work on the engine | [Developer guide](docs/DEVELOPING.md), [architecture](docs/ARCHITECTURE.md) |
 | know exactly what "proven" means | [Semantics](docs/SEMANTICS.md) |

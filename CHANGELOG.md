@@ -44,6 +44,20 @@ follows [Semantic Versioning](https://semver.org/) as described in
 - `.github/workflows/field-test.yml`: the ledger on pull requests, and
   `codemosis fix` on cobra, gin and ripgrep with their own tests as the
   oracle, re-checked independently (`scripts/field-test-oracle.sh`).
+- Agentic coding tools: `codemosis mcp` (an MCP server with check, fix,
+  answer, explain, map, rules and verify_proof), `codemosis hook` (reports
+  findings on the lines an agent just changed, with what to do; exit 2 feeds
+  it back), `codemosis integrate <tool>` (writes Claude Code, Cursor, VS
+  Code, Gemini CLI, Zed, Continue, opencode, Aider and AGENTS.md
+  configuration, merging into existing files), a Claude Code plugin with a
+  marketplace entry, and `check --file/--changed/--format compact`.
+- Editors: a VS Code extension (language client, `codemosis mcp` offered
+  to Copilot's agent mode, commands, schema validation), a Zed extension
+  (language server and MCP context server), a Neovim plugin (LSP,
+  `:Codemosis`, `:CodemosisQuickfix`), an Emacs package (lsp-mode add-on,
+  eglot, compilation buffer), Helix and Sublime Text settings, and
+  instructions for Vim and JetBrains IDEs (docs/EDITORS.md). CI builds and
+  packages both extensions.
 - Proof coverage: every one of the 144 facts in the built-in packs is now
   proven necessary by a counterexample (from 55 of 160). Implied facts
   were removed, and table invariants are tested. `pack test --mutations
