@@ -272,6 +272,20 @@ $ scripts/field-test.sh --summary-json scripts/field-test-baseline.json
 
 ### Real oracles
 
+The first run in CI (pull request #2), each project's own build and test
+suite deciding every step:
+
+| Project | Correction kept | Tests before → after | `proof verify` | Tests re-run | Formatter |
+|---|---|---|---|---|---|
+| cobra | `go-core/bool-literal-comparison` | 429 → 429 | verified | pass | gofmt clean |
+| gin | `go-core/bool-literal-comparison` | 733 → 733 | verified | pass | gofmt clean |
+| ripgrep | `rust-core/needless-return` | 446 → 446 | verified | pass | rustfmt clean |
+
+ripgrep's `manual-assert` correction was refused by the formatting contract,
+as intended ("crates/ignore/src/dir.rs is kept formatted with rustfmt, and
+after the correction rustfmt would rewrite line 208"). No accepted step
+regressed a test.
+
 `scripts/field-test-oracle.sh NAME` runs `codemosis fix` on cobra, gin or
 ripgrep with the project's own build and tests as the oracle, then checks
 without trusting the engine: `proof verify` replays the certificate, the

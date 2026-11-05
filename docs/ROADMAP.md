@@ -46,7 +46,7 @@ formatter, demonstrated continuously on real repositories.
    formatter supports it (clang-format `--lines`, Prettier
    `--range-start`), so a formatter that would also rewrite distant lines
    can still lay out the correction alone.
-2. **Field test in CI, with real oracles (built; first runs pending).** A weekly workflow
+2. **Field test in CI, with real oracles (built; first run green).** A weekly workflow
    (`.github/workflows/field-test.yml`) runs `codemosis fix` on the pinned
    repositories inside per-ecosystem containers (dependencies installed,
    then the network cut off), with each project's own test command as the
@@ -57,7 +57,9 @@ formatter, demonstrated continuously on real repositories.
    *Delivered:* `scripts/field-test-oracle.sh` and the `oracle` job for
    cobra, gin and ripgrep (Go and Cargo: dependencies fetched, then the
    package managers offline); each run ends with `proof verify`, an
-   independent re-run of the tests and the formatter check. Next: Python
+   independent re-run of the tests and the formatter check. First run: three
+   corrections kept with 429, 733 and 446 tests unchanged, one refused by
+   the formatting contract, every certificate verified. Next: Python
    and JavaScript projects (requests, click, express), which need their
    test dependencies installed per project.
 3. **Precision ledger (done).** `scripts/field-test.sh` writes a machine-readable

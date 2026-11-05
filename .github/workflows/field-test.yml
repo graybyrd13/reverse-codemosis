@@ -74,7 +74,11 @@ jobs:
           cache: false
       - uses: Swatinem/rust-cache@v2
       - name: codemosis fix, proof verify, tests and formatter re-checked
-        run: scripts/field-test-oracle.sh ${{ matrix.repo }} "$RUNNER_TEMP/oracle"
+        run: |
+          # setup-go's problem matcher reads "file.go: ..." report lines as
+          # compiler errors; the job's own exit status is what counts.
+          echo "::remove-matcher owner=go::"
+          scripts/field-test-oracle.sh ${{ matrix.repo }} "$RUNNER_TEMP/oracle"
       - name: Job summary
         if: always()
         run: |

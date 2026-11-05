@@ -648,7 +648,7 @@ impl CompiledRule {
                     return Ok(());
                 }
             }
-            raw.push(self.raw_match(&ctx).map_err(&rule_err)?);
+            raw.push(self.raw_match(&ctx).map_err(rule_err)?);
             Ok(())
         };
 
