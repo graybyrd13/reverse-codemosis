@@ -5,6 +5,7 @@ mod doctor;
 mod interactive;
 mod lsp;
 mod map;
+mod mcp;
 mod packdocs;
 mod scaffold;
 
@@ -252,6 +253,14 @@ enum Command {
     },
     /// Run the language server (LSP over standard input and output) for editors.
     Lsp,
+    /// Run the Model Context Protocol server (over standard input and output)
+    /// for agentic coding tools: check, fix, answer, explain, map, rules and
+    /// verify_proof as tools.
+    Mcp {
+        /// Project directory (default: the current directory).
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
     /// For agentic coding tools' hooks: check what the agent just changed.
     /// Reads the tool's hook payload (JSON) from standard input; checks the
     /// files it names, or every changed file if it names none; reports only
@@ -614,6 +623,10 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         Command::Lock { path, check } => lock_cmd(&path, check),
         Command::Lsp => {
             lsp::serve()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Mcp { path } => {
+            mcp::serve(path)?;
             Ok(ExitCode::SUCCESS)
         }
         Command::Hook {
@@ -1029,14 +1042,13 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
     let oracle = (!no_verify && !dry_run).then(|| oracle_from(root, &section));
     let text = format == Format::Text;
     let languages = ws.project.languages();
-    let shown = applicable(&ws.packs, &languages);
     if text {
         print!(
             "{}",
             report::header(
                 &report::Header {
                     root: &display_root(root),
-                    packs: &shown,
+                    packs: &applicable(&ws.packs, &languages),
                     build: oracle.as_ref().and(section.build.as_deref()),
                     test: oracle.as_ref().and(section.test.as_deref()),
                     detected,
@@ -1046,85 +1058,42 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         );
         let _ = std::io::stdout().flush();
     }
-    let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
-    let policy = ws.policy.clone();
-    let answers_ledger = ws.answers.clone();
-    let answers = |id: &str| answers_ledger.get(id);
-    // Formatters that can run the project's own code wait for the same
-    // consent as its build and tests.
-    let formatters = codemosis_engine::formatter::Formatters::new(
-        root,
-        &ws.config.format,
-        oracle.as_ref().is_some_and(|o| o.is_configured()),
-    );
-    let session = Session {
-        project: &mut ws.project,
-        rules,
-        answers: &answers,
-        oracle: oracle.as_ref(),
-        policy: Some(&policy),
-        formatters: Some(&formatters),
-        options: Options {
-            write: !dry_run,
-            max_steps,
-        },
-    };
     let live = std::io::stderr().is_terminal() && text;
     if live && oracle.as_ref().is_some_and(|o| o.is_configured()) {
         eprintln!("{}", e.dim("  measuring: running the build and tests..."));
     }
-    let report = session.run(&mut |ev| {
-        if !live {
-            return;
-        }
-        match ev {
-            Event::Baseline(_) => eprintln!("{}", e.dim("  baseline measured; correcting...")),
-            Event::Step(st) => eprintln!(
-                "{}",
-                e.dim(&format!(
-                    "  ✓ {} {} ({} change(s))",
-                    st.number,
-                    st.rule,
-                    st.findings.len()
-                ))
-            ),
-            Event::Rejected(r) => eprintln!("{}", e.dim(&format!("  ✗ {} rejected", r.finding.rule))),
-        }
-    })?;
-    let mut certificate_path = None;
-    if !dry_run && !report.steps.is_empty() {
-        let cert = codemosis_engine::proof::Certificate::of(
-            &report,
-            root,
-            &ws.project,
-            &ws.packs,
-            &ws.answers,
-            oracle.as_ref().map(|_| (&section.build, &section.test)),
-        );
-        if let Some(cert) = cert.filter(|_| proof) {
-            let rel = cert.file_name();
-            match codemosis_engine::fsguard::write_confined(root, &rel, cert.to_json().as_bytes()) {
-                Ok(()) => certificate_path = Some(rel),
-                Err(err) => eprintln!("{} cannot write the proof certificate: {err}", e.yellow("warning:")),
+    let (report, certificate_path) = run_session(
+        root,
+        &mut ws,
+        only,
+        SessionMode {
+            write: !dry_run,
+            max_steps,
+            proof,
+            oracle: oracle.as_ref(),
+            section: &section,
+        },
+        e,
+        &mut |ev| {
+            if !live {
+                return;
             }
-        }
-        let logged = codemosis_engine::audit::record(
-            root,
-            "fix",
-            serde_json::json!({
-                "steps": report.steps.len(),
-                "rejected": report.rejected.len(),
-                "files": report.files_changed,
-                "distance_before": report.distance_before,
-                "distance_after": report.distance_after,
-                "verified": report.verified,
-                "proof": certificate_path.as_ref().map(|p| p.display().to_string()),
-            }),
-        );
-        if let Err(err) = logged {
-            eprintln!("{} cannot write the audit log: {err}", e.yellow("warning:"));
-        }
-    }
+            match ev {
+                Event::Baseline(_) => eprintln!("{}", e.dim("  baseline measured; correcting...")),
+                Event::Step(st) => eprintln!(
+                    "{}",
+                    e.dim(&format!(
+                        "  ✓ {} {} ({} change(s))",
+                        st.number,
+                        st.rule,
+                        st.findings.len()
+                    ))
+                ),
+                Event::Rejected(r) => eprintln!("{}", e.dim(&format!("  ✗ {} rejected", r.finding.rule))),
+            }
+        },
+    )?;
+    let shown = applicable(&ws.packs, &languages);
     match format {
         Format::Json => println!("{}", fix_json(&report)?),
         Format::Markdown => println!("{}", report::session_markdown(&report, &display_root(root), &shown)),
@@ -1152,6 +1121,91 @@ fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style,
         );
     }
     Ok(ExitCode::SUCCESS)
+}
+
+/// How a correction session runs.
+struct SessionMode<'a> {
+    /// Write the corrections (and verify them, if there is an oracle).
+    write: bool,
+    max_steps: usize,
+    /// Write a proof certificate when something changed.
+    proof: bool,
+    /// The build and tests that verify each step, and their commands.
+    oracle: Option<&'a codemosis_engine::oracle::Oracle>,
+    section: &'a config::OracleSection,
+}
+
+/// Run the correction loop over a workspace and, when it wrote something,
+/// record its proof certificate and an audit entry. Prints nothing to
+/// standard output, so the MCP server can share it.
+fn run_session(
+    root: &Path,
+    ws: &mut Workspace,
+    only: &[String],
+    mode: SessionMode,
+    e: Style,
+    on_event: &mut dyn FnMut(Event),
+) -> Result<(codemosis_engine::session::Report, Option<PathBuf>)> {
+    let (oracle, section) = (mode.oracle, mode.section);
+    let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
+    let policy = ws.policy.clone();
+    let answers_ledger = ws.answers.clone();
+    let answers = |id: &str| answers_ledger.get(id);
+    // Formatters that can run the project's own code wait for the same
+    // consent as its build and tests.
+    let formatters = codemosis_engine::formatter::Formatters::new(
+        root,
+        &ws.config.format,
+        oracle.is_some_and(|o| o.is_configured()),
+    );
+    let session = Session {
+        project: &mut ws.project,
+        rules,
+        answers: &answers,
+        oracle,
+        policy: Some(&policy),
+        formatters: Some(&formatters),
+        options: Options {
+            write: mode.write,
+            max_steps: mode.max_steps,
+        },
+    };
+    let report = session.run(on_event)?;
+    let mut certificate_path = None;
+    if mode.write && !report.steps.is_empty() {
+        let cert = codemosis_engine::proof::Certificate::of(
+            &report,
+            root,
+            &ws.project,
+            &ws.packs,
+            &ws.answers,
+            oracle.map(|_| (&section.build, &section.test)),
+        );
+        if let Some(cert) = cert.filter(|_| mode.proof) {
+            let rel = cert.file_name();
+            match codemosis_engine::fsguard::write_confined(root, &rel, cert.to_json().as_bytes()) {
+                Ok(()) => certificate_path = Some(rel),
+                Err(err) => eprintln!("{} cannot write the proof certificate: {err}", e.yellow("warning:")),
+            }
+        }
+        let logged = codemosis_engine::audit::record(
+            root,
+            "fix",
+            serde_json::json!({
+                "steps": report.steps.len(),
+                "rejected": report.rejected.len(),
+                "files": report.files_changed,
+                "distance_before": report.distance_before,
+                "distance_after": report.distance_after,
+                "verified": report.verified,
+                "proof": certificate_path.as_ref().map(|p| p.display().to_string()),
+            }),
+        );
+        if let Err(err) = logged {
+            eprintln!("{} cannot write the audit log: {err}", e.yellow("warning:"));
+        }
+    }
+    Ok((report, certificate_path))
 }
 
 /// The JSON Schemas of every file format: (name, file it describes, schema).
@@ -1269,9 +1323,17 @@ fn fix_json(report: &codemosis_engine::session::Report) -> Result<String> {
     Ok(serde_json::to_string_pretty(&v)?)
 }
 
-fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Style) -> Result<ExitCode> {
-    let root = canonical(path)?;
-    let mut ws = Workspace::open(&root, &[])?;
+/// What recording an answer did.
+struct Recorded {
+    question: String,
+    answer: String,
+    /// The answer asks for a change, which `fix` will make.
+    changes: bool,
+}
+
+/// Record a person's answer to an open question in `.codemosis/answers.toml`.
+fn record_answer(root: &Path, id: &str, answer: &str, note: Option<String>) -> Result<Recorded> {
+    let mut ws = Workspace::open(root, &[])?;
     let scan = ws.scan();
     let finding = scan
         .findings
@@ -1297,28 +1359,37 @@ fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Styl
     }
     let changes = option.changes;
     let answer = option.answer.clone();
-    let answer = answer.as_str();
     ws.answers.set(Answer {
         id: q.id.clone(),
         rule: finding.rule.clone(),
         location: format!("{}:{}", finding.file.display(), finding.span.start.line),
         question: q.text.clone(),
-        answer: answer.to_string(),
+        answer: answer.clone(),
         note,
     });
-    ws.answers.save(&root).map_err(|e| anyhow!(e))?;
+    ws.answers.save(root).map_err(|e| anyhow!(e))?;
     let _ = codemosis_engine::audit::record(
-        &root,
+        root,
         "answer",
         serde_json::json!({"id": q.id, "rule": finding.rule, "answer": answer}),
     );
+    Ok(Recorded {
+        question: q.id.clone(),
+        answer,
+        changes,
+    })
+}
+
+fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Style) -> Result<ExitCode> {
+    let root = canonical(path)?;
+    let r = record_answer(&root, id, answer, note)?;
     println!(
         "Recorded {} to {} in {}.",
-        s.bold(answer),
-        q.id,
+        s.bold(&r.answer),
+        r.question,
         codemosis_engine::answers::FILE
     );
-    if changes {
+    if r.changes {
         println!("Run `codemosis fix` to apply the correction.");
     } else {
         println!("The code stays as it is and will not be reported again.");
@@ -1333,11 +1404,14 @@ fn find_rule<'p>(packs: &'p [Pack], id: &str) -> Option<&'p codemosis_core::Comp
         .find(|r| r.id == id || r.spec.id == id)
 }
 
-fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
+/// A rule's explanation: what it finds, why, its facts, question and proof.
+fn explain_text(id: &str, extra: &[PathBuf], s: Style) -> Result<String> {
+    use std::fmt::Write as _;
+    let mut out = String::new();
     let packs = all_packs(extra)?;
     let rule = find_rule(&packs, id).ok_or_else(|| anyhow!("no rule named '{id}'; `codemosis rules` lists them"))?;
     let spec = &rule.spec;
-    println!("{}  {}", s.bold(&rule.id), spec.title);
+    let _ = writeln!(out, "{}  {}", s.bold(&rule.id), spec.title);
     let sem = spec.semantics.map(|x| x.describe()).unwrap_or("");
     let kind = match (&spec.fix, &spec.ask) {
         (Some(_), None) => format!("corrects automatically ({sem})"),
@@ -1355,14 +1429,14 @@ fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
     } else {
         rule.languages.iter().map(|l| l.id()).collect::<Vec<_>>().join(", ")
     };
-    println!("  category  {} — {}", spec.category, spec.category.describe());
-    println!("  language  {target}");
-    println!("  action    {kind}");
+    let _ = writeln!(out, "  category  {} — {}", spec.category, spec.category.describe());
+    let _ = writeln!(out, "  language  {target}");
+    let _ = writeln!(out, "  action    {kind}");
     if !spec.cwe.is_empty() {
-        println!("  weakness  {}", spec.cwe.join(", "));
+        let _ = writeln!(out, "  weakness  {}", spec.cwe.join(", "));
     }
     if !spec.tags.is_empty() {
-        println!("  tags      {}", spec.tags.join(", "));
+        let _ = writeln!(out, "  tags      {}", spec.tags.join(", "));
     }
     if let Some(d) = &spec.deprecated {
         let by = spec
@@ -1370,62 +1444,71 @@ fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
             .as_deref()
             .map(|r| format!(" Use {r} instead."))
             .unwrap_or_default();
-        println!("  {}  {d}{by}", s.yellow("deprecated"));
+        let _ = writeln!(out, "  {}  {d}{by}", s.yellow("deprecated"));
     }
-    println!();
-    println!("{}\n", spec.explain.trim());
+    let _ = writeln!(out);
+    let _ = writeln!(out, "{}\n", spec.explain.trim());
     let (title, body) = match (&spec.shape, &spec.pattern, &spec.patterns) {
         (Some(q), _, _) => ("Shape", q.clone()),
         (_, Some(p), _) => ("Pattern", p.clone()),
         (_, _, Some(t)) => ("Patterns", format!("one per language, from the table '{t}'")),
         _ => ("Shape", String::new()),
     };
-    println!("{}", s.bold(title));
+    let _ = writeln!(out, "{}", s.bold(title));
     for l in body.trim().lines() {
-        println!("  {l}");
+        let _ = writeln!(out, "  {l}");
     }
     if !spec.facts.is_empty() {
-        println!("\n{}", s.bold("Facts that must hold"));
+        let _ = writeln!(out, "\n{}", s.bold("Facts that must hold"));
         for f in &spec.facts {
-            println!("  {f}");
+            let _ = writeln!(out, "  {f}");
         }
     }
     if let Some(ask) = &spec.ask {
-        println!("\n{}\n  {}", s.bold("Question"), ask.question);
+        let _ = writeln!(out, "\n{}\n  {}", s.bold("Question"), ask.question);
         for o in &ask.options {
-            println!("    {:<8} {}", o.answer, o.means);
+            let _ = writeln!(out, "    {:<8} {}", o.answer, o.means);
         }
     }
     if let Some(ex) = spec.examples.first() {
-        println!("\n{}", s.bold("Example"));
+        let _ = writeln!(out, "\n{}", s.bold("Example"));
         match &ex.after {
-            Some(after) => print!(
-                "{}",
-                codemosis_engine::session::unified_diff(
-                    ex.path
-                        .as_deref()
-                        .or(rule.languages.first().map(|l| l.example_file()))
-                        .unwrap_or("example"),
-                    &ex.before,
-                    after
-                )
-            ),
+            Some(after) => {
+                let _ = write!(
+                    out,
+                    "{}",
+                    codemosis_engine::session::unified_diff(
+                        ex.path
+                            .as_deref()
+                            .or(rule.languages.first().map(|l| l.example_file()))
+                            .unwrap_or("example"),
+                        &ex.before,
+                        after
+                    )
+                );
+            }
             None => {
                 for l in ex.before.lines() {
-                    println!("  {l}");
+                    let _ = writeln!(out, "  {l}");
                 }
             }
         }
     }
-    println!(
+    let _ = writeln!(
+        out,
         "\n{} example(s) and {} counterexample(s) prove this rule; run `codemosis pack test --rule {}`.",
         spec.examples.len(),
         spec.counterexamples.len(),
         spec.id
     );
     for r in &spec.references {
-        println!("See also: {r}");
+        let _ = writeln!(out, "See also: {r}");
     }
+    Ok(out)
+}
+
+fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
+    print!("{}", explain_text(id, extra, s)?);
     Ok(ExitCode::SUCCESS)
 }
 
