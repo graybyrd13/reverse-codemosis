@@ -32,6 +32,8 @@ Some waits are deliberate: rate limits, back-off, pacing. Only you know, so
 the engine asks. keep records the wait as intentional; remove deletes it.
 Waits inside loops and closures are not reported.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Shape**
 
 ```scheme
@@ -44,6 +46,7 @@ Waits inside loops and closures are not reported.
 
 **Facts that must hold**
 
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `matches(text(@function), '^((std::)?thread::sleep|(tokio::)?time::sleep|async_std::task::sleep)$')`
 - `!inside(@stmt, 'loop_expression', 'while_expression', 'for_expression', 'closure_expression')`
 - `occupies_lines(@stmt)`

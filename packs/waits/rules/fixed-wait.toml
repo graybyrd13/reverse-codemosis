@@ -14,10 +14,12 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine
 asks. keep records the wait as intentional; remove deletes the line. This
 rule reads text, so it cannot tell a wait inside a polling loop from one on
 its own: keep the ones that pace a loop.
+
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
 """
 patterns = "wait_patterns"
 focus = "@match"
-where = ["occupies_lines(@match)"]
+where = ["occupies_lines(@match)", "file_purpose() not in ['example', 'docs', 'benchmark']"]
 
 [ask]
 question = "Keep this fixed wait?"

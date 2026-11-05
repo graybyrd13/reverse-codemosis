@@ -114,6 +114,20 @@ fn capture_name(s: &str) -> Option<&str> {
     s.strip_prefix('@').filter(|n| !n.is_empty())
 }
 
+/// Tools whose suppression comments the engine understands (see `foreign`).
+pub const KNOWN_TOOLS: &[&str] = &[
+    "flake8",
+    "ruff",
+    "mypy",
+    "pyright",
+    "pylint",
+    "eslint",
+    "clang-tidy",
+    "golangci",
+    "shellcheck",
+    "clippy",
+];
+
 /// The most partial matches a shape may have in progress at once in a file.
 pub const MATCH_LIMIT: u32 = 1024;
 
@@ -475,6 +489,15 @@ impl CompiledRule {
         for c in &spec.cwe {
             if !cwe_re.is_match(c) {
                 problems.push(format!("cwe: '{c}' is not like CWE-396"));
+            }
+        }
+        for e in &spec.equivalents {
+            match e.split_once(':') {
+                Some((tool, code)) if KNOWN_TOOLS.contains(&tool) && !code.is_empty() => {}
+                _ => problems.push(format!(
+                    "equivalents: '{e}' is not `tool:code` with a tool among {}",
+                    KNOWN_TOOLS.join(", ")
+                )),
             }
         }
         if spec.replaced_by.is_some() && spec.deprecated.is_none() {
@@ -1206,7 +1229,12 @@ pub fn scan<'r>(
         }
     }
     supersede(&mut out.findings);
-    crate::suppress::apply_inline(project, &mut out.findings, &crate::suppress::today());
+    let equivalents: std::collections::HashMap<String, Vec<String>> = rules
+        .iter()
+        .filter(|r| !r.spec.equivalents.is_empty())
+        .map(|r| (r.id.clone(), r.spec.equivalents.clone()))
+        .collect();
+    crate::suppress::apply_inline(project, &mut out.findings, &crate::suppress::today(), &equivalents);
     sort_findings(&mut out.findings);
     out
 }

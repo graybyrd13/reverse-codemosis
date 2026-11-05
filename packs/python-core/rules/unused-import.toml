@@ -2,6 +2,7 @@ id = "unused-import"
 title = "Unused import"
 category = "waste"
 cwe = ["CWE-1164"]
+equivalents = ["flake8:F401", "pylint:unused-import", "pylint:W0611"]
 semantics = "preserved"
 summary = "`${name}` is imported but never used."
 explain = """

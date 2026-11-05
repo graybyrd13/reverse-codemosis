@@ -2,6 +2,7 @@ id = "bare-except"
 title = "Bare except clause"
 category = "hazard"
 cwe = ["CWE-396"]
+equivalents = ["flake8:E722", "pylint:bare-except", "pylint:W0702"]
 semantics = "corrected"
 summary = "A bare `except:` also catches KeyboardInterrupt and SystemExit, so Ctrl-C and sys.exit() cannot stop the program here."
 explain = """

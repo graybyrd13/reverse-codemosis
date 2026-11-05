@@ -1,6 +1,7 @@
 id = "return-bool-if-negated"
 title = "if/else that returns False or True"
 category = "simplification"
+equivalents = ["flake8:SIM103"]
 semantics = "preserved"
 summary = "This if/else returns the opposite truth value of its condition; it is `return ${cond|py.negate}`."
 explain = """

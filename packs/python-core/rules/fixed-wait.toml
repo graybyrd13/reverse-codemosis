@@ -15,6 +15,10 @@ Some waits are deliberate: rate limits, back-off, pacing output for a person.
 Only you know which this is, so the engine asks. Answering keep records the
 wait as intentional; remove deletes it. Waits inside loops are polling
 intervals and are not reported.
+
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
+Neither is a wait in an `if __name__ == "__main__":` block, which runs only when the file is executed as a script.
 """
 shape = '''
 (expression_statement
@@ -34,6 +38,8 @@ shape = '''
 '''
 focus = "@stmt"
 where = [
+  "!py.in_main_block(@stmt)",
+  "file_purpose() not in ['example', 'docs', 'benchmark']",
   "!inside(@stmt, 'for_statement', 'while_statement')",
   "occupies_lines(@stmt)",
   "count(children(parent(@stmt))) > 1",
@@ -151,4 +157,25 @@ import time
 
 for attempt in range(3):
     time.sleep(1)
+'''
+
+[[counterexample]]
+name = "a pause in a demonstration run as a script"
+code = '''
+import time
+
+if __name__ == "__main__":
+    print("watch this")
+    time.sleep(1)
+'''
+
+[[counterexample]]
+name = "an example"
+path = "examples/progress.py"
+code = '''
+import time
+
+print("step 1")
+time.sleep(1)
+print("step 2")
 '''

@@ -1,6 +1,7 @@
 id = "return-bool-if"
 title = "if/else that returns True or False"
 category = "simplification"
+equivalents = ["flake8:SIM103"]
 semantics = "preserved"
 summary = "This if/else returns the truth value of its condition; it is `return ${cond|py.as_bool}`."
 explain = """

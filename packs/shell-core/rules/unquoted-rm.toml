@@ -1,6 +1,7 @@
 id = "unquoted-rm"
 title = "Unquoted variable in rm"
 category = "hazard"
+equivalents = ["shellcheck:SC2086"]
 semantics = "corrected"
 summary = "`${stmt}` deletes a path built from the unquoted variable ${variable}."
 explain = """

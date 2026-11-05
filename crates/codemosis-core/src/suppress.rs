@@ -167,8 +167,17 @@ pub fn still_applies(until: Option<&str>, today: &str) -> Result<(), String> {
 
 /// Mark findings covered by an inline marker as suppressed. A marker that
 /// has expired leaves the finding open and says so in its evidence.
-pub fn apply_inline(project: &Project, findings: &mut [Finding], today: &str) {
+///
+/// Suppressions written for other tools (`# noqa: F821`...) apply to rules
+/// that declare the matching `equivalents`.
+pub fn apply_inline(
+    project: &Project,
+    findings: &mut [Finding],
+    today: &str,
+    equivalents: &std::collections::HashMap<String, Vec<String>>,
+) {
     let mut cache: Vec<Option<Vec<Marker>>> = vec![None; project.files.len()];
+    let mut foreign_cache: Vec<Option<Vec<crate::foreign::ForeignMarker>>> = vec![None; project.files.len()];
     for f in findings.iter_mut() {
         if !f.is_open() {
             continue;
@@ -176,6 +185,26 @@ pub fn apply_inline(project: &Project, findings: &mut [Finding], today: &str) {
         let Some(idx) = project.index_of(&f.file) else {
             continue;
         };
+        if let Some(eqs) = equivalents.get(&f.rule) {
+            let foreign = foreign_cache[idx].get_or_insert_with(|| crate::foreign::markers(&project.files[idx]));
+            let line = f.span.start.line;
+            if let Some((m, eq)) = foreign
+                .iter()
+                .find_map(|m| eqs.iter().find(|e| m.covers(e, line)).map(|e| (m, e)))
+            {
+                f.status = Status::Suppressed {
+                    suppression: Suppression {
+                        kind: SuppressionKind::InSource,
+                        reason: Some(format!("already suppressed for {eq}: `{}`", m.text)),
+                        until: None,
+                        owner: None,
+                        at: format!("{}:{}", f.file.display(), m.line),
+                    },
+                };
+                f.edits.clear();
+                continue;
+            }
+        }
         let markers = cache[idx].get_or_insert_with(|| markers(&project.files[idx]));
         let Some(m) = markers
             .iter()

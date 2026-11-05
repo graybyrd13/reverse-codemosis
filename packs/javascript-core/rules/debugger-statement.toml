@@ -2,6 +2,7 @@ id = "debugger-statement"
 title = "debugger statement"
 category = "waste"
 cwe = ["CWE-489"]
+equivalents = ["eslint:no-debugger"]
 semantics = "preserved"
 summary = "`debugger` is a breakpoint left in the code."
 explain = """

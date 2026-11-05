@@ -84,6 +84,8 @@ A fixed sleep is a guess about timing: too short and the code is flaky (what it 
 
 Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported. Waits inside blocks (`loop do`, `.each do`) are treated as loops.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Shape**
 
 ```scheme
@@ -95,6 +97,7 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. k
 
 **Facts that must hold**
 
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `empty(field(@stmt, 'receiver'))`
 - `kind(parent(@stmt)) in ['program', 'body_statement', 'begin_block', 'then', 'else']`
 - `!inside(@stmt, 'while', 'until', 'for', 'do_block', 'block')`

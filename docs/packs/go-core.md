@@ -86,6 +86,8 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. k
 Go refuses to compile an unused import, so the wait is only reported when
 the file uses the time package elsewhere too.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Shape**
 
 ```scheme
@@ -98,6 +100,7 @@ the file uses the time package elsewhere too.
 
 **Facts that must hold**
 
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `!inside(@stmt, 'for_statement')`
 - `occupies_lines(@stmt)`
 - `file_matches('\\btime\\.') > count_matches(text(@stmt), '\\btime\\.')`

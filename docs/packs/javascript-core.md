@@ -11,7 +11,7 @@ Every example is executed with Node (TypeScript with type stripping).
 | Rule | Category | What it does | Proof |
 |---|---|---|---|
 | [`assignment-in-condition`](#assignment-in-condition) Assignment of a constant in a condition | contradiction | asks, corrects on yes (corrected) | 1 ex. · 1 counter |
-| [`console-log`](#console-log) console.log left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 2 counter |
+| [`console-log`](#console-log) console.log left in the code | waste | asks, then corrects as chosen (corrected) | 1 ex. · 4 counter |
 | [`debugger-statement`](#debugger-statement) debugger statement | waste | corrects (preserved) | 1 ex. · 1 counter |
 | [`duplicate-object-key`](#duplicate-object-key) Object key given twice | contradiction | explains | 1 ex. · 1 counter |
 | [`empty-catch`](#empty-catch) Empty catch block | hazard | explains | 1 ex. · 1 counter |
@@ -81,6 +81,8 @@ many are left behind. Some are the program's real output (a command-line
 tool printing results), so the engine asks rather than assumes. keep records
 it as intentional; remove deletes it.
 
+Only library code is asked about: console output in tests, examples, scripts, documentation and benchmarks is usually the point of the code (see `file_purpose()`).
+
 **Shape**
 
 ```scheme
@@ -93,6 +95,7 @@ it as intentional; remove deletes it.
 
 **Facts that must hold**
 
+- `file_purpose() == 'library'`
 - `occupies_lines(@stmt)`
 - `!js.defines('console')`
 
@@ -126,6 +129,19 @@ console.warn("careful");
 ```javascript
 const console = { log: (...xs) => process.stdout.write(xs.join(" ") + "\\n") };
 console.log("report ready");
+```
+
+**Counterexample: output is the point of an example** (no finding)
+
+```javascript
+const port = 3000;
+console.log("listening on", port);
+```
+
+**Counterexample: and of a script** (no finding)
+
+```javascript
+console.log("built");
 ```
 
 
@@ -267,6 +283,8 @@ Some waits are deliberate (rate limits, back-off, animation pacing), so the
 engine asks. keep records the wait as intentional; remove deletes it. Waits
 inside loops are polling intervals and are not reported.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Shape**
 
 ```scheme
@@ -322,6 +340,7 @@ inside loops are polling intervals and are not reported.
 
 **Facts that must hold**
 
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `!inside(@stmt, 'for_statement', 'for_in_statement', 'while_statement', 'do_statement')`
 - `occupies_lines(@stmt)`
 

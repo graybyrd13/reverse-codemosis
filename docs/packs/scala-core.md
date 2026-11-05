@@ -18,6 +18,8 @@ A fixed sleep is a guess about timing: too short and the code is flaky (what it 
 
 Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Shape**
 
 ```scheme
@@ -29,6 +31,7 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. k
 
 **Facts that must hold**
 
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `kind(parent(@stmt)) in ['block', 'template_body', 'compilation_unit']`
 - `!inside(@stmt, 'while_expression', 'for_expression', 'do_while_expression', 'lambda_expression')`
 - `occupies_lines(@stmt)`

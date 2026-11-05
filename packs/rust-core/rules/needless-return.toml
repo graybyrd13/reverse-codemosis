@@ -1,6 +1,7 @@
 id = "needless-return"
 title = "return as the last statement of a function"
 category = "simplification"
+equivalents = ["clippy:needless_return"]
 semantics = "preserved"
 summary = "`${ret}` is the last statement of the function; the value can simply be its tail expression."
 explain = """

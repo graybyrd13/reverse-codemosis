@@ -1,6 +1,7 @@
 id = "needless-return"
 title = "Bare return at the end of a function"
 category = "simplification"
+equivalents = ["golangci:gosimple", "golangci:staticcheck"]
 semantics = "preserved"
 summary = "This `return` is the last statement of a function with no results; it does nothing."
 explain = """

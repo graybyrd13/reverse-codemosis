@@ -130,6 +130,8 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. k
 A sleep inside a try block is not reported: removing it could leave a catch
 of InterruptedException that javac rejects as unreachable.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Shape**
 
 ```scheme
@@ -146,6 +148,7 @@ of InterruptedException that javac rejects as unreachable.
 
 **Facts that must hold**
 
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `!inside(@stmt, 'for_statement', 'enhanced_for_statement', 'while_statement', 'do_statement', 'lambda_expression')`
 - `!inside(@stmt, 'try_statement', 'try_with_resources_statement')`
 - `occupies_lines(@stmt)`

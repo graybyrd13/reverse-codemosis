@@ -1,6 +1,7 @@
 id = "fstring-without-placeholders"
 title = "f-string without placeholders"
 category = "waste"
+equivalents = ["flake8:F541", "pylint:f-string-without-interpolation"]
 semantics = "preserved"
 summary = "${s} is an f-string with nothing to fill in."
 explain = """
@@ -14,7 +15,7 @@ as far as Python is concerned, and many projects write every fragment with
 the prefix on purpose, so the rule only applies when no fragment of the
 concatenation has a placeholder (as pyflakes does).
 """
-shape = "(string) @s"
+shape = "((string) @s (#match? @s \"^[rRbBuUtT]*[fF]\"))"
 where = [
   "matches(py.string_prefix(@s), 'f')",
   "!contains(@s, 'interpolation')",

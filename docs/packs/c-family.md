@@ -90,6 +90,8 @@ A fixed sleep is a guess about timing: too short and the code is flaky (what it 
 
 Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Shape**
 
 ```scheme
@@ -103,6 +105,7 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. k
 
 **Facts that must hold**
 
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `text(@function) in ['sleep', 'usleep', 'nanosleep', 'Sleep'] || matches(text(@function), '^(std::)?this_thread::sleep_(for|until)$')`
 - `!inside(@stmt, 'for_statement', 'while_statement', 'do_statement', 'for_range_loop', 'lambda_expression')`
 - `occupies_lines(@stmt)`

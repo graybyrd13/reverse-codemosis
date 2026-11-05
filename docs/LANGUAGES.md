@@ -17,7 +17,7 @@ Every one of the 845 languages in GitHub Linguist is known: **17** deep (a synta
 | Kotlin | `kotlin` | tree-sitter-kotlin-ng 1.1.0 | generic + 1 | none | parse damage, comments | 3 |
 | Lua | `lua` | tree-sitter-lua 0.5.0 | generic + 1 | `lua` | parse damage, comments | 3 |
 | PHP | `php` | tree-sitter-php 0.25.1 | generic + 1 | `php` | parse damage, comments | 4 |
-| Python | `python` | tree-sitter-python 0.25.0 | generic + 17 + bindings | `python3` | parse damage, comments | 26 |
+| Python | `python` | tree-sitter-python 0.25.0 | generic + 19 + bindings | `python3` | parse damage, comments | 26 |
 | Ruby | `ruby` | tree-sitter-ruby 0.23.1 | generic + 1 | `ruby` | parse damage, comments | 4 |
 | Rust | `rust` | tree-sitter-rust 0.24.2 | generic + 0 | `rustc` | #[cfg], macro bodies, parse damage, comments | 8 |
 | Scala | `scala` | tree-sitter-scala 0.26.4 | generic + 1 | none | parse damage, comments | 3 |

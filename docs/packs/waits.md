@@ -31,11 +31,14 @@ asks. keep records the wait as intentional; remove deletes the line. This
 rule reads text, so it cannot tell a wait inside a polling loop from one on
 its own: keep the ones that pace a loop.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
 **Patterns:** one per language from the table `wait_patterns` (32 languages: AppleScript, AutoHotkey, Batchfile, Clojure, Crystal, Dart, Dockerfile, Elixir, Erlang, F#, Fortran, GDScript, Groovy, Haskell, Julia, Lua, MATLAB, Makefile, Nim, OCaml, Objective-C, PLpgSQL, Perl, PowerShell, R, Raku, SQL, TSQL, Tcl, Visual Basic .NET, YAML, Zig).
 
 **Facts that must hold**
 
 - `occupies_lines(@match)`
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 
 **Question:** Keep this fixed wait?
 

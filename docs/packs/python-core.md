@@ -14,10 +14,10 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 |---|---|---|---|
 | [`bare-except`](#bare-except) Bare except clause | hazard | asks, corrects on yes (corrected) | 1 ex. · 2 counter |
 | [`duplicate-dict-key`](#duplicate-dict-key) Dictionary key given twice | contradiction | explains | 1 ex. · 2 counter |
-| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 3 ex. · 3 counter |
+| [`fixed-wait`](#fixed-wait) Fixed wait | hazard | asks, then corrects as chosen (preserved) | 3 ex. · 5 counter |
 | [`fstring-without-placeholders`](#fstring-without-placeholders) f-string without placeholders | waste | corrects (preserved) | 1 ex. · 2 counter |
 | [`is-literal`](#is-literal) Identity comparison with a literal | contradiction | corrects (corrected) | 2 ex. · 3 counter |
-| [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 4 counter |
+| [`missing-f-prefix`](#missing-f-prefix) String with placeholders but no f prefix | contradiction | asks, corrects on yes (corrected) | 1 ex. · 7 counter |
 | [`missing-module-import`](#missing-module-import) Module used without being imported | broken | corrects (repaired) | 2 ex. · 3 counter |
 | [`missing-name-import`](#missing-name-import) Standard-library name used without being imported | broken | corrects (repaired) | 2 ex. · 2 counter |
 | [`mutable-default`](#mutable-default) Mutable default argument | hazard | asks, corrects on yes (corrected) | 2 ex. · 2 counter |
@@ -26,7 +26,7 @@ except, a string that looks like it meant to be an f-string), the pack asks.
 | [`redundant-pass`](#redundant-pass) Redundant pass | waste | corrects (preserved) | 1 ex. · 1 counter |
 | [`return-bool-if-negated`](#return-bool-if-negated) if/else that returns False or True | simplification | corrects (preserved) | 2 ex. · 1 counter |
 | [`return-bool-if`](#return-bool-if) if/else that returns True or False | simplification | corrects (preserved) | 1 ex. · 2 counter |
-| [`undefined-name`](#undefined-name) Name that is never defined | broken | explains | 2 ex. · 2 counter |
+| [`undefined-name`](#undefined-name) Name that is never defined | broken | explains | 2 ex. · 3 counter |
 | [`unreachable-code`](#unreachable-code) Unreachable code | waste | corrects (preserved) | 2 ex. · 3 counter |
 | [`unused-import`](#unused-import) Unused import | waste | corrects (preserved) | 1 ex. · 5 counter |
 | [`vacuous-assert`](#vacuous-assert) Assertion that can never fail | contradiction | corrects (corrected) | 1 ex. · 2 counter |
@@ -165,6 +165,10 @@ Only you know which this is, so the engine asks. Answering keep records the
 wait as intentional; remove deletes it. Waits inside loops are polling
 intervals and are not reported.
 
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+
+Neither is a wait in an `if __name__ == "__main__":` block, which runs only when the file is executed as a script.
+
 **Shape**
 
 ```scheme
@@ -186,6 +190,8 @@ intervals and are not reported.
 
 **Facts that must hold**
 
+- `!py.in_main_block(@stmt)`
+- `file_purpose() not in ['example', 'docs', 'benchmark']`
 - `!inside(@stmt, 'for_statement', 'while_statement')`
 - `occupies_lines(@stmt)`
 - `count(children(parent(@stmt))) > 1`
@@ -266,6 +272,26 @@ for attempt in range(3):
     time.sleep(1)
 ```
 
+**Counterexample: a pause in a demonstration run as a script** (no finding)
+
+```python
+import time
+
+if __name__ == "__main__":
+    print("watch this")
+    time.sleep(1)
+```
+
+**Counterexample: an example** (no finding)
+
+```python
+import time
+
+print("step 1")
+time.sleep(1)
+print("step 2")
+```
+
 
 ## fstring-without-placeholders
 
@@ -286,7 +312,7 @@ concatenation has a placeholder (as pyflakes does).
 **Shape**
 
 ```scheme
-(string) @s
+((string) @s (#match? @s "^[rRbBuUtT]*[fF]"))
 ```
 
 **Facts that must hold**
@@ -441,6 +467,7 @@ somewhere else, so the decision is yours. Answering yes adds the `f` prefix.
 
 - `py.placeholders_bound(@s)`
 - `!py.is_docstring(@s)`
+- `!py.used_as_template(@s)`
 - `kind(parent(@s)) not in ['attribute', 'binary_operator', 'concatenated_string', 'pair', 'subscript']`
 
 **Question:** Should ${s} be an f-string, so its placeholders are filled in from the variables in scope?
@@ -488,6 +515,31 @@ pattern = "{{name}} and {name}"
 def greet(name):
     """Return "Hello, {name}"."""
     return "Hello, " + name
+```
+
+**Counterexample: a translation template, formatted after translation** (no finding)
+
+```python
+from gettext import gettext as _
+
+editor = "vi"
+print(_("{editor}: Editing failed").format(editor=editor))
+```
+
+**Counterexample: a template kept in a variable and formatted later** (no finding)
+
+```python
+path = "/static/app.js"
+element_template = "{path}"
+print(element_template.format(path=path))
+```
+
+**Counterexample: an attribute docstring** (no finding)
+
+```python
+class Shell:
+    name = "bash"
+    """Shown as {name} in the completion script."""
 ```
 
 
@@ -1139,6 +1191,24 @@ def total(prices):
 
 ```python
 print(json.dumps({}))
+```
+
+**Counterexample: PEP 695 type aliases and type parameters** (no finding)
+
+```python
+type Alias = str
+type Pair[T] = tuple[T, T]
+
+
+def first[T](items: list[T]) -> T:
+    return items[0]
+
+
+class Box[T]:
+    item: T
+
+
+print(Alias, Pair, first, Box)
 ```
 
 

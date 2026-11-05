@@ -1,6 +1,7 @@
 id = "unfinished-stub"
 title = "todo!() or unimplemented!() left in code"
 category = "hazard"
+equivalents = ["clippy:todo", "clippy:unimplemented"]
 summary = "`${mac}!` panics when it is reached: this code path is unfinished."
 explain = """
 `todo!()` and `unimplemented!()` compile anywhere and panic at run time.

@@ -109,6 +109,12 @@ pub struct RuleSpec {
     /// Common Weakness Enumeration ids the rule addresses ("CWE-396").
     #[serde(default)]
     pub cwe: Vec<String>,
+    /// The same check in other tools, as `tool:code` ("flake8:F821",
+    /// "eslint:no-console", "clippy:needless_return"). A suppression a
+    /// project wrote for one of them (`# noqa: F821`) also suppresses this
+    /// rule there.
+    #[serde(default)]
+    pub equivalents: Vec<String>,
     /// Set when the rule should no longer be used: why, and what instead.
     /// A deprecated rule still runs; its findings and `explain` say so.
     #[serde(default)]

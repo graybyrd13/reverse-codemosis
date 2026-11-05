@@ -2,6 +2,7 @@ id = "console-log"
 title = "console.log left in the code"
 category = "waste"
 cwe = ["CWE-489"]
+equivalents = ["eslint:no-console"]
 semantics = "corrected"
 summary = "`${call}` writes debugging output."
 explain = """
@@ -9,6 +10,8 @@ explain = """
 many are left behind. Some are the program's real output (a command-line
 tool printing results), so the engine asks rather than assumes. keep records
 it as intentional; remove deletes it.
+
+Only library code is asked about: console output in tests, examples, scripts, documentation and benchmarks is usually the point of the code (see `file_purpose()`).
 """
 shape = '''
 (expression_statement
@@ -19,6 +22,7 @@ shape = '''
 '''
 focus = "@stmt"
 where = [
+  "file_purpose() == 'library'",
   "occupies_lines(@stmt)",
   "!js.defines('console')",
 ]
@@ -64,4 +68,19 @@ name = "a local console is the program's own logger"
 code = '''
 const console = { log: (...xs) => process.stdout.write(xs.join(" ") + "\\n") };
 console.log("report ready");
+'''
+
+[[counterexample]]
+name = "output is the point of an example"
+path = "examples/server.mjs"
+code = '''
+const port = 3000;
+console.log("listening on", port);
+'''
+
+[[counterexample]]
+name = "and of a script"
+path = "scripts/build.mjs"
+code = '''
+console.log("built");
 '''

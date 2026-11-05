@@ -143,6 +143,11 @@ impl SourceFile {
         self.detection.language.map(|l| l.name).unwrap_or("Unknown")
     }
 
+    /// What the file is for, from the conventions of its path.
+    pub fn purpose(&self) -> Purpose {
+        purpose_of(&self.path)
+    }
+
     pub fn tier(&self) -> Tier {
         if self.tree.is_some() {
             Tier::Deep
@@ -229,7 +234,7 @@ impl SourceFile {
                 let mut region = n;
                 for _ in 0..2 {
                     match region.parent() {
-                        Some(p) if p.parent().is_some() => region = p,
+                        Some(p) if p.parent().is_some() && !CONTAINERS.contains(&p.kind()) => region = p,
                         _ => break,
                     }
                 }
@@ -334,6 +339,127 @@ pub fn parse_text(lang: &dyn Language, text: &str) -> Option<Tree> {
     parser.parse(text, None)
 }
 
+/// What a file is for. Rules use it to stay quiet about code whose
+/// behaviour is intentional where it lives: console output in an example,
+/// a pause in a demonstration.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Purpose {
+    Library,
+    Test,
+    Example,
+    Script,
+    Docs,
+    Benchmark,
+}
+
+impl Purpose {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Purpose::Library => "library",
+            Purpose::Test => "test",
+            Purpose::Example => "example",
+            Purpose::Script => "script",
+            Purpose::Docs => "docs",
+            Purpose::Benchmark => "benchmark",
+        }
+    }
+}
+
+/// Build and task definitions: tooling, whatever directory they sit in.
+fn is_build_file(name: &str) -> bool {
+    const NAMES: &[&str] = &[
+        "gulpfile.js",
+        "gulpfile.mjs",
+        "gulpfile.ts",
+        "gruntfile.js",
+        "jakefile.js",
+        "setup.py",
+        "noxfile.py",
+        "fabfile.py",
+        "tasks.py",
+        "dodo.py",
+        "manage.py",
+        "rakefile",
+        "build.rs",
+        "makefile",
+        "justfile",
+    ];
+    NAMES.contains(&name)
+        || [".config.js", ".config.mjs", ".config.cjs", ".config.ts", ".config.mts"]
+            .iter()
+            .any(|s| name.ends_with(s))
+}
+
+/// A file's purpose from path conventions shared across ecosystems.
+pub fn purpose_of(path: &Path) -> Purpose {
+    let lower = path.to_string_lossy().replace('\\', "/").to_lowercase();
+    let parts: Vec<&str> = lower.split('/').collect();
+    let (dirs, name) = parts.split_at(parts.len().saturating_sub(1));
+    let name = name.first().copied().unwrap_or("");
+    let any_dir = |set: &[&str]| dirs.iter().any(|d| set.contains(d));
+    let stem = name.split('.').next().unwrap_or(name);
+    let test_name = name.starts_with("test_")
+        || stem.ends_with("_test")
+        || stem.ends_with("_tests")
+        || stem.ends_with("_spec")
+        || name.contains(".test.")
+        || name.contains(".spec.")
+        || name == "conftest.py"
+        || (stem.ends_with("test") && stem.len() > 4 && path.to_string_lossy().contains("Test"));
+    // Gradle and Kotlin Multiplatform source sets: src/test, src/jvmTest...
+    let test_source_set = dirs
+        .windows(2)
+        .any(|w| w[0] == "src" && (w[1] == "test" || w[1].ends_with("test")));
+    if test_name
+        || test_source_set
+        || any_dir(&[
+            "test",
+            "tests",
+            "__tests__",
+            "spec",
+            "specs",
+            "testing",
+            "integration-tests",
+            "e2e",
+            "testdata",
+            "fixtures",
+            "__fixtures__",
+            "__snapshots__",
+        ])
+    {
+        Purpose::Test
+    } else if any_dir(&[
+        "example",
+        "examples",
+        "sample",
+        "samples",
+        "demo",
+        "demos",
+        "sandbox",
+        "playground",
+    ]) {
+        Purpose::Example
+    } else if any_dir(&["bench", "benches", "benchmark", "benchmarks"]) {
+        Purpose::Benchmark
+    } else if any_dir(&["doc", "docs", "documentation"]) {
+        Purpose::Docs
+    } else if any_dir(&[
+        "scripts",
+        "script",
+        "bin",
+        "tools",
+        "hack",
+        "ci",
+        ".github",
+        ".circleci",
+    ]) || is_build_file(name)
+    {
+        Purpose::Script
+    } else {
+        Purpose::Library
+    }
+}
+
 /// Which files belong to a project.
 #[derive(Clone, Debug, Default)]
 pub struct FileFilter {
@@ -355,6 +481,32 @@ const ALWAYS_SKIPPED: &[&str] = &[
     ".codemosis",
     ".hg",
     ".svn",
+];
+
+/// Node kinds that hold many independent statements or declarations: parse
+/// damage inside one never spreads to the whole container (a header's
+/// include guard, a class body, a block).
+const CONTAINERS: &[&str] = &[
+    "translation_unit",
+    "preproc_ifdef",
+    "preproc_if",
+    "preproc_else",
+    "preproc_elif",
+    "declaration_list",
+    "field_declaration_list",
+    "compound_statement",
+    "block",
+    "statement_block",
+    "class_body",
+    "enum_body",
+    "interface_body",
+    "program",
+    "module",
+    "source_file",
+    "statements",
+    "template_body",
+    "namespace_definition",
+    "body_statement",
 ];
 
 /// Files larger than this are not read: they are data, not code someone
@@ -471,4 +623,33 @@ impl Project {
 
 fn normalize(p: &Path) -> PathBuf {
     PathBuf::from(p.to_string_lossy().replace('\\', "/"))
+}
+
+#[cfg(test)]
+mod purpose_tests {
+    use super::*;
+
+    #[test]
+    fn purposes() {
+        let p = |s: &str| purpose_of(Path::new(s));
+        assert_eq!(p("src/requests/utils.py"), Purpose::Library);
+        assert_eq!(p("tests/test_utils.py"), Purpose::Test);
+        assert_eq!(p("pkg/handler_test.go"), Purpose::Test);
+        assert_eq!(p("src/cart.test.js"), Purpose::Test);
+        assert_eq!(p("okio/src/jvmTest/kotlin/okio/BufferTest.kt"), Purpose::Test);
+        assert_eq!(p("src/test/java/com/x/FooTest.java"), Purpose::Test);
+        assert_eq!(p("examples/basic.js"), Purpose::Example);
+        assert_eq!(p("scripts/release.sh"), Purpose::Script);
+        assert_eq!(p(".github/workflows/ci.yml"), Purpose::Script);
+        assert_eq!(p("docs/conf.py"), Purpose::Docs);
+        assert_eq!(p("benches/parse.rs"), Purpose::Benchmark);
+        assert_eq!(p("testdata/certificate/key.pem"), Purpose::Test);
+        assert_eq!(p("gulpfile.js"), Purpose::Script);
+        assert_eq!(p("webpack.config.js"), Purpose::Script);
+        assert_eq!(
+            p("src/latest.py"),
+            Purpose::Library,
+            "a name ending in 'test' is not a test by itself"
+        );
+    }
 }

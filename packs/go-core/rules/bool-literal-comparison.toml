@@ -1,6 +1,7 @@
 id = "bool-literal-comparison"
 title = "Comparison with true or false"
 category = "simplification"
+equivalents = ["golangci:gosimple", "golangci:staticcheck"]
 semantics = "preserved"
 summary = "`${cmp}` compares a boolean with a constant; it is `${result}`."
 explain = """

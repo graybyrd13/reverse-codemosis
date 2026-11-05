@@ -2,6 +2,7 @@ id = "duplicate-dict-key"
 title = "Dictionary key given twice"
 category = "contradiction"
 cwe = ["CWE-462"]
+equivalents = ["flake8:F601", "pylint:duplicate-key"]
 summary = "Key ${second} appears twice in this dictionary; the value given on line ${first|line} is silently discarded."
 explain = """
 In a dictionary literal, a repeated key keeps only its last value: the

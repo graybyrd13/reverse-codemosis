@@ -514,11 +514,26 @@ pub fn role(path: &Path, text: &str) -> Role {
         if VENDORED_DIRS.contains(&c.as_ref()) {
             return Role::Vendored(format!("inside {c}/"));
         }
+        // Xcode documentation sets (jazzy, docc) are generated output.
+        if c.ends_with(".docset") || c.ends_with(".doccarchive") {
+            return Role::Generated(format!("inside the generated {c}"));
+        }
     }
     let name = path
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
         .unwrap_or_default();
+    // Well-known libraries copied into a project (after Linguist's vendor.yml).
+    static VENDORED_FILE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let vendored_file = VENDORED_FILE.get_or_init(|| {
+        regex::Regex::new(
+            r"(?i)^(jquery([.-][\w.-]*)?|typeahead([.-][\w.-]*)?|bootstrap(\.bundle)?|modernizr([.-][\w.-]*)?|underscore(-min)?|backbone(-min)?|require|prism|highlight(\.pack)?|lunr|handlebars([.-][\w.-]*)?|mustache|moment(-with-locales)?|angular|react(-dom)?(\.(production|development))?|vue|d3(\.v\d+)?|chart|popper|htmx|alpine)(\.min)?\.js$",
+        )
+        .expect("valid regex")
+    });
+    if vendored_file.is_match(&name) {
+        return Role::Vendored(format!("{name} is a well-known third-party library"));
+    }
     if GENERATED_FILES.contains(&name.as_str()) {
         return Role::Generated("lockfile".to_string());
     }
@@ -546,6 +561,24 @@ pub fn role(path: &Path, text: &str) -> Role {
         return Role::Generated("minified (very long lines)".to_string());
     }
     Role::Source
+}
+
+#[cfg(test)]
+mod vendored_tests {
+    use super::*;
+
+    #[test]
+    fn well_known_libraries_and_docsets() {
+        let r = |p: &str| role(Path::new(p), "x");
+        assert!(matches!(r("docs/js/typeahead.jquery.js"), Role::Vendored(_)));
+        assert!(matches!(r("static/jquery-3.7.1.min.js"), Role::Vendored(_)));
+        assert!(matches!(
+            r("Alamofire.docset/Contents/Resources/x.js"),
+            Role::Generated(_)
+        ));
+        assert!(matches!(r("src/app.js"), Role::Source));
+        assert!(matches!(r("src/required.js"), Role::Source));
+    }
 }
 
 #[cfg(test)]

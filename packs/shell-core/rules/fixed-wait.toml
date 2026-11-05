@@ -11,6 +11,8 @@ Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. k
 
 In scripts the usual safe form is a loop that checks the condition (the port
 answers, the file exists, the process is up) with a time limit.
+
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
 """
 shape = '''
 (command
@@ -20,6 +22,7 @@ shape = '''
 '''
 focus = "@stmt"
 where = [
+  "file_purpose() not in ['example', 'docs', 'benchmark']",
   "count(field(@stmt, 'argument')) == 1",
   "kind(parent(@stmt)) == 'program' || (kind(parent(@stmt)) == 'compound_statement' && count(children(parent(@stmt))) > 1)",
   "!inside(@stmt, 'for_statement', 'while_statement', 'c_style_for_statement')",

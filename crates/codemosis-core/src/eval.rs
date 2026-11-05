@@ -495,6 +495,11 @@ pub const GENERIC_FACTS: &[FactDoc] = &[
         doc: "How many times the regular expression matches in the text.",
     },
     FactDoc {
+        name: "file_purpose",
+        signature: "file_purpose() -> string",
+        doc: "What the file is for, from path conventions: 'library', 'test', 'example', 'script', 'docs' or 'benchmark' (tests/, *_test.go, *.spec.ts, examples/, scripts/, bin/, .github/, docs/, benches/...). For rules that should stay quiet where a behaviour is intentional, such as console output in an example.",
+    },
+    FactDoc {
         name: "file_matches",
         signature: "file_matches(regex) -> number",
         doc: "How many times the regular expression matches in the whole file, in code only (not comments or strings) when the file's comments are known.",
@@ -841,6 +846,10 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
             let re = crate::regex_cache::get(&ctx.string(&args[1], name)?)
                 .map_err(|e| EvalError(format!("count_matches(): invalid regex: {e}")))?;
             Ok(Value::Num(re.find_iter(&text).count() as i64))
+        }
+        "file_purpose" => {
+            arity(name, args, 0, 0)?;
+            Ok(Value::Str(ctx.file.purpose().as_str().to_string()))
         }
         "file_matches" => {
             arity(name, args, 1, 1)?;

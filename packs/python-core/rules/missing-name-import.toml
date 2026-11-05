@@ -1,6 +1,7 @@
 id = "missing-name-import"
 title = "Standard-library name used without being imported"
 category = "broken"
+equivalents = ["flake8:F821", "mypy:name-defined", "pyright:reportUndefinedVariable", "pylint:undefined-variable"]
 semantics = "repaired"
 summary = "`${name}` is used but never imported; it can only be `${module}.${name}`."
 explain = """

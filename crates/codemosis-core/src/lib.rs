@@ -12,6 +12,7 @@
 pub mod edit;
 pub mod eval;
 pub mod expr;
+pub mod foreign;
 pub mod guards;
 pub mod lang;
 pub mod lex;
@@ -37,7 +38,7 @@ pub use model::{
     Status, Suppression, SuppressionKind,
 };
 pub use pack::Pack;
-pub use project::{FileFilter, Project, SourceFile, Tier};
+pub use project::{FileFilter, Project, Purpose, SourceFile, Tier};
 pub use rule::{scan, CompiledRule, Scan};
 
 /// Render a syntax tree with field names and anonymous tokens, to help pack

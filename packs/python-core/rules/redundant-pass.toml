@@ -1,6 +1,7 @@
 id = "redundant-pass"
 title = "Redundant pass"
 category = "waste"
+equivalents = ["flake8:PIE790", "pylint:unnecessary-pass", "pylint:W0107"]
 semantics = "preserved"
 summary = "This `pass` does nothing: the block already has other statements."
 explain = """

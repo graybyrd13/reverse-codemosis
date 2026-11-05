@@ -16,6 +16,9 @@ pub enum ScopeKind {
     Function,
     Class,
     Comprehension,
+    /// The scope PEP 695 type parameters live in, around a generic function,
+    /// class or `type` alias.
+    Annotation,
 }
 
 #[derive(Clone, Debug)]
@@ -55,19 +58,41 @@ pub struct PyAnalysis {
     pub star_import: bool,
     /// Every identifier-like word that appears in a string or a comment.
     pub text_words: BTreeSet<String>,
+    /// Occurrence indexes by name and by start byte, so facts asked once per
+    /// identifier stay linear in the size of the file.
+    by_name: std::collections::HashMap<String, Vec<usize>>,
+    by_start: std::collections::HashMap<usize, usize>,
 }
 
 impl PyAnalysis {
+    fn named<'s>(&'s self, name: &str) -> impl Iterator<Item = &'s Occurrence> + 's {
+        self.by_name
+            .get(name)
+            .into_iter()
+            .flatten()
+            .map(move |i| &self.occurrences[*i])
+    }
+
     pub fn bindings_of<'s>(&'s self, name: &'s str) -> impl Iterator<Item = &'s Occurrence> + 's {
-        self.occurrences
-            .iter()
-            .filter(move |o| o.role == Role::Binding && o.name == name)
+        self.named(name).filter(|o| o.role == Role::Binding)
     }
 
     pub fn references_of<'s>(&'s self, name: &'s str) -> impl Iterator<Item = &'s Occurrence> + 's {
-        self.occurrences
-            .iter()
-            .filter(move |o| o.role == Role::Reference && o.name == name)
+        self.named(name).filter(|o| o.role == Role::Reference)
+    }
+
+    /// The occurrence that starts at this byte, if any.
+    pub fn occurrence_at(&self, start: usize) -> Option<&Occurrence> {
+        self.by_start.get(&start).map(|i| &self.occurrences[*i])
+    }
+
+    fn index(&mut self) {
+        self.by_name.clear();
+        self.by_start.clear();
+        for (i, o) in self.occurrences.iter().enumerate() {
+            self.by_name.entry(o.name.clone()).or_default().push(i);
+            self.by_start.entry(o.start).or_insert(i);
+        }
     }
 
     /// True when anything in the file binds or declares `name`.
@@ -153,6 +178,7 @@ pub fn analyze(file: &SourceFile) -> PyAnalysis {
         nonlocals: BTreeSet::new(),
     });
     w.visit(root, 0);
+    w.out.index();
     w.out
 }
 
@@ -258,17 +284,49 @@ impl<'a> Walker<'a> {
                         self.out.dynamic = true;
                     }
                 }
-                let inner = self.new_scope(ScopeKind::Function, node, scope);
+                // `def f[T](x: T) -> T`: T lives in an annotation scope
+                // around the function (PEP 695).
+                let outer = match node.child_by_field_name("type_parameters") {
+                    Some(tp) => self.type_parameter_scope(node, tp, scope),
+                    None => scope,
+                };
+                let inner = self.new_scope(ScopeKind::Function, node, outer);
                 if let Some(params) = node.child_by_field_name("parameters") {
-                    self.parameters(params, scope, inner);
+                    self.parameters(params, outer, inner);
                 }
-                for f in ["return_type", "type_parameters"] {
-                    if let Some(n) = node.child_by_field_name(f) {
-                        self.visit(n, scope);
-                    }
+                if let Some(n) = node.child_by_field_name("return_type") {
+                    self.visit(n, outer);
                 }
                 if let Some(body) = node.child_by_field_name("body") {
                     self.visit(body, inner);
+                }
+            }
+            "type_alias_statement" => {
+                // `type Alias[T] = ...` binds Alias here; T and the value live
+                // in an annotation scope (PEP 695).
+                let left = node.child_by_field_name("left");
+                let (name, params) = match left {
+                    Some(l) => {
+                        let generic = named_children(l).into_iter().find(|c| c.kind() == "generic_type");
+                        match generic {
+                            Some(g) => (
+                                named_children(g).into_iter().find(|c| c.kind() == "identifier"),
+                                named_children(g).into_iter().find(|c| c.kind() == "type_parameter"),
+                            ),
+                            None => (named_children(l).into_iter().find(|c| c.kind() == "identifier"), None),
+                        }
+                    }
+                    None => (None, None),
+                };
+                if let Some(n) = name {
+                    self.record(n, Role::Binding, scope, None);
+                }
+                let value_scope = match params {
+                    Some(tp) => self.type_parameter_scope(node, tp, scope),
+                    None => scope,
+                };
+                if let Some(right) = node.child_by_field_name("right") {
+                    self.visit(right, value_scope);
                 }
             }
             "lambda" => {
@@ -284,12 +342,14 @@ impl<'a> Walker<'a> {
                 if let Some(name) = node.child_by_field_name("name") {
                     self.bind(name, scope);
                 }
-                for f in ["superclasses", "type_parameters"] {
-                    if let Some(n) = node.child_by_field_name(f) {
-                        self.visit(n, scope);
-                    }
+                let outer = match node.child_by_field_name("type_parameters") {
+                    Some(tp) => self.type_parameter_scope(node, tp, scope),
+                    None => scope,
+                };
+                if let Some(n) = node.child_by_field_name("superclasses") {
+                    self.visit(n, outer);
                 }
-                let inner = self.new_scope(ScopeKind::Class, node, scope);
+                let inner = self.new_scope(ScopeKind::Class, node, outer);
                 if let Some(body) = node.child_by_field_name("body") {
                     self.visit(body, inner);
                 }
@@ -438,6 +498,30 @@ impl<'a> Walker<'a> {
             "case_pattern" => self.case_pattern(node, scope),
             _ => self.visit_children(node, scope),
         }
+    }
+
+    /// Open the annotation scope of a PEP 695 generic and bind its type
+    /// parameters there (`T`, `*Ts`, `**P`, `T: int`, `T = str`); bounds and
+    /// defaults are read in that scope too.
+    fn type_parameter_scope(&mut self, owner: Node, params: Node, scope: usize) -> usize {
+        let ann = self.new_scope(ScopeKind::Annotation, owner, scope);
+        for p in named_children(params) {
+            let mut stack = vec![p];
+            let mut bound = false;
+            while let Some(n) = stack.pop() {
+                if n.kind() == "identifier" && !bound {
+                    self.record(n, Role::Binding, ann, None);
+                    bound = true;
+                } else if bound {
+                    self.visit(n, ann);
+                } else {
+                    let mut kids = named_children(n);
+                    kids.reverse();
+                    stack.extend(kids);
+                }
+            }
+        }
+        ann
     }
 
     fn import_name(&mut self, name: Node, scope: usize, plain_import: bool) {

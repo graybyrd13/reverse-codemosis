@@ -1,6 +1,7 @@
 id = "mutable-default"
 title = "Mutable default argument"
 category = "hazard"
+equivalents = ["flake8:B006", "pylint:dangerous-default-value", "pylint:W0102"]
 semantics = "corrected"
 summary = "`${param}=${value}` is evaluated once, when `${function}` is defined; every call that omits `${param}` shares that one object."
 explain = """

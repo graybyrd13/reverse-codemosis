@@ -1,6 +1,7 @@
 id = "unit-return-type"
 title = "Explicit unit return type"
 category = "simplification"
+equivalents = ["clippy:unused_unit"]
 semantics = "preserved"
 summary = "`-> ()` is what a function returns when no return type is written."
 explain = """

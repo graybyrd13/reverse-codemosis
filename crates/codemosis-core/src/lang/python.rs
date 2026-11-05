@@ -177,6 +177,7 @@ pub const BUILTINS: &[&str] = &[
     "Warning",
     "WindowsError",
     "ZeroDivisionError",
+    "frozendict",
 ];
 
 const FACTS: &[FactDoc] = &[
@@ -192,6 +193,8 @@ const FACTS: &[FactDoc] = &[
     FactDoc { name: "first_statement", signature: "py.first_statement(block) -> nodes", doc: "The first statement of a block that is not its docstring (empty when there is none)." },
     FactDoc { name: "is_docstring", signature: "py.is_docstring(nodes) -> bool", doc: "True when the node is (or is the string of) a module, class or function docstring." },
     FactDoc { name: "top_level", signature: "py.top_level(nodes) -> bool", doc: "True when the statement sits directly in the module, not inside a block." },
+    FactDoc { name: "used_as_template", signature: "py.used_as_template(string) -> bool", doc: "True when a string is evidently a template filled in later, so its `{...}` are not meant as f-string placeholders: an argument of a gettext-style call (`_`, `gettext`, `ngettext`, `pgettext`, `gettext_lazy`...), an argument of a call whose result is `.format`-ed, assigned to a name that is later `.format`-ed or whose name says template (`*template*`, `*fmt*`, `*format*`), or a statement on its own (an attribute docstring)." },
+    FactDoc { name: "in_main_block", signature: "py.in_main_block(nodes) -> bool", doc: "True when the node is inside an `if __name__ == \"__main__\":` block: code that runs only when the file is executed as a script, often a demonstration." },
     FactDoc { name: "imported_elsewhere", signature: "py.imported_elsewhere(name) -> bool", doc: "True when another file of the project imports the name from this module, or reads `module.name`." },
     FactDoc { name: "defined_in_project", signature: "py.defined_in_project(name, module?) -> bool", doc: "True when another file of the project defines the name at module level, or the project has a module or package of that name: importing it from the standard library would then be a guess. Bindings that import the name from `module` itself (`import json`, `from pathlib import Path`) are not counted." },
     FactDoc { name: "string_prefix", signature: "py.string_prefix(string) -> string", doc: "The lower-cased prefix letters of a string literal: '', 'f', 'rb'..." },
@@ -370,14 +373,15 @@ fn call_fact<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Va
             let last = *nodes.last().unwrap();
             Ok(match name {
                 "is_reference" => Value::Bool(
-                    a.occurrences
-                        .iter()
-                        .any(|o| o.start == first.start_byte() && o.role == Role::Reference),
+                    a.occurrence_at(first.start_byte())
+                        .is_some_and(|o| o.role == Role::Reference),
                 ),
                 "removal_preserves_scope" => Value::Bool(removal_preserves_scope(a, &nodes, first, last)),
                 "first_statement" => Value::Nodes(first_statement(&first, ctx).into_iter().collect()),
                 "is_docstring" => Value::Bool(is_docstring(&first)),
                 "top_level" => Value::Bool(first.parent().is_some_and(|p| p.kind() == "module")),
+                "in_main_block" => Value::Bool(in_main_block(&first, ctx)),
+                "used_as_template" => Value::Bool(used_as_template(&first, ctx)),
                 "string_prefix" => Value::Str(string_prefix(&first, ctx)),
                 "placeholders_bound" => Value::Bool(placeholders_bound(a, &first, ctx)),
                 "yields_bool" => Value::Bool(yields_bool(&first)),
@@ -388,6 +392,109 @@ fn call_fact<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Va
 }
 
 const NESTED_SCOPES: &[&str] = &["function_definition", "lambda", "class_definition"];
+
+const GETTEXT: &[&str] = &[
+    "_",
+    "N_",
+    "gettext",
+    "ngettext",
+    "pgettext",
+    "npgettext",
+    "dgettext",
+    "dngettext",
+    "gettext_lazy",
+    "ngettext_lazy",
+    "pgettext_lazy",
+    "npgettext_lazy",
+    "gettext_noop",
+    "lazy_gettext",
+    "lazy_ngettext",
+    "ugettext",
+    "ungettext",
+    "ugettext_lazy",
+    "ungettext_lazy",
+];
+
+/// The called name of a call: `f` in `f(...)`, `g` in `a.b.g(...)`.
+fn called_name<'t>(call: &Node<'t>, ctx: &EvalCtx<'t>) -> Option<&'t str> {
+    let f = call.child_by_field_name("function")?;
+    let n = match f.kind() {
+        "attribute" => f.child_by_field_name("attribute")?,
+        _ => f,
+    };
+    Some(ctx.node_text(&n))
+}
+
+/// See the `used_as_template` fact.
+fn used_as_template(node: &Node, ctx: &EvalCtx<'_>) -> bool {
+    // A string inside a concatenation counts as the concatenation.
+    let mut s = *node;
+    while let Some(p) = s.parent().filter(|p| p.kind() == "concatenated_string") {
+        s = p;
+    }
+    let Some(parent) = s.parent() else { return false };
+    match parent.kind() {
+        // A statement on its own: an attribute docstring, or dead text.
+        "expression_statement" => true,
+        "argument_list" => {
+            let Some(call) = parent.parent().filter(|c| c.kind() == "call") else {
+                return false;
+            };
+            if called_name(&call, ctx).is_some_and(|n| GETTEXT.contains(&n)) {
+                return true;
+            }
+            // `something("...{x}...").format(...)`
+            call.parent().is_some_and(|a| {
+                a.kind() == "attribute"
+                    && a.child_by_field_name("attribute")
+                        .is_some_and(|m| matches!(ctx.node_text(&m), "format" | "format_map"))
+            })
+        }
+        "assignment" => {
+            let Some(left) = parent.child_by_field_name("left") else {
+                return false;
+            };
+            let target = match left.kind() {
+                "attribute" => left.child_by_field_name("attribute"),
+                "identifier" => Some(left),
+                _ => None,
+            };
+            let Some(target) = target else { return false };
+            let name = ctx.node_text(&target);
+            let lower = name.to_lowercase();
+            if ["template", "tmpl", "fmt", "format"].iter().any(|w| lower.contains(w)) {
+                return true;
+            }
+            let text = &ctx.file.text;
+            text.contains(&format!("{name}.format(")) || text.contains(&format!("{name}.format_map("))
+        }
+        _ => false,
+    }
+}
+
+/// Inside `if __name__ == "__main__":` (either operand order, either quote).
+fn in_main_block(node: &Node, ctx: &EvalCtx<'_>) -> bool {
+    let mut cur = node.parent();
+    while let Some(n) = cur {
+        if n.kind() == "if_statement" {
+            if let Some(cond) = n.child_by_field_name("condition") {
+                let text: String = ctx.node_text(&cond).chars().filter(|c| !c.is_whitespace()).collect();
+                let text = text.replace('\'', "\"");
+                if text == "__name__==\"__main__\"" || text == "\"__main__\"==__name__" {
+                    // Only the consequence counts, not an `else` branch.
+                    let in_body = n
+                        .child_by_field_name("consequence")
+                        .is_some_and(|b| b.start_byte() <= node.start_byte() && node.end_byte() <= b.end_byte());
+                    if in_body {
+                        return true;
+                    }
+                }
+            }
+        }
+        cur = n.parent();
+    }
+    false
+}
 
 fn removal_preserves_scope(a: &PyAnalysis, nodes: &[Node], first: Node, last: Node) -> bool {
     // Statements that change the meaning of the whole scope, wherever they are.

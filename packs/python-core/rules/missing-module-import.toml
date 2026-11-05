@@ -1,6 +1,7 @@
 id = "missing-module-import"
 title = "Module used without being imported"
 category = "broken"
+equivalents = ["flake8:F821", "mypy:name-defined", "pyright:reportUndefinedVariable", "pylint:undefined-variable"]
 semantics = "repaired"
 summary = "`${name}` is used as a module but never imported, so this line raises NameError when it runs."
 explain = """

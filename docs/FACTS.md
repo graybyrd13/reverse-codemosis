@@ -44,6 +44,7 @@ Facts every language can use
   concat(text...) -> string                      The texts joined together.
   bang(text) -> string                           The C-style negation of an expression: `!x`, parenthesised unless x is a single name, member access or call.
   count_matches(text, regex) -> number           How many times the regular expression matches in the text.
+  file_purpose() -> string                       What the file is for, from path conventions: 'library', 'test', 'example', 'script', 'docs' or 'benchmark' (tests/, *_test.go, *.spec.ts, examples/, scripts/, bin/, .github/, docs/, benches/...). For rules that should stay quiet where a behaviour is intentional, such as console output in an example.
   file_matches(regex) -> number                  How many times the regular expression matches in the whole file, in code only (not comments or strings) when the file's comments are known.
   kind_at(capture) -> string                     What the capture starts in: 'code', 'comment', 'string', or 'unknown' when the file's comments and strings cannot be told apart.
   language() -> string                           The file's language, as GitHub names it: 'Python', 'Shell', 'PowerShell'...
@@ -87,6 +88,8 @@ python facts (py.*)
   py.first_statement(block) -> nodes             The first statement of a block that is not its docstring (empty when there is none).
   py.is_docstring(nodes) -> bool                 True when the node is (or is the string of) a module, class or function docstring.
   py.top_level(nodes) -> bool                    True when the statement sits directly in the module, not inside a block.
+  py.used_as_template(string) -> bool            True when a string is evidently a template filled in later, so its `{...}` are not meant as f-string placeholders: an argument of a gettext-style call (`_`, `gettext`, `ngettext`, `pgettext`, `gettext_lazy`...), an argument of a call whose result is `.format`-ed, assigned to a name that is later `.format`-ed or whose name says template (`*template*`, `*fmt*`, `*format*`), or a statement on its own (an attribute docstring).
+  py.in_main_block(nodes) -> bool                True when the node is inside an `if __name__ == "__main__":` block: code that runs only when the file is executed as a script, often a demonstration.
   py.imported_elsewhere(name) -> bool            True when another file of the project imports the name from this module, or reads `module.name`.
   py.defined_in_project(name, module?) -> bool   True when another file of the project defines the name at module level, or the project has a module or package of that name: importing it from the standard library would then be a guess. Bindings that import the name from `module` itself (`import json`, `from pathlib import Path`) are not counted.
   py.string_prefix(string) -> string             The lower-cased prefix letters of a string literal: '', 'f', 'rb'...

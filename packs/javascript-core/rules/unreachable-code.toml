@@ -2,6 +2,7 @@ id = "unreachable-code"
 title = "Unreachable code"
 category = "waste"
 cwe = ["CWE-561"]
+equivalents = ["eslint:no-unreachable"]
 semantics = "preserved"
 summary = "This code can never run: the block always leaves at line ${jump|line} before reaching it."
 explain = """
