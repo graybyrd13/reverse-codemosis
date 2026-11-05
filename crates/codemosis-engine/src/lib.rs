@@ -152,6 +152,17 @@ impl Workspace {
         self.scan_rules(&[])
     }
 
+    /// Like [`Workspace::scan_rules`], but only in these files (indices into
+    /// `project.files`). Facts may still read every file of the project.
+    pub fn scan_files(&self, only: &[String], files: &std::collections::BTreeSet<usize>) -> Scan {
+        let rules = enabled_rules(&self.packs, &self.config, &self.project, only);
+        let answers = |id: &str| self.answers.get(id);
+        let mut scan = codemosis_core::scan(&self.project, rules, &answers, Some(files));
+        self.policy
+            .apply_suppressions(&mut scan.findings, &codemosis_core::suppress::today());
+        scan
+    }
+
     /// The configured oracle, or a detected one. The flag says whether it
     /// was detected rather than configured.
     pub fn oracle_section(&self) -> (OracleSection, bool) {

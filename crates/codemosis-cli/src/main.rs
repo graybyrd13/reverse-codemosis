@@ -1,5 +1,6 @@
 //! `codemosis`: correct code the way a proof corrects an argument.
 
+mod agent;
 mod doctor;
 mod interactive;
 mod lsp;
@@ -70,6 +71,9 @@ enum CheckFormat {
     Github,
     /// A GitHub pull-request review with suggested changes, as JSON for the API.
     Review,
+    /// One line per finding, `path:line:col: level: message [rule; status]`,
+    /// for hooks, editors' quickfix lists and grep.
+    Compact,
 }
 
 #[derive(Subcommand)]
@@ -111,6 +115,14 @@ enum Command {
         /// Print where the time went (loading, matching, the slowest rules) to standard error.
         #[arg(long)]
         timings: bool,
+        /// Only report findings in this file (repeatable). The whole project is
+        /// still read, for facts that look across files.
+        #[arg(long = "file", value_name = "PATH")]
+        files: Vec<PathBuf>,
+        /// Only report findings in files that differ from the last commit
+        /// (modified, staged or untracked).
+        #[arg(long)]
+        changed: bool,
     },
     /// Record today's open findings as accepted, so `check --baseline` fails only on new ones.
     Baseline {
@@ -240,6 +252,26 @@ enum Command {
     },
     /// Run the language server (LSP over standard input and output) for editors.
     Lsp,
+    /// For agentic coding tools' hooks: check what the agent just changed.
+    /// Reads the tool's hook payload (JSON) from standard input; checks the
+    /// files it names, or every changed file if it names none; reports only
+    /// findings on lines changed since the last commit, with what to do about
+    /// each, to standard error, and exits 2 (fed back to the agent). Silent,
+    /// with status 0, when there is nothing to report.
+    Hook {
+        /// Project directory (default: the payload's `cwd`, or the current directory).
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Report findings anywhere in the files, not only on changed lines.
+        #[arg(long)]
+        all_lines: bool,
+        /// Exit status when there are findings.
+        #[arg(long, default_value_t = 2)]
+        exit_code: u8,
+        /// Print the findings as JSON on standard output and exit 0.
+        #[arg(long)]
+        json: bool,
+    },
     /// Print a shell completion script: bash, zsh, fish, powershell or elvish.
     Completions {
         #[arg(value_enum)]
@@ -422,6 +454,8 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             show_suppressed,
             diff,
             timings,
+            files,
+            changed,
         } => check(
             &path,
             CheckOptions {
@@ -433,6 +467,8 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
                 show_suppressed,
                 diff,
                 timings,
+                files: &files,
+                changed,
             },
             &packs,
             &rules,
@@ -580,6 +616,17 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             lsp::serve()?;
             Ok(ExitCode::SUCCESS)
         }
+        Command::Hook {
+            path,
+            all_lines,
+            exit_code,
+            json,
+        } => agent::hook(agent::HookOptions {
+            path,
+            all_lines,
+            exit_code,
+            json,
+        }),
         Command::Schema { name, output } => schema_cmd(name.as_deref(), output.as_deref()),
         Command::Completions { shell } => {
             clap_complete::generate(shell, &mut Cli::command(), "codemosis", &mut std::io::stdout());
@@ -614,6 +661,8 @@ struct CheckOptions<'a> {
     show_suppressed: bool,
     diff: bool,
     timings: bool,
+    files: &'a [PathBuf],
+    changed: bool,
 }
 
 fn finding_json(f: &Finding, policy: &codemosis_engine::policy::Policy, baselined: bool) -> serde_json::Value {
@@ -665,7 +714,10 @@ fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: St
     let loaded = started.elapsed();
     let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
     let scan_started = std::time::Instant::now();
-    let scan = ws.scan_rules(only);
+    let scan = match agent::scope(&root, &ws.project, o.files, o.changed)? {
+        Some(files) => ws.scan_files(only, &files),
+        None => ws.scan_rules(only),
+    };
     let scanned = scan_started.elapsed();
     if o.timings {
         print_timings(&ws, &scan, loaded, scanned);
@@ -723,6 +775,16 @@ fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: St
             body = serde_json::to_string_pretty(&ci::sarif(&out, Some(&root_uri)))? + "\n";
         }
         CheckFormat::Gitlab => body = serde_json::to_string_pretty(&ci::gitlab(&out))? + "\n",
+        CheckFormat::Compact => {
+            for f in scan
+                .findings
+                .iter()
+                .filter(|f| o.show_suppressed || !matches!(f.status, Status::Suppressed { .. }))
+                .filter(|f| !is_baselined(f))
+            {
+                let _ = writeln!(body, "{}", agent::compact_line(f, &ws.policy));
+            }
+        }
         CheckFormat::Review => body = serde_json::to_string_pretty(&ci::github_review(&out))? + "\n",
         CheckFormat::Github => {
             body = ci::github_annotations(&out);
