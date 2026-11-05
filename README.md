@@ -112,10 +112,14 @@ The precise model is in [docs/SEMANTICS.md](docs/SEMANTICS.md).
   on an existing codebase. [Integrations](docs/INTEGRATIONS.md).
 
 The rules are deliberately narrow: each corrects one well-understood
-mistake, and only where it can prove the correction. On healthy, mature
-codebases it usually finds little, and that is the intended behaviour.
-[docs/FIELD_TEST.md](docs/FIELD_TEST.md) records what it found, and did
-not find, on real open-source projects.
+mistake, and only where it can prove the correction. On twenty well-known
+open-source projects (10,780 files, eleven languages, 15 seconds in all) it
+proposed 127 corrections, every one of which was reviewed and is correct,
+asked 128 questions a careful reviewer would also ask, found three genuine
+bugs, and found nothing at all in nine projects. It honours the
+suppressions those projects already wrote for flake8, mypy, eslint and
+other tools. [docs/FIELD_TEST.md](docs/FIELD_TEST.md) has the details,
+including what it got wrong before the test.
 
 ## What it refuses to do
 

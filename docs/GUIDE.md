@@ -70,6 +70,11 @@ its share and tier, how many files are generated or vendored (never
 edited), the build and test commands it would use, the definitions it found
 and the current distance.
 
+Each file also has a **purpose** from its path: library, test, example,
+script (including build files), docs or benchmark. Some rules stay quiet
+outside library code, where the behaviour is usually the point: console
+output in an example, a pause in a demonstration.
+
 Languages are understood at one of three tiers: **deep** (a syntax tree:
 shapes, scopes, facts), **lexical** (it tells code from comments and
 strings) and **recognized** (identity only). `codemosis languages` lists all
@@ -243,6 +248,11 @@ Editors can validate this file with `schemas/config.schema.json`.
    `codemosis: ignore[...]` on its own line covers the next line;
    `ignore-file[...]` covers the file; `until=YYYY-MM-DD` and `owner=` are
    optional.
+   Suppressions you already wrote for other tools count too: `# noqa:
+   F821`, `# type: ignore[name-defined]`, `// eslint-disable-next-line
+   no-console`, `NOLINT`, `//nolint`, `# shellcheck disable=SC2086` and
+   `#[allow(clippy::needless_return)]` silence the matching rules, which
+   declare their equivalents in other tools (`codemosis explain RULE`).
 4. Set the bar with `[policy] fail_on` and `[severity]`.
 5. `codemosis lock` to pin the packs, so a change to any rule is reviewed.
 6. Add the [GitHub Action, GitLab component or pre-commit hook](INTEGRATIONS.md).

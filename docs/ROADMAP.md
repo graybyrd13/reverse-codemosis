@@ -1,44 +1,150 @@
 # Roadmap
 
-The engine, the pack format and its proof system, the verification loop,
-every language GitHub knows in three tiers, questions with named answers,
-CI and editor integrations, proof certificates and the soundness guards are
-in place. What follows is ordered by how much it strengthens correction,
-which comes before everything else.
+Where Reverse Codemosis goes next, in order. Each milestone has a goal, the
+evidence that motivates it, deliverables, and exit criteria that can be
+measured. Correction comes before features: no milestone may lower the
+[field test](FIELD_TEST.md)'s precision.
 
-## Next
+## Where things stand
 
-- **Prove more facts necessary.** `codemosis pack test --mutations`
-  reports 52 of 140 facts in the built-in packs as proven necessary by a
-  counterexample. Every unproven fact gets a counterexample or is removed;
-  releases may not lower the number.
-- **Binding analysis beyond Python.** JavaScript/TypeScript, Go, Java and
-  Rust scope graphs, so their packs can prove removals and renames and the
-  binding-preservation guard covers them.
-- **Compiler diagnostics as facts.** Read `rustc --error-format=json`,
-  `tsc`, `mypy` and friends; a machine-applicable suggestion with a unique
-  resolution becomes a proven correction, an uncertain one a question.
-- **Type-aware facts**, backed by a type checker, to unlock corrections
-  that are blocked only because a type cannot be established syntactically.
-- **Multi-file examples** in packs, so cross-file facts are proven in packs
-  and not only in engine tests.
+The engine, the pack format and its proofs, the verification loop, all 845
+GitHub languages in three tiers, questions, CI and editor integrations,
+proof certificates and the soundness guards are in place. The
+[field test](FIELD_TEST.md) on 20 open-source projects found 127 proven
+corrections (all correct), 128 legitimate questions and three genuine bugs,
+and exposed what to do next:
 
-## Later
+| Evidence from the field test | Leads to |
+|---|---|
+| A correct ripgrep correction breaks its 79-column `rustfmt` check | formatter-aware corrections (M1) |
+| Projects' test suites were not run as the oracle (third-party code) | a sandboxed field-test job (M1) |
+| 105 of 160 facts are not proven necessary by any counterexample | proof coverage (M1) |
+| `bool(...)` and `not (a != b)` are kept because types are unknown | type facts (M2) |
+| Binding analysis exists only for Python | scope graphs for more languages (M2) |
+| 44 files hit grammar gaps (C macros, Kotlin `actual`, Swift `()`, zsh) | grammar work (M2) |
+| Django takes 7.4 s cold, every time | incremental analysis (M3) |
 
-- **Incremental analysis and a content-addressed cache** keyed by file
-  hash, grammar, pack digest and engine version, for monorepos and for a
-  `codemosis watch` daemon that keeps findings current between commands.
-- **Pack registry**: discovery, signed releases (the lockfile already pins
-  content), compatibility checks against engine ranges, security review.
-- **Constraint checking with an SMT solver** for facts that are arithmetic
-  or boolean in nature, with counterexamples reported like any other
-  refusal.
-- **Out-of-tree grammars** through a stable plugin interface (WebAssembly,
-  with no host access), so the deep tier can grow without rebuilding.
-- **A playground** in the browser: paste code, pick packs, see facts,
-  findings and proofs.
-- **Structural corrections across files**: moving a definition, splitting a
-  module, each step still verified.
+## M1: verified on real projects (0.2)
+
+**Goal:** every correction passes the project's own test suite *and*
+formatter, demonstrated continuously on real repositories.
+
+1. **Formatter-aware acceptance.** Detect each project's formatter: rustfmt
+   (`rustfmt.toml`, Cargo projects), gofmt (always for Go), Black or Ruff
+   format (`pyproject.toml`), Prettier (its config files) and clang-format
+   (`.clang-format`). If a touched file was formatter-clean before a step,
+   it must be clean after it. The step reformats only the lines it changed
+   when the formatter supports ranges, and is refused otherwise. Add this to
+   the acceptance contract and the proof certificate.
+   *Exit:* the ripgrep correction is reformatted to 79 columns, or
+   refused; a soundness test covers each formatter; no change to the two
+   demonstrations' diffs.
+2. **Field test in CI, with real oracles.** A weekly workflow
+   (`.github/workflows/field-test.yml`) runs `codemosis fix` on the pinned
+   repositories inside per-ecosystem containers (dependencies installed,
+   then the network cut off), with each project's own test command as the
+   oracle, then `proof verify`. It publishes the results table and fails on
+   any accepted step that regressed a test.
+   *Exit:* at least six repositories in four ecosystems run end to end;
+   zero accepted regressions over four consecutive weeks.
+3. **Precision ledger.** `scripts/field-test.sh` writes a machine-readable
+   summary, and CI compares it with a checked-in baseline: questions per
+   thousand files, explanations per thousand files, proven corrections,
+   and corrections reviewed correct. A rise in noise needs a stated reason
+   in the pull request.
+   *Exit:* the baseline is committed, and CI fails on an unexplained
+   increase of more than 10%.
+4. **Proof coverage.** Every `where` fact in the built-in packs either has
+   a counterexample that needs it (`pack test --mutations`) or is removed.
+   These are ideal first contributions; see the list it prints.
+   *Exit:* every fact proven necessary (55 of 160 today), enforced in CI.
+5. **Readable corrections.** Offer the clearer form when it is provably
+   equal: `a not in b` instead of `not (a in b)` (already done), and `==`
+   instead of `not (... != ...)` for builtin operands such as string,
+   number and None literals on one side, through a new fact that
+   recognises builtin operands.
+   *Exit:* Django's `not (engine != "InnoDB")` becomes
+   `engine == "InnoDB"` only when provable, with a counterexample for a
+   custom `__ne__`.
+
+## M2: deeper understanding (0.3)
+
+**Goal:** more corrections become provable, across more languages.
+
+1. **Scope graphs beyond Python.** JavaScript/TypeScript (hoisting, TDZ,
+   imports), Go, Java and Rust, extending the binding-preservation guard
+   to them and enabling proven unused-import and unreachable-code rules
+   there.
+   *Exit:* the soundness suite has a binding case per language;
+   `unused-import` ships for JavaScript, TypeScript and Go.
+2. **Compiler and type-checker diagnostics as facts.** Read
+   `rustc --error-format=json`, `tsc --noEmit`, `mypy` and `go vet -json`.
+   A suggestion the compiler marks machine-applicable with a single
+   resolution becomes a proven correction; an uncertain one becomes a
+   question. Type facts (`py.type_of`, `ts.type_of`) unlock the `bool()`
+   and `!=` cases above.
+   *Exit:* the redundant `bool()` is dropped exactly when the operands are
+   known to be bools; rustc's machine-applicable fixes pass the field test.
+3. **Grammar gaps.** Detect zsh and send it to the lexical tier instead of
+   the bash grammar; upgrade the Swift and Kotlin grammars, or contribute
+   fixes upstream; let packs declare C macros that act as statements or
+   loops (`jv_array_foreach`).
+   *Exit:* parse damage in the field test drops from 44 files to under 10.
+4. **Multi-file pack examples**, so cross-file facts are proven in packs.
+
+## M3: scale and flow (0.4)
+
+**Goal:** fast enough to run on every keystroke and every commit of a
+monorepo.
+
+1. **Incremental analysis with a content-addressed cache**, keyed by file
+   hash, grammar version, pack digest and engine version, shared by
+   `check`, `lsp` and a new `codemosis watch`.
+   *Exit:* re-checking Django after a one-file edit takes under 300 ms;
+   a cold check under 4 s on four cores.
+2. **Cheaper rules:** merge the queries of rules that share a root node
+   kind, and push cheap textual tests into query predicates.
+3. **Upstream reporting:** `codemosis report` turns a genuine finding in a
+   dependency or another project into issue text with the evidence and
+   the rule's explanation, for a person to file.
+
+## M4: an ecosystem (0.5 and later)
+
+- **A pack registry:** discovery, signed releases (the lockfile already
+  pins content), checks against engine ranges, security review.
+- **Out-of-tree grammars** through a WebAssembly plugin interface with no
+  host access.
+- **A browser playground:** paste code, pick packs, see facts, findings and
+  proofs.
+- **SMT-backed facts** for arithmetic and boolean conditions, with
+  counterexamples reported like any other refusal.
+- **Structural corrections across files** (moving a definition, splitting a
+  module), each step still verified.
+
+## The next two weeks
+
+Concrete, ordered, each small enough for one pull request:
+
+1. `engine/src/formatter.rs`: detect rustfmt and gofmt, and check
+   formatter-cleanliness of touched files in `session.rs::try_step`
+   (M1.1). Start with refusing; reformatting can follow.
+2. `.github/workflows/field-test.yml` for the Go and Rust repositories
+   (cobra, gin, ripgrep), whose test suites need no services (M1.2).
+3. `scripts/field-test.sh --summary-json` and a committed baseline (M1.3).
+4. Counterexamples for the unproven facts in `javascript-core` and
+   `go-core`, tagged "good first issue" (M1.4).
+5. zsh detection and routing to the lexical tier (M2.3).
+6. Decide on the three upstream reports in [FIELD_TEST.md](FIELD_TEST.md).
+
+## Decisions for the maintainers
+
+- **Formatter policy:** reformat changed lines (clearer diffs, but needs
+  formatters that support ranges) or refuse the step (simpler and
+  stricter). The plan starts with refusing.
+- **Upstream reports:** file the three genuine issues found in rich and
+  Django, crediting the tool, or keep the field test private until 0.2.
+- **0.2 scope:** ship M1 alone, or wait for M2.1 (scope graphs for
+  JavaScript), which would make the JavaScript pack substantially stronger.
 
 ## Much later
 

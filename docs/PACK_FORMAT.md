@@ -109,6 +109,7 @@ print(not [])
 | `references` | no | Links to documentation backing the rule. |
 | `tags` | no | Free-form labels (`"timing"`, `"readability"`), shown in reports and SARIF. |
 | `cwe` | no | Common Weakness Enumeration ids the rule addresses (`["CWE-396"]`); SARIF consumers use them for security views. |
+| `equivalents` | no | The same check in other tools, as `tool:code` (`["flake8:F821", "mypy:name-defined"]`). A suppression the project wrote for one of them (`# noqa: F821`) then suppresses this rule there too. Tools: flake8, ruff, mypy, pyright, pylint, eslint, clang-tidy, golangci, shellcheck, clippy. |
 | `deprecated` | no | Why the rule should no longer be used. It still runs; `explain`, `rules`, SARIF and pack docs say so. |
 | `replaced_by` | no | The qualified id of the rule that replaces a deprecated one. |
 | `example` | yes, at least one | Proof that the rule does what it says (below). |
@@ -194,6 +195,20 @@ The functions are the engine's **fact vocabulary**: generic ones such as
 language's own, prefixed (`py.bound`, `py.removal_preserves_scope`...). The
 full list with exact meanings is in [FACTS.md](FACTS.md) and in
 `codemosis facts`.
+
+Two facts help a rule stay quiet where a behaviour is intentional:
+`file_purpose()` is `library`, `test`, `example`, `script`, `docs` or
+`benchmark` from path conventions (`console.log` is asked about only in
+`library` code), and `py.in_main_block(@x)` is true inside
+`if __name__ == "__main__":`. Narrowing a rule this way only removes
+findings; it can never make a correction wrong.
+
+A shape that pairs every child of a node with every other
+(`(dictionary (pair) @a (pair) @b (#eq? @a @b))`) is quadratic, and
+tree-sitter evaluates it in cubic time. Match each child once and compare
+with a fact such as `earlier_same_field(@pair, 'key')` instead. Every shape
+runs under a limit on partial matches; exceeding it is a rule error, not a
+hang.
 
 **Facts must be conservative.** When a fact cannot be sure, it must answer in
 the direction that blocks the correction. If your rule needs a fact the
