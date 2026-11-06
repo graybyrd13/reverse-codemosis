@@ -1,0 +1,32 @@
+id = "private-key"
+title = "Private key committed"
+category = "hazard"
+cwe = ["CWE-321", "CWE-798"]
+summary = "A private key is stored in this file."
+explain = """
+Anyone who can read the repository, or any copy of it, can use this key. It
+must be treated as compromised: revoke or rotate it, remove it from the
+repository's history, and load keys from a secret store or the environment
+instead. Deleting it from the current version alone does not help, so
+nothing is changed automatically.
+"""
+pattern = '-----BEGIN (?:RSA |EC |DSA |OPENSSH |ENCRYPTED |PGP )?PRIVATE KEY(?: BLOCK)?-----'
+within = "any"
+focus = "@match"
+
+[[example]]
+path = "deploy/id_rsa.txt"
+before = '''
+-----BEGIN RSA PRIVATE KEY-----
+MIIEowIBAAKCAQEAexampleexampleexample
+-----END RSA PRIVATE KEY-----
+'''
+
+[[counterexample]]
+name = "a public key"
+path = "deploy/key.txt"
+code = '''
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA
+-----END PUBLIC KEY-----
+'''

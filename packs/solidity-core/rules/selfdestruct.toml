@@ -1,0 +1,40 @@
+id = "selfdestruct"
+title = "selfdestruct"
+category = "hazard"
+cwe = ["CWE-477"]
+tags = ["security", "deprecated"]
+summary = "`${call}` is deprecated and no longer removes the contract's code."
+explain = """
+`selfdestruct` was deprecated by EIP-6049, and since EIP-6780 (the Cancun upgrade) it only sends the
+contract's ether away, except in the transaction that created the contract: the code and storage stay.
+Code that relies on it to disable a contract no longer works, and anyone able to call it can still drain
+the balance. Use an explicit pause or withdrawal pattern. Nothing is changed automatically.
+"""
+shape = '(call_expression function: (expression (identifier) @function) (#eq? @function "selfdestruct")) @call'
+focus = "@call"
+
+[[example]]
+before = '''
+pragma solidity ^0.8.0;
+
+contract Box {
+    address payable owner;
+
+    function close() public {
+        selfdestruct(owner);
+    }
+}
+'''
+
+[[counterexample]]
+code = '''
+pragma solidity ^0.8.0;
+
+contract Box {
+    bool closed;
+
+    function close() public {
+        closed = true;
+    }
+}
+'''

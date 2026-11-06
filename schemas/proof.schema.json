@@ -1,0 +1,377 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Proof certificate",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "type": "string"
+    },
+    "created": {
+      "type": "string"
+    },
+    "engine": {
+      "$ref": "#/$defs/EngineInfo"
+    },
+    "environment": {
+      "$ref": "#/$defs/Environment"
+    },
+    "packs": {
+      "description": "The packs whose rules took a step, pinned by content.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PackRef"
+      }
+    },
+    "answers": {
+      "description": "The human answers the steps depend on: question id to answer.",
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "oracle": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/OracleRecord"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/StepRecord"
+      }
+    },
+    "files": {
+      "description": "Every changed file, before the first step and after the last.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FileRecord"
+      }
+    },
+    "patch": {
+      "description": "The whole change as one exact unified diff.",
+      "type": "string"
+    },
+    "digest": {
+      "description": "SHA-256 of this certificate with `digest` empty: tamper evidence.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema",
+    "created",
+    "engine",
+    "environment",
+    "packs",
+    "answers",
+    "steps",
+    "files",
+    "patch",
+    "digest"
+  ],
+  "$defs": {
+    "EngineInfo": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "type": "string"
+        },
+        "tree_sitter": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "grammars": {
+          "description": "Grammar crate versions of the languages the steps touched.",
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      },
+      "required": [
+        "version",
+        "grammars"
+      ]
+    },
+    "Environment": {
+      "type": "object",
+      "properties": {
+        "os": {
+          "type": "string"
+        },
+        "arch": {
+          "type": "string"
+        },
+        "commit": {
+          "description": "The commit the corrections were made on, when the project is in git.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "os",
+        "arch"
+      ]
+    },
+    "PackRef": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "version",
+        "sha256"
+      ]
+    },
+    "OracleRecord": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "test": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "before": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OracleSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "after": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/OracleSummary"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "OracleSummary": {
+      "type": "object",
+      "properties": {
+        "build_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "passed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "failed": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "passed",
+        "failed"
+      ]
+    },
+    "StepRecord": {
+      "type": "object",
+      "properties": {
+        "number": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "rule": {
+          "type": "string"
+        },
+        "pack_sha256": {
+          "type": "string"
+        },
+        "semantics": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "category": {
+          "type": "string"
+        },
+        "findings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FindingRef"
+          }
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FileRecord"
+          }
+        },
+        "patch": {
+          "type": "string"
+        },
+        "oracle": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/StepOracleRecord"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "formatted": {
+          "description": "Files the project's formatter laid out after the rule's edits.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FormatRecord"
+          }
+        }
+      },
+      "required": [
+        "number",
+        "rule",
+        "pack_sha256",
+        "category",
+        "findings",
+        "files",
+        "patch"
+      ]
+    },
+    "FindingRef": {
+      "type": "object",
+      "properties": {
+        "fingerprint": {
+          "type": "string"
+        },
+        "file": {
+          "type": "string"
+        },
+        "line": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "question": {
+          "description": "The question whose answer unlocked this correction, if any.",
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "fingerprint",
+        "file",
+        "line"
+      ]
+    },
+    "FileRecord": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "before_sha256": {
+          "type": "string"
+        },
+        "after_sha256": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "before_sha256",
+        "after_sha256"
+      ]
+    },
+    "StepOracleRecord": {
+      "type": "object",
+      "properties": {
+        "build_ok": {
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "passed_before": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "passed_after": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
+        "failed_after": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "required": [
+        "passed_before",
+        "passed_after",
+        "failed_after"
+      ]
+    },
+    "FormatRecord": {
+      "description": "A file a formatter laid out after a rule corrected it.",
+      "type": "object",
+      "properties": {
+        "path": {
+          "type": "string"
+        },
+        "formatter": {
+          "type": "string"
+        },
+        "version": {
+          "description": "The formatter's version line, e.g. `rustfmt 1.9.0-stable (...)`.",
+          "type": "string"
+        },
+        "corrected_sha256": {
+          "description": "SHA-256 of the file as the rule's edits left it, before formatting.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "formatter",
+        "version",
+        "corrected_sha256"
+      ]
+    }
+  },
+  "description": "What justified each correction, replayable by `codemosis proof verify`."
+}

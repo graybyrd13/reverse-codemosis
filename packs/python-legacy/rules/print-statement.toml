@@ -11,7 +11,8 @@ through Python 2's soft-space mechanism, which has no exact Python 3 form.
 """
 shape = "(print_statement) @stmt"
 where = [
-  "exists(@args)",
+  # No exists(@args): a bare `print` parses as a name, not a print statement,
+  # and a print with only a chevron is excluded next.
   "!contains(@stmt, 'chevron')",
   "!ends_with(text(@stmt), ',')",
 ]
@@ -43,4 +44,11 @@ print("hello")
 name = "a trailing comma has no exact Python 3 form"
 code = '''
 print "no newline",
+'''
+
+[[counterexample]]
+name = "a chevron is the print-chevron rule's"
+code = '''
+import sys
+print >>sys.stderr, "warning"
 '''

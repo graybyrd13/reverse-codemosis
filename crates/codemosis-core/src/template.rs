@@ -47,6 +47,10 @@ pub const GENERIC_FILTERS: &[(&str, &str)] = &[
     ),
     ("unescape_braces", "Turn '{{' into '{' and '}}' into '}'."),
     (
+        "bang",
+        "The C-style negation `!x`, parenthesised unless x is a single name, member access or call.",
+    ),
+    (
         "drop_string_prefix",
         "Remove a letter (the argument) from a string literal's prefix: ${s|drop_string_prefix:f}.",
     ),
@@ -139,7 +143,11 @@ impl Template {
                 Segment::Text(t) => out.push_str(t),
                 Segment::Hole { name, filters } => {
                     if name == "indent" && !ctx.bindings.contains_key("indent") {
-                        out.push_str(&ctx.file.lang.indent_unit(&ctx.file.text));
+                        let unit = match ctx.file.lang {
+                            Some(l) => l.indent_unit(&ctx.file.text),
+                            None => crate::lang::detect_indent(&ctx.file.text),
+                        };
+                        out.push_str(&unit);
                         continue;
                     }
                     let Some(value) = ctx.bindings.get(name) else {
@@ -157,9 +165,14 @@ impl Template {
     }
 }
 
-pub fn is_known_filter(name: &str, lang: &dyn Language) -> bool {
+pub fn is_known_filter(name: &str, langs: &[&'static dyn Language]) -> bool {
     match name.split_once('.') {
-        Some((prefix, rest)) => prefix == lang.prefix() && lang.filters().iter().any(|(n, _)| *n == rest),
+        Some((prefix, rest)) => {
+            !langs.is_empty()
+                && langs
+                    .iter()
+                    .all(|l| l.prefix() == prefix && l.filters().iter().any(|(n, _)| *n == rest))
+        }
         None => GENERIC_FILTERS.iter().any(|(n, _)| *n == name),
     }
 }
@@ -171,19 +184,17 @@ fn apply_filter<'a>(
     ctx: &EvalCtx<'a>,
 ) -> Result<Value<'a>, EvalError> {
     if let Some((prefix, rest)) = name.split_once('.') {
-        if prefix == ctx.file.lang.prefix() {
-            if let Some(r) = ctx.file.lang.filter(rest, arg, &value, ctx) {
+        if let Some(lang) = ctx.file.lang.filter(|l| l.prefix() == prefix) {
+            if let Some(r) = lang.filter(rest, arg, &value, ctx) {
                 return r;
             }
         }
         return err(format!("unknown filter '{name}'"));
     }
     if name == "line" {
-        let nodes = ctx.nodes(&value, "line")?;
         return Ok(Value::Str(
-            nodes
-                .first()
-                .map(|n| (n.start_position().row + 1).to_string())
+            ctx.extent(&value, "line")?
+                .map(|(a, _)| ctx.file.line_of(a).to_string())
                 .unwrap_or_default(),
         ));
     }
@@ -198,6 +209,7 @@ fn apply_filter<'a>(
         "upper" => text.to_uppercase(),
         "strip_parens" => strip_parens(&text),
         "unescape_braces" => text.replace("{{", "{").replace("}}", "}"),
+        "bang" => bang(&text),
         "drop_string_prefix" | "add_string_prefix" => {
             let letter = need_arg()?;
             let quote = text
@@ -219,6 +231,22 @@ fn apply_filter<'a>(
         other => return err(format!("unknown filter '{other}'")),
     };
     Ok(Value::Str(out))
+}
+
+/// `!x` for a simple operand, `!(x)` otherwise: parentheses are always
+/// correct, so they are kept whenever precedence could matter.
+pub fn bang(text: &str) -> String {
+    let t = text.trim();
+    static SIMPLE: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let simple = SIMPLE.get_or_init(|| {
+        regex::Regex::new(r"^[A-Za-z_$][\w$]*(\.[A-Za-z_$][\w$]*)*(\([^()]*\))?$").expect("valid regex")
+    });
+    let parenthesised = t.starts_with('(') && strip_parens(t) != t;
+    if simple.is_match(t) || parenthesised {
+        format!("!{t}")
+    } else {
+        format!("!({t})")
+    }
 }
 
 /// Remove one pair of parentheses that encloses the whole text.
@@ -254,6 +282,16 @@ mod tests {
         assert_eq!(t.filters(), vec!["trim"]);
         assert!(Template::parse("${").is_err());
         assert!(Template::parse("${a b}").is_err());
+    }
+
+    #[test]
+    fn bang_parenthesises_when_needed() {
+        assert_eq!(bang("ready"), "!ready");
+        assert_eq!(bang("user.active"), "!user.active");
+        assert_eq!(bang("isDone(x)"), "!isDone(x)");
+        assert_eq!(bang("a && b"), "!(a && b)");
+        assert_eq!(bang("(a || b)"), "!(a || b)");
+        assert_eq!(bang("x == 1"), "!(x == 1)");
     }
 
     #[test]

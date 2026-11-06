@@ -1,0 +1,61 @@
+id = "open-admin-port"
+title = "SSH or RDP open to the internet"
+category = "hazard"
+cwe = ["CWE-284"]
+tags = ["security", "aws"]
+summary = "This ingress rule opens an administration port to every address on the internet."
+explain = """
+`0.0.0.0/0` (or `::/0`) on port 22 (SSH) or 3389 (RDP) exposes the machine's login to the whole internet,
+where it is scanned within minutes. Restrict `cidr_blocks` to the addresses that administer it, or reach it
+through a bastion, a VPN or a session manager. Nothing is changed automatically: only you know which
+addresses should reach it.
+"""
+shape = '''
+(block
+  (identifier) @kind
+  (body) @body
+  (#eq? @kind "ingress")) @block
+'''
+focus = "@block"
+where = [
+  "matches(text(@body), '(?m)^\\\\s*(from_port|to_port)\\\\s*=\\\\s*(22|3389)\\\\s*$')",
+  "matches(text(@body), '\"(0\\\\.0\\\\.0\\\\.0/0|::/0)\"')",
+]
+
+[[example]]
+before = '''
+resource "aws_security_group" "admin" {
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+'''
+
+[[counterexample]]
+name = "a web port open to everyone is the point of a web server"
+code = '''
+resource "aws_security_group" "web" {
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+'''
+
+[[counterexample]]
+name = "SSH from the office network"
+code = '''
+resource "aws_security_group" "admin" {
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["203.0.113.0/24"]
+  }
+}
+'''

@@ -55,11 +55,37 @@ impl Style {
 
 fn source_line(project: &Project, f: &Finding, line: usize) -> Option<String> {
     let file = project.files.iter().find(|s| s.path == f.file)?;
-    file.text.lines().nth(line.checked_sub(1)?).map(|s| s.to_string())
+    file.text
+        .lines()
+        .nth(line.checked_sub(1)?)
+        .map(|s| codemosis_core::redact::redact(s).into_owned())
+}
+
+/// "suppressed at src/a.py:3 (legacy module) until 2027-01-31, owner @ops".
+pub fn suppression_line(s: &codemosis_core::Suppression) -> String {
+    let mut out = format!("suppressed at {}", s.at);
+    if let Some(r) = &s.reason {
+        out.push_str(&format!(" ({r})"));
+    } else {
+        out.push_str(" (no reason given)");
+    }
+    if let Some(u) = &s.until {
+        out.push_str(&format!(" until {u}"));
+    }
+    if let Some(o) = &s.owner {
+        out.push_str(&format!(", owner {o}"));
+    }
+    out
 }
 
 /// A finding, with the line it points at.
 pub fn finding(f: &Finding, project: &Project, s: Style) -> String {
+    finding_with(f, project, s, true)
+}
+
+/// A finding, optionally without its status line (for interactive asking,
+/// which shows the question itself).
+pub fn finding_with(f: &Finding, project: &Project, s: Style, show_status: bool) -> String {
     let mut out = String::new();
     let _ = writeln!(
         out,
@@ -119,18 +145,37 @@ pub fn finding(f: &Finding, project: &Project, s: Style) -> String {
             ),
             None => s.green("proven correction available"),
         },
-        Status::NeedsAnswer { question } => format!(
-            "{} {}\n    {}\n    answer with: codemosis answer {} yes   (or no)",
-            s.yellow("question"),
-            s.bold(&question.id),
-            question.text,
-            question.id
-        ),
-        Status::Declined { question } => format!("kept as intentional (you answered no to {})", question.id),
+        Status::NeedsAnswer { question } => {
+            let mut text = format!(
+                "{} {}\n    {}",
+                s.yellow("question"),
+                s.bold(&question.id),
+                question.text
+            );
+            for o in &question.options {
+                let note = match &o.unavailable {
+                    Some(why) => format!("  {}", s.dim(&format!("(not possible here: {why})"))),
+                    None => String::new(),
+                };
+                text.push_str(&format!("\n      {:<8} {}{}", s.bold(&o.answer), o.means, note));
+            }
+            text.push_str(&format!(
+                "\n    answer with: codemosis answer {} <{}>   or run `codemosis ask`",
+                question.id,
+                question.choices()
+            ));
+            text
+        }
+        Status::Declined { question, answer } => {
+            format!("kept as intentional (you answered {answer} to {})", question.id)
+        }
         Status::Explained => "no correction can be proven here; the explanation is the result".to_string(),
         Status::Refused { reason } => format!("{} {}", s.red("correction refused:"), reason),
+        Status::Suppressed { suppression } => suppression_line(suppression),
     };
-    let _ = writeln!(out, "  {} {}", s.blue("="), status);
+    if show_status {
+        let _ = writeln!(out, "  {} {}", s.blue("="), status);
+    }
     out
 }
 
@@ -191,7 +236,15 @@ pub fn oracle_summary(run: &OracleRun, s: Style) -> Vec<(String, String)> {
 pub fn packs_line(packs: &[&Pack]) -> String {
     packs
         .iter()
-        .map(|p| format!("{} {} ({} rules)", p.meta.id, p.meta.version, p.rules.len()))
+        .map(|p| {
+            let n = p.rules.len();
+            format!(
+                "{} {} ({n} rule{})",
+                p.meta.id,
+                p.meta.version,
+                if n == 1 { "" } else { "s" }
+            )
+        })
         .collect::<Vec<_>>()
         .join(" · ")
 }
@@ -215,13 +268,51 @@ fn step_line(step: &Step, s: Style) -> String {
         None => String::new(),
     };
     format!(
-        "  {} {:>2}  {} {}{}",
+        "  {} {:>2}  {} {}{}{}",
         s.green("✓"),
         step.number,
         s.bold(&step.rule),
         what,
+        s.dim(&laid_out(step)),
         s.dim(&oracle)
     )
+}
+
+/// `  laid out by rustfmt` when a formatter laid the step's files out.
+fn laid_out(step: &Step) -> String {
+    let mut names: Vec<&str> = step.formatted.iter().map(|f| f.formatter.as_str()).collect();
+    names.dedup();
+    if names.is_empty() {
+        String::new()
+    } else {
+        format!("  laid out by {}", names.join(", "))
+    }
+}
+
+/// One line per formatter that held the corrections, for the result.
+fn formatting_lines(r: &Report) -> Vec<String> {
+    r.formatting
+        .iter()
+        .map(|u| match &u.not_run {
+            Some(why) => format!("{} ({}): not run: {why}", u.formatter, u.evidence),
+            None => {
+                let mut line = format!(
+                    "{} ({}): {} changed file{} kept formatted",
+                    u.formatter,
+                    u.evidence,
+                    u.files_checked,
+                    if u.files_checked == 1 { "" } else { "s" }
+                );
+                if u.files_not_formatted > 0 {
+                    line.push_str(&format!(
+                        "; {} not formatted to begin with, not held to it",
+                        u.files_not_formatted
+                    ));
+                }
+                line
+            }
+        })
+        .collect()
 }
 
 pub struct Header<'a> {
@@ -344,6 +435,9 @@ pub fn session_text(r: &Report, project: &Project, s: Style, show_diff: bool) ->
             s.yellow("stopped at the step limit; run again to continue")
         );
     }
+    for (i, line) in formatting_lines(r).iter().enumerate() {
+        let _ = writeln!(out, "  {:<9} {}", if i == 0 { "format" } else { "" }, s.dim(line));
+    }
 
     let questions: Vec<&Finding> = r
         .remaining
@@ -429,7 +523,15 @@ pub fn session_markdown(r: &Report, root: &str, packs: &[&Pack]) -> String {
             .semantics
             .map(|x| format!(" — {}: {}", x.as_str(), x.describe()))
             .unwrap_or_default();
-        let _ = writeln!(out, "{}. **{}** ({}){}", step.number, step.rule, step.title, sem);
+        let _ = writeln!(
+            out,
+            "{}. **{}** ({}){}{}",
+            step.number,
+            step.rule,
+            step.title,
+            sem,
+            laid_out(step).replace("  laid out", "; laid out")
+        );
         for f in &step.findings {
             let _ = writeln!(out, "   - `{}:{}` {}", f.file.display(), f.span.start.line, f.message);
         }
@@ -447,6 +549,13 @@ pub fn session_markdown(r: &Report, root: &str, packs: &[&Pack]) -> String {
             );
         }
     }
+    let formatting = formatting_lines(r);
+    if !formatting.is_empty() {
+        let _ = writeln!(out, "\n## Formatting\n");
+        for line in formatting {
+            let _ = writeln!(out, "- {line}");
+        }
+    }
     let questions: Vec<&Finding> = r
         .remaining
         .iter()
@@ -458,13 +567,14 @@ pub fn session_markdown(r: &Report, root: &str, packs: &[&Pack]) -> String {
             if let Some(q) = f.question() {
                 let _ = writeln!(
                     out,
-                    "- `{}` at `{}:{}`: {}  \n  {}  \n  Answer with `codemosis answer {} yes` or `no`.",
+                    "- `{}` at `{}:{}`: {}  \n  {}  \n  Answer with `codemosis answer {} <{}>`, or run `codemosis ask`.",
                     q.id,
                     f.file.display(),
                     f.span.start.line,
                     f.message,
                     q.text,
-                    q.id
+                    q.id,
+                    q.choices()
                 );
             }
         }

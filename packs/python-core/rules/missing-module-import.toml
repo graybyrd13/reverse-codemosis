@@ -1,6 +1,7 @@
 id = "missing-module-import"
 title = "Module used without being imported"
 category = "broken"
+equivalents = ["flake8:F821", "mypy:name-defined", "pyright:reportUndefinedVariable", "pylint:undefined-variable"]
 semantics = "repaired"
 summary = "`${name}` is used as a module but never imported, so this line raises NameError when it runs."
 explain = """
@@ -14,15 +15,16 @@ standard-library module, every attribute the file reads from it exists in
 that module, and no other file in the project defines a name or a module
 called `name`. Then exactly one statement makes the code run: `import name`.
 """
-shape = "(attribute object: (identifier) @name) @use"
+shape = "(attribute object: (identifier) @name) @_use"
 focus = "@name"
 anchor = ["${name}"]
 where = [
-  "py.is_reference(@name)",
+  # No py.is_reference(@name): the object of an attribute is always read.
   "!py.bound(text(@name))",
-  "!py.builtin(text(@name))",
+  # No builtin is in stdlib_modules (a test in codemosis-core keeps it so).
   "!py.dynamic_names()",
-  "in_table('stdlib_modules', text(@name))",
+  # Membership in stdlib_modules is implied by the next fact: a name not in
+  # the table has no attributes there.
   "subset(py.attributes(text(@name)), table('stdlib_modules', text(@name)))",
   "!py.defined_in_project(text(@name), text(@name))",
 ]
@@ -105,3 +107,13 @@ from helpers import *
 
 print(json.dumps({}))
 '''
+
+[[counterexample]]
+name = "the project has its own json module: which one the import means is ambiguous"
+code = '''
+print(json.dumps({}))
+'''
+files = { "json.py" = '''
+def dumps(value):
+    return "local"
+''' }

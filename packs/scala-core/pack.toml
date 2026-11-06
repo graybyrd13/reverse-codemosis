@@ -1,0 +1,9 @@
+[pack]
+id = "scala-core"
+version = "0.1.0"
+engine = "^0.1"
+language = "scala"
+summary = "Questions for Scala: fixed waits."
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

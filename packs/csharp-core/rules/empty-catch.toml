@@ -1,0 +1,49 @@
+id = "empty-catch"
+title = "Empty catch block"
+category = "hazard"
+cwe = ["CWE-390"]
+summary = "This catch block swallows the exception without a trace."
+explain = """
+An empty catch hides every exception of that type, including the unexpected
+ones. When ignoring is right, a comment saying why makes it a decision (and
+the rule stays quiet); otherwise handle, log or rethrow.
+"""
+shape = "(catch_clause body: (block) @body) @clause"
+focus = "@clause"
+where = [
+  "count(children(@body)) == 0",
+  "!has_comment(@body)",
+]
+
+[[example]]
+before = '''
+class Loader {
+    void Load() {
+        try { Read(); } catch (Exception) { }
+    }
+}
+'''
+
+[[counterexample]]
+code = '''
+class Loader {
+    void Load() {
+        try { Read(); } catch (Exception) { /* optional */ }
+    }
+}
+'''
+
+[[counterexample]]
+name = "a catch that handles the exception"
+code = '''
+class Loader {
+    void Load() {
+        try {
+            Read();
+        } catch (System.Exception e) {
+            System.Console.Error.WriteLine(e);
+        }
+    }
+    void Read() {}
+}
+'''

@@ -51,3 +51,20 @@ except NameError:
 
 print(list(xrange(3)))
 '''
+
+[[counterexample]]
+name = "input is redefined here"
+code = '''
+def input(prompt=""):
+    return "scripted"
+
+answer = raw_input("name? ")
+'''
+
+[[counterexample]]
+name = "a star import may redefine range or input"
+code = '''
+from compat import *
+for i in xrange(3):
+    print(i)
+'''

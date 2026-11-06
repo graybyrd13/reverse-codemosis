@@ -1,0 +1,126 @@
+id = "assignment-in-condition"
+title = "Assignment of a constant in a condition"
+category = "contradiction"
+cwe = ["CWE-481"]
+equivalents = ["clang-tidy:bugprone-assignment-in-if-condition"]
+semantics = "corrected"
+summary = "`${assign}` assigns rather than compares, so this condition is always the same."
+explain = """
+`if (retries = 3)` stores 3 in `retries` and then tests 3, which is always
+true: the branch always runs and the variable is overwritten. `==` was
+almost certainly meant, but an assignment in a condition can be deliberate,
+so the engine asks.
+"""
+shape = "(if_statement condition: (_) @condition)"
+focus = "@assign"
+where = [
+  "kind(@assign) == 'assignment_expression' && text(field(@assign, 'operator')) == '='",
+  "kind(field(@assign, 'left')) == 'identifier'",
+  "kind(field(@assign, 'right')) in ['number_literal', 'char_literal', 'true', 'false']",
+]
+
+[let]
+assign = "children(@condition)"
+variable = "field(@assign, 'left')"
+value = "field(@assign, 'right')"
+
+[ask]
+question = "Did you mean `${variable} == ${value}`?"
+
+[fix]
+edits = [{ replace = "@assign", with = "${variable} == ${value}" }]
+
+[[example]]
+before = '''
+#include <stdio.h>
+
+int main(void) {
+    int retries = 0;
+    if (retries = 3) puts("giving up"); else puts("retrying");
+    return 0;
+}
+'''
+after = '''
+#include <stdio.h>
+
+int main(void) {
+    int retries = 0;
+    if (retries == 3) puts("giving up"); else puts("retrying");
+    return 0;
+}
+'''
+output = "retrying\n"
+output_before = "giving up\n"
+
+[[example]]
+name = "C++"
+language = "cpp"
+before = '''
+#include <cstdio>
+
+int main() {
+    int mode = 1;
+    if (mode = 2) std::puts("two"); else std::puts("one");
+}
+'''
+after = '''
+#include <cstdio>
+
+int main() {
+    int mode = 1;
+    if (mode == 2) std::puts("two"); else std::puts("one");
+}
+'''
+output = "one\n"
+
+[[counterexample]]
+name = "assigning a computed value"
+code = '''
+#include <stdio.h>
+int main(void) {
+    int c;
+    if ((c = getchar()) != EOF) putchar(c);
+    return 0;
+}
+'''
+
+[[counterexample]]
+name = "a comparison"
+language = "c"
+code = '''
+int is_zero(int x) {
+    if (x == 0) return 1;
+    return 0;
+}
+'''
+
+[[counterexample]]
+name = "a compound assignment is not a mistyped comparison"
+language = "c"
+code = '''
+int next(int x) {
+    if (x += 1) return x;
+    return 0;
+}
+'''
+
+[[counterexample]]
+name = "assignment through a pointer is left to a person"
+language = "c"
+code = '''
+void clear(int *p) {
+    if (*p = 0) return;
+}
+'''
+
+[[counterexample]]
+name = "assigning a call's result and testing it is an idiom"
+language = "c"
+code = '''
+int read_byte(void);
+int first(void) {
+    int b;
+    if (b = read_byte()) return b;
+    return -1;
+}
+'''

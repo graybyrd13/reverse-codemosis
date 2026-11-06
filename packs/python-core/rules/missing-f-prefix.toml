@@ -1,6 +1,7 @@
 id = "missing-f-prefix"
 title = "String with placeholders but no f prefix"
 category = "contradiction"
+equivalents = ["flake8:RUF027"]
 semantics = "corrected"
 summary = "${s} contains placeholders naming variables in scope, but it is not an f-string, so they are printed literally."
 explain = """
@@ -15,7 +16,9 @@ somewhere else, so the decision is yours. Answering yes adds the `f` prefix.
 shape = "(string) @s"
 where = [
   "py.placeholders_bound(@s)",
-  "!py.is_docstring(@s)",
+  # No !py.is_docstring(@s): a docstring is a string statement, which
+  # py.used_as_template already excludes.
+  "!py.used_as_template(@s)",
   "kind(parent(@s)) not in ['attribute', 'binary_operator', 'concatenated_string', 'pair', 'subscript']",
 ]
 
@@ -61,4 +64,45 @@ name = "escaped braces"
 code = '''
 name = "x"
 pattern = "{{name}} and {name}"
+'''
+
+[[counterexample]]
+name = "a docstring that shows a placeholder"
+code = '''
+def greet(name):
+    """Return "Hello, {name}"."""
+    return "Hello, " + name
+'''
+
+[[counterexample]]
+name = "a translation template, formatted after translation"
+code = '''
+from gettext import gettext as _
+
+editor = "vi"
+print(_("{editor}: Editing failed").format(editor=editor))
+'''
+
+[[counterexample]]
+name = "a template kept in a variable and formatted later"
+code = '''
+path = "/static/app.js"
+element_template = "{path}"
+print(element_template.format(path=path))
+'''
+
+[[counterexample]]
+name = "an attribute docstring"
+code = '''
+class Shell:
+    name = "bash"
+    """Shown as {name} in the completion script."""
+'''
+
+[[counterexample]]
+name = "a docstring that shows a placeholder"
+code = '''
+def greet(name):
+    """Return the greeting for {name}."""
+    return f"hello {name}"
 '''

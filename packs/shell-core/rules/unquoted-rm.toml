@@ -1,0 +1,52 @@
+id = "unquoted-rm"
+title = "Unquoted variable in rm"
+category = "hazard"
+equivalents = ["shellcheck:SC2086"]
+semantics = "corrected"
+summary = "`${stmt}` deletes a path built from the unquoted variable ${variable}."
+explain = """
+An unquoted variable is split on spaces and expanded as a glob. In `rm`,
+that turns "my dir/build" into two paths, and an empty or unset variable
+turns `rm -rf $DIR/build` into `rm -rf /build`. Quoting the variable keeps
+the path exactly as it was set. Some scripts rely on splitting a list of
+paths on purpose, so the engine asks.
+"""
+shape = '''
+(command
+  name: (command_name (word) @command)
+  argument: (concatenation (simple_expansion) @variable)
+  (#eq? @command "rm")) @stmt
+
+(command
+  name: (command_name (word) @command)
+  argument: (simple_expansion) @variable
+  (#eq? @command "rm")) @stmt
+'''
+focus = "@variable"
+
+[ask]
+question = "Quote ${variable} so that spaces or an empty value cannot change what is deleted?"
+
+[fix]
+edits = [{ replace = "@variable", with = "\"${variable}\"" }]
+
+[[example]]
+before = '''
+DIR="my dir"
+mkdir -p "$DIR/build" && touch "$DIR/build/output"
+rm -rf $DIR/build
+ls "$DIR" | wc -l | tr -d ' '
+'''
+after = '''
+DIR="my dir"
+mkdir -p "$DIR/build" && touch "$DIR/build/output"
+rm -rf "$DIR"/build
+ls "$DIR" | wc -l | tr -d ' '
+'''
+output = "0\n"
+output_before = "1\n"
+
+[[counterexample]]
+code = '''
+rm -rf "$DIR/build"
+'''

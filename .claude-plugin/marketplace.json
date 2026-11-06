@@ -1,0 +1,14 @@
+{
+  "name": "reverse-codemosis",
+  "owner": { "name": "Reverse Codemosis contributors" },
+  "metadata": {
+    "description": "Plugins for Reverse Codemosis: correct code the way a proof corrects an argument."
+  },
+  "plugins": [
+    {
+      "name": "codemosis",
+      "source": "./integrations/claude-code",
+      "description": "Checks every edit, applies only provable corrections and brings the user's decisions back to the user."
+    }
+  ]
+}

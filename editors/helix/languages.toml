@@ -1,0 +1,29 @@
+# Reverse Codemosis for Helix: add to ~/.config/helix/languages.toml (or a
+# project's .helix/languages.toml).
+#
+# Helix replaces a language's default servers when you list them, so keep
+# the ones you use (`hx --health <language>` shows them) and add "codemosis".
+
+[language-server.codemosis]
+command = "codemosis"
+args = ["lsp"]
+
+[[language]]
+name = "python"
+language-servers = ["ruff", "pylsp", "codemosis"]
+
+[[language]]
+name = "rust"
+language-servers = ["rust-analyzer", "codemosis"]
+
+[[language]]
+name = "go"
+language-servers = ["gopls", "codemosis"]
+
+[[language]]
+name = "typescript"
+language-servers = ["typescript-language-server", "codemosis"]
+
+[[language]]
+name = "javascript"
+language-servers = ["typescript-language-server", "codemosis"]

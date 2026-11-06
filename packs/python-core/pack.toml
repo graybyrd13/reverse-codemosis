@@ -1,6 +1,7 @@
 [pack]
 id = "python-core"
 version = "0.1.0"
+engine = "^0.1"
 language = "python"
 summary = "Provable corrections for everyday Python 3."
 description = """

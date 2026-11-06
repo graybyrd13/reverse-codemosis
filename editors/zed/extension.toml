@@ -1,0 +1,21 @@
+id = "codemosis"
+name = "Reverse Codemosis"
+version = "0.1.0"
+schema_version = 1
+authors = ["Reverse Codemosis contributors"]
+description = "Find where code falls short, apply only corrections that can be proven, and answer the questions that are yours."
+repository = "https://github.com/graybyrd13/reverse-codemosis"
+
+# The language server reads every language GitHub knows; Zed starts it for
+# the languages listed here (add more in settings: languages.<name>.language_servers).
+[language_servers.codemosis]
+name = "Reverse Codemosis"
+languages = [
+  "Python", "Rust", "JavaScript", "TypeScript", "TSX", "Go", "Java", "C", "C++", "C#",
+  "Ruby", "PHP", "Shell Script", "Kotlin", "Scala", "Lua", "Swift",
+  "Elixir", "Erlang", "Haskell", "OCaml", "Zig", "Dart", "Elm", "Nix", "Terraform",
+  "HCL", "PowerShell", "Perl", "R", "Julia", "Clojure", "Groovy", "Objective-C",
+  "Markdown", "YAML", "TOML", "JSON", "Dockerfile", "Make", "HTML", "CSS", "SQL",
+]
+
+[context_servers.codemosis]

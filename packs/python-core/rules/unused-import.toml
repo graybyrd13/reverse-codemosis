@@ -1,6 +1,8 @@
 id = "unused-import"
 title = "Unused import"
 category = "waste"
+cwe = ["CWE-1164"]
+equivalents = ["flake8:F401", "pylint:unused-import", "pylint:W0611"]
 semantics = "preserved"
 summary = "`${name}` is imported but never used."
 explain = """
@@ -93,3 +95,48 @@ try:
 except ImportError:
     json = None
 '''
+
+[[counterexample]]
+name = "an import inside try is a feature test"
+code = '''
+try:
+    import zlib
+    HAVE_ZLIB = True
+except ImportError:
+    HAVE_ZLIB = False
+'''
+
+[[counterexample]]
+name = "deleting the name needs the import"
+code = '''
+import json
+del json
+'''
+
+[[counterexample]]
+name = "exec may use any name"
+code = '''
+import json
+plugin = open("plugin.py").read()
+exec(plugin)
+'''
+
+[[counterexample]]
+name = "a module that declares its public names is left to a person"
+code = '''
+import json
+__all__ = ["dump"]
+def dump(x):
+    return repr(x)
+'''
+
+[[counterexample]]
+name = "another module imports the name from this one"
+path = "config.py"
+code = '''
+import json
+'''
+files = { "app.py" = '''
+from config import json
+print(json.dumps({}))
+''' }

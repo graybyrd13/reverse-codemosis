@@ -1,0 +1,14 @@
+[pack]
+id = "javascript-core"
+version = "0.1.0"
+engine = "^0.1"
+languages = ["javascript", "typescript", "tsx"]
+summary = "Provable corrections for JavaScript and TypeScript, and questions where intent decides."
+description = """
+JavaScript has its own traps: declarations hoist, `let` and `const` have a
+temporal dead zone, NaN is unequal to itself, and debugging leftovers ship.
+Every example is executed with Node (TypeScript with type stripping).
+"""
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

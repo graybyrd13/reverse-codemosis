@@ -1,0 +1,49 @@
+id = "debugger-statement"
+title = "debugger statement"
+category = "waste"
+cwe = ["CWE-489"]
+equivalents = ["eslint:no-debugger"]
+semantics = "preserved"
+summary = "`debugger` is a breakpoint left in the code."
+explain = """
+A `debugger` statement does nothing unless a debugger is attached, in which
+case it stops the program. It is always a leftover from a debugging session:
+in production it is dead weight, and for anyone with developer tools open it
+halts the page.
+"""
+shape = "(debugger_statement) @stmt"
+where = ["occupies_lines(@stmt)"]
+
+[fix]
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+before = '''
+function total(items) {
+  debugger;
+  return items.reduce((a, b) => a + b, 0);
+}
+console.log(total([1, 2, 3]));
+'''
+after = '''
+function total(items) {
+  return items.reduce((a, b) => a + b, 0);
+}
+console.log(total([1, 2, 3]));
+'''
+
+[[counterexample]]
+code = '''
+const debuggerEnabled = false;
+console.log(debuggerEnabled);
+'''
+
+[[counterexample]]
+name = "the only statement of an if: deleting its line would drop the condition's side effect"
+code = '''
+function check(items) {
+  if (validate(items)) debugger;
+  return items;
+}
+function validate(items) { return items.length > 0; }
+'''

@@ -1,6 +1,7 @@
 id = "undefined-name"
 title = "Name that is never defined"
 category = "broken"
+equivalents = ["flake8:F821", "mypy:name-defined", "pyright:reportUndefinedVariable", "pylint:undefined-variable", "pylint:E0602"]
 summary = "`${name}` is not defined anywhere in this file; this line raises NameError when it runs."
 explain = """
 Nothing in the file binds this name: no import, assignment, parameter,
@@ -48,4 +49,35 @@ def total(prices):
 name = "fixable imports are left to the import rules"
 code = '''
 print(json.dumps({}))
+'''
+
+[[counterexample]]
+name = "PEP 695 type aliases and type parameters"
+code = '''
+type Alias = str
+type Pair[T] = tuple[T, T]
+
+
+def first[T](items: list[T]) -> T:
+    return items[0]
+
+
+class Box[T]:
+    item: T
+
+
+print(Alias, Pair, first, Box)
+'''
+
+[[counterexample]]
+name = "a star import may provide any name"
+code = '''
+from settings import *
+print(DEBUG)
+'''
+
+[[counterexample]]
+name = "a standard-library name is left to missing-name-import, which adds its import"
+code = '''
+counts = defaultdict(int)
 '''

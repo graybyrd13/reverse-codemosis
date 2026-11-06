@@ -1,0 +1,26 @@
+id = "obj-magic"
+title = "Obj.magic"
+category = "hazard"
+tags = ["type-safety"]
+summary = "`${use}` turns off the type checker for this value."
+explain = """
+`Obj.magic` converts any value to any type without a check. When the types do not really match, the
+program reads memory as the wrong kind of value: wrong results at best, a segmentation fault at worst,
+and the type checker can no longer help. Use a variant, a GADT or a proper conversion. Nothing is changed
+automatically: the safe form depends on what the cast was for.
+"""
+shape = '''
+(value_path (module_path (module_name) @module) (value_name) @name
+  (#eq? @module "Obj") (#eq? @name "magic")) @use
+'''
+focus = "@use"
+
+[[example]]
+before = '''
+let as_int (x : string) : int = Obj.magic x
+'''
+
+[[counterexample]]
+code = '''
+let as_int (x : string) : int = int_of_string x
+'''

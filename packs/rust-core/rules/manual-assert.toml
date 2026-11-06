@@ -1,6 +1,7 @@
 id = "manual-assert"
 title = "if !condition { panic!(..) }"
 category = "simplification"
+equivalents = ["clippy:manual_assert"]
 semantics = "preserved"
 summary = "This `if` only panics when `${cond}` is false; it is `assert!(${cond|strip_parens}, ...)`."
 explain = """
@@ -76,6 +77,36 @@ fn check(ok: bool) {
     if !ok {
         eprintln!("about to fail");
         panic!("bad");
+    }
+}
+'''
+
+[[counterexample]]
+name = "not a panic: the program goes on"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        println!("not ok");
+    }
+}
+'''
+
+[[counterexample]]
+name = "a bare panic!() has a different message from assert!"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        panic!();
+    }
+}
+'''
+
+[[counterexample]]
+name = "brackets are not an argument list"
+code = '''
+fn check(ok: bool) {
+    if !ok {
+        panic!["bad"];
     }
 }
 '''

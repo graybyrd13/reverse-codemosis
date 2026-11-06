@@ -1,0 +1,32 @@
+# Hooks for https://pre-commit.com. In .pre-commit-config.yaml:
+#
+#   - repo: https://github.com/graybyrd13/reverse-codemosis
+#     rev: <a tag or commit>
+#     hooks:
+#       - id: codemosis-check
+#
+# pre-commit builds codemosis with cargo the first time.
+
+- id: codemosis-check
+  name: Reverse Codemosis (check)
+  description: "Report findings; fail on any new open finding at or above warning."
+  entry: codemosis check --fail-on warning
+  language: rust
+  pass_filenames: false
+  always_run: true
+
+- id: codemosis-check-strict
+  name: Reverse Codemosis (check, every finding)
+  description: Fail on any open finding, including notes.
+  entry: codemosis check --fail-on any
+  language: rust
+  pass_filenames: false
+  always_run: true
+
+- id: codemosis-pack-test
+  name: Reverse Codemosis (pack self-tests)
+  description: "For repositories of fix packs: lint every pack and run its proofs."
+  entry: sh -c 'codemosis pack lint --deny-warnings "$@" && codemosis pack test "$@"' --
+  language: rust
+  files: '(^|/)(pack\.toml|rules/.*\.toml|tables/.*\.toml)$'
+  pass_filenames: false

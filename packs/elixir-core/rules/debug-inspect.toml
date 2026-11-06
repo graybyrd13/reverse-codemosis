@@ -1,0 +1,103 @@
+id = "debug-inspect"
+title = "IO.inspect left in code"
+tags = ["debugging"]
+category = "waste"
+semantics = "preserved"
+summary = "`${call}` prints a value for debugging."
+explain = """
+`IO.inspect` prints its argument and returns it, which makes it the usual way to look at a value while
+debugging, and easy to leave behind. It may also be real output, so the engine asks. keep records it as
+intentional; remove deletes the line.
+
+Only standalone calls are reported: an `IO.inspect` in a pipeline passes its value on, and the last
+expression of a block is its result, so deleting either would change the program.
+"""
+shape = '''
+(call
+  target: (dot left: (alias) @module right: (identifier) @function)
+  (#eq? @module "IO")
+  (#eq? @function "inspect")) @call
+'''
+focus = "@call"
+where = [
+  "file_purpose() in ['library', 'test']",
+  "kind(parent(@call)) in ['do_block', 'stab_clause', 'body', 'source']",
+  "exists(siblings_after(@call))",
+  "occupies_lines(@call)",
+]
+[ask]
+question = "Keep this IO.inspect?"
+
+[[ask.option]]
+answer = "keep"
+means = "it is real output; record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "it is leftover debugging; delete it"
+edits = [{ delete_lines = "@call" }]
+
+[[example]]
+answer = "remove"
+path = "lib/cart.ex"
+before = '''
+defmodule Cart do
+  def total(items) do
+    IO.inspect(items)
+    Enum.sum(items)
+  end
+end
+'''
+after = '''
+defmodule Cart do
+  def total(items) do
+    Enum.sum(items)
+  end
+end
+'''
+
+[[counterexample]]
+name = "in an example, printing is the point"
+path = "examples/cart.exs"
+code = '''
+defmodule Cart do
+  def total(items) do
+    IO.inspect(items)
+    Enum.sum(items)
+  end
+end
+'''
+
+[[counterexample]]
+name = "the start of a pipeline: deleting the line would break it"
+path = "lib/cart.ex"
+code = '''
+defmodule Cart do
+  def total(items) do
+    IO.inspect(items)
+    |> Enum.sum()
+  end
+end
+'''
+
+[[counterexample]]
+name = "the last expression is the function's result"
+path = "lib/cart.ex"
+code = '''
+defmodule Cart do
+  def show(items) do
+    IO.inspect(items)
+  end
+end
+'''
+
+[[counterexample]]
+name = "a call that shares its line"
+path = "lib/cart.ex"
+code = '''
+defmodule Cart do
+  def total(items) do
+    IO.inspect(items); Enum.sum(items)
+  end
+end
+'''

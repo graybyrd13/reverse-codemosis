@@ -1,0 +1,40 @@
+# GitHub language name = [regular expressions].
+# Each pattern starts at the beginning of a line and must capture the wait
+# as `call`; the whole match is deleted when the answer is "remove", so it
+# must cover the entire statement (and nothing else) on its line.
+[wait_patterns]
+"AppleScript" = ['(?im)^[ \t]*(?P<call>delay\s+[\d.]+)[ \t]*$']
+"AutoHotkey" = ['(?im)^[ \t]*(?P<call>Sleep,?\s*\d+)[ \t]*$']
+"Batchfile" = [
+  '(?im)^[ \t]*(?P<call>timeout(?:\.exe)?\s+(?:/t\s+)?\d+(?:\s+/nobreak)?(?:\s*>\s*nul)?)[ \t]*$',
+  '(?im)^[ \t]*(?P<call>ping\s+(?:-n\s+\d+\s+)?127\.0\.0\.1(?:\s+-n\s+\d+)?\s*>\s*nul)[ \t]*$',
+]
+"Clojure" = ['(?m)^[ \t]*(?P<call>\(Thread/sleep\s+\d+\))[ \t]*$']
+"Crystal" = ['(?m)^[ \t]*(?P<call>sleep\s*\(?\s*[\d.]+(?:\.(?:seconds|milliseconds))?\s*\)?)[ \t]*$']
+"Dart" = ['(?m)^[ \t]*(?P<call>await\s+Future\.delayed\([^\n;]*\);|sleep\(\s*(?:const\s+)?Duration\([^\n;]*\)\);)[ \t]*$']
+"Dockerfile" = ['(?m)^[ \t]*(?P<call>RUN\s+sleep\s+\d+)[ \t]*$']
+"Elixir" = ['(?m)^[ \t]*(?P<call>(?:Process\.sleep|:timer\.sleep)\(\s*[\d_]+\s*\))[ \t]*$']
+"Erlang" = ['(?m)^[ \t]*(?P<call>timer:sleep\(\s*\d+\s*\)[,.]?)[ \t]*$']
+"F#" = ['(?m)^[ \t]*(?P<call>(?:System\.)?Threading\.Thread\.Sleep\(\s*\d+\s*\)|do!\s+Async\.Sleep\s*\(?\s*\d+\s*\)?)[ \t]*$']
+"Fortran" = ['(?im)^[ \t]*(?P<call>call\s+sleep\s*\(\s*\d+\s*\))[ \t]*$']
+"GDScript" = ['(?m)^[ \t]*(?P<call>await\s+get_tree\(\)\.create_timer\([^\n)]*\)\.timeout)[ \t]*$']
+"Groovy" = ['(?m)^[ \t]*(?P<call>(?:Thread\.)?sleep\(\s*\d+\s*\))[ \t]*$']
+"Haskell" = ['(?m)^[ \t]*(?P<call>threadDelay\s+\(?[\d_ *]+\)?)[ \t]*$']
+"Julia" = ['(?m)^[ \t]*(?P<call>sleep\(\s*[\d.]+\s*\))[ \t]*$']
+"Lua" = ['''(?m)^[ \t]*(?P<call>os\.execute\(\s*["']sleep\s+[\d.]+["']\s*\))[ \t]*$''']
+"Makefile" = ['(?m)^\t(?P<call>@?sleep\s+\d+)[ \t]*$']
+"MATLAB" = ['(?m)^[ \t]*(?P<call>pause\(\s*[\d.]+\s*\);?)[ \t]*$']
+"Nim" = ['(?m)^[ \t]*(?P<call>sleep\(\s*\d+\s*\))[ \t]*$']
+"Objective-C" = ['(?m)^[ \t]*(?P<call>\[NSThread\s+sleepForTimeInterval:\s*[\d.]+\];|u?sleep\(\s*\d+\s*\);)[ \t]*$']
+"OCaml" = ['(?m)^[ \t]*(?P<call>Unix\.sleepf?\s+[\d.]+;?)[ \t]*$']
+"Perl" = ['(?m)^[ \t]*(?P<call>(?:Time::HiRes::)?u?sleep\s*\(?\s*[\d.]+\s*\)?\s*;)[ \t]*$']
+"PLpgSQL" = ['(?im)^[ \t]*(?P<call>(?:PERFORM|SELECT)\s+pg_sleep\(\s*[\d.]+\s*\);)[ \t]*$']
+"PowerShell" = ['(?im)^[ \t]*(?P<call>Start-Sleep(?:\s+-(?:Seconds|Milliseconds|s|m))?\s+[\d.]+)[ \t]*$']
+"R" = ['(?m)^[ \t]*(?P<call>Sys\.sleep\(\s*[\d.]+\s*\))[ \t]*$']
+"Raku" = ['(?m)^[ \t]*(?P<call>sleep\s+[\d.]+;)[ \t]*$']
+"SQL" = ['(?im)^[ \t]*(?P<call>(?:SELECT|DO)\s+(?:pg_)?sleep\(\s*[\d.]+\s*\);)[ \t]*$']
+"Tcl" = ['(?m)^[ \t]*(?P<call>after\s+\d+)[ \t]*$']
+"TSQL" = ['''(?im)^[ \t]*(?P<call>WAITFOR\s+DELAY\s+'[\d:.]+';?)[ \t]*$''']
+"Visual Basic .NET" = ['(?im)^[ \t]*(?P<call>(?:System\.)?(?:Threading\.)?Thread\.Sleep\(\s*\d+\s*\))[ \t]*$']
+"YAML" = ['(?m)^[ \t]+(?P<call>sleep\s+\d+[smh]?)[ \t]*$']
+"Zig" = ['(?m)^[ \t]*(?P<call>std\.time\.sleep\([^\n;]*\);)[ \t]*$']

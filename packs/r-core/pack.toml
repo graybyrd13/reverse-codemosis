@@ -1,0 +1,9 @@
+[pack]
+id = "r-core"
+version = "0.1.0"
+engine = "^0.1"
+language = "r"
+summary = "Corrections and questions for R: comparisons with NA, browser() left in code."
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

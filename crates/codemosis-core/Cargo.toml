@@ -11,14 +11,49 @@ build = "build.rs"
 
 [dependencies]
 regex.workspace = true
+schemars.workspace = true
 serde.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 toml.workspace = true
 tree-sitter.workspace = true
 tree-sitter-python.workspace = true
 tree-sitter-rust.workspace = true
+tree-sitter-javascript.workspace = true
+tree-sitter-typescript.workspace = true
+tree-sitter-go.workspace = true
+tree-sitter-java.workspace = true
+tree-sitter-c.workspace = true
+tree-sitter-cpp.workspace = true
+tree-sitter-c-sharp.workspace = true
+tree-sitter-ruby.workspace = true
+tree-sitter-php.workspace = true
+tree-sitter-bash.workspace = true
+tree-sitter-kotlin-ng.workspace = true
+tree-sitter-scala.workspace = true
+tree-sitter-lua.workspace = true
+tree-sitter-swift.workspace = true
+tree-sitter-elixir.workspace = true
+tree-sitter-haskell.workspace = true
+tree-sitter-ocaml.workspace = true
+tree-sitter-zig.workspace = true
+tree-sitter-dart.workspace = true
+tree-sitter-r.workspace = true
+tree-sitter-julia.workspace = true
+tree-sitter-erlang.workspace = true
+tree-sitter-hcl.workspace = true
+tree-sitter-powershell.workspace = true
+tree-sitter-nix.workspace = true
+tree-sitter-elm.workspace = true
+tree-sitter-solidity.workspace = true
 similar.workspace = true
 ignore.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[build-dependencies]
+yaml-rust2.workspace = true
 
 [dev-dependencies]
 tempfile.workspace = true

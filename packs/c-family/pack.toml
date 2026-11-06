@@ -1,0 +1,9 @@
+[pack]
+id = "c-family"
+version = "0.1.0"
+engine = "^0.1"
+languages = ["c", "cpp"]
+summary = "Corrections and questions for C and C++."
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

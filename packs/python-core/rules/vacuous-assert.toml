@@ -1,6 +1,8 @@
 id = "vacuous-assert"
 title = "Assertion that can never fail"
 category = "contradiction"
+cwe = ["CWE-571"]
+equivalents = ["flake8:F631", "pylint:assert-on-tuple"]
 semantics = "corrected"
 summary = "`${stmt}` asserts a two-element tuple, which is always true, so it never checks anything."
 explain = """
@@ -64,4 +66,18 @@ name = "comparing a tuple is a real check"
 code = '''
 pair = (1, 2)
 assert (1, 2) == pair
+'''
+
+[[counterexample]]
+name = "an assignment expression cannot stand unparenthesized in an assert"
+code = '''
+def check(load):
+    assert (data := load(), "loaded")
+'''
+
+[[counterexample]]
+name = "nor in its message"
+code = '''
+def check(ready, explain):
+    assert (ready, why := explain())
 '''

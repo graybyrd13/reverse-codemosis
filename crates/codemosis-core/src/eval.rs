@@ -23,6 +23,8 @@ pub enum Value<'a> {
     Str(String),
     /// Zero or more syntax nodes, in source order.
     Nodes(Vec<Node<'a>>),
+    /// Zero or more byte ranges of the file, in order (captures of text rules).
+    Spans(Vec<(usize, usize)>),
     List(Vec<Value<'a>>),
 }
 
@@ -33,6 +35,7 @@ impl Value<'_> {
             Value::Num(_) => "number",
             Value::Str(_) => "string",
             Value::Nodes(_) => "nodes",
+            Value::Spans(_) => "spans",
             Value::List(_) => "list",
         }
     }
@@ -71,6 +74,24 @@ impl<'a> EvalCtx<'a> {
         }
     }
 
+    /// The byte ranges of a capture, whether it holds nodes or spans.
+    pub fn ranges(&self, v: &Value<'a>, what: &str) -> Result<Vec<(usize, usize)>, EvalError> {
+        match v {
+            Value::Nodes(n) => Ok(n.iter().map(|n| (n.start_byte(), n.end_byte())).collect()),
+            Value::Spans(s) => Ok(s.clone()),
+            other => err(format!("{what}: expected a capture, found {}", other.type_name())),
+        }
+    }
+
+    /// The overall range of a capture: from its first start to its last end.
+    pub fn extent(&self, v: &Value<'a>, what: &str) -> Result<Option<(usize, usize)>, EvalError> {
+        let r = self.ranges(v, what)?;
+        Ok(match (r.first(), r.last()) {
+            (Some(a), Some(b)) => Some((a.0, b.1.max(a.0))),
+            _ => None,
+        })
+    }
+
     /// The nodes bound to a name (empty when the name holds another value).
     pub fn bound_nodes(&self, name: &str) -> Vec<Node<'a>> {
         match self.bindings.get(name) {
@@ -86,6 +107,9 @@ impl<'a> EvalCtx<'a> {
     pub fn nodes(&self, v: &Value<'a>, what: &str) -> Result<Vec<Node<'a>>, EvalError> {
         match v {
             Value::Nodes(n) => Ok(n.clone()),
+            Value::Spans(_) => err(format!(
+                "{what}: needs syntax-tree nodes, but this rule matches text (it has a `pattern`, not a `shape`)"
+            )),
             other => err(format!(
                 "{what}: expected nodes (a capture), found {}",
                 other.type_name()
@@ -99,6 +123,10 @@ impl<'a> EvalCtx<'a> {
         match v {
             Value::Str(s) => Ok(s.clone()),
             Value::Nodes(n) => Ok(self.text_of(n)),
+            Value::Spans(s) => Ok(match (s.first(), s.last()) {
+                (Some(a), Some(b)) => self.file.text[a.0..b.1.max(a.0)].to_string(),
+                _ => String::new(),
+            }),
             other => err(format!("{what}: expected text, found {}", other.type_name())),
         }
     }
@@ -114,6 +142,7 @@ impl<'a> EvalCtx<'a> {
         match v {
             Value::List(items) => items.iter().map(|i| self.string(i, what)).collect(),
             Value::Nodes(nodes) => Ok(nodes.iter().map(|n| self.node_text(n).to_string()).collect()),
+            Value::Spans(spans) => Ok(spans.iter().map(|(a, b)| self.file.text[*a..*b].to_string()).collect()),
             Value::Str(s) => Ok(vec![s.clone()]),
             other => err(format!("{what}: expected a list, found {}", other.type_name())),
         }
@@ -174,7 +203,9 @@ fn compare<'a>(a: &Value<'a>, op: CmpOp, b: &Value<'a>, ctx: &EvalCtx<'a>) -> Re
         CmpOp::In | CmpOp::NotIn => {
             let needle = ctx.string(a, "left side of 'in'")?;
             let found = match b {
-                Value::List(_) | Value::Nodes(_) => ctx.strings(b, "right side of 'in'")?.contains(&needle),
+                Value::List(_) | Value::Nodes(_) | Value::Spans(_) => {
+                    ctx.strings(b, "right side of 'in'")?.contains(&needle)
+                }
                 Value::Str(s) => s.contains(&needle),
                 other => {
                     return err(format!(
@@ -261,23 +292,14 @@ pub fn contains_kind(node: &Node<'_>, kinds: &[String]) -> bool {
     false
 }
 
-/// Every comment node whose range intersects [start, end).
-pub fn comments_in<'a>(file: &'a SourceFile, start: usize, end: usize) -> Vec<Node<'a>> {
-    let mut out = Vec::new();
-    let mut stack = vec![file.tree.root_node()];
-    let mut cursor = file.tree.walk();
-    while let Some(n) = stack.pop() {
-        if n.end_byte() <= start || n.start_byte() >= end {
-            continue;
-        }
-        if file.lang.is_comment(&n) {
-            out.push(n);
-            continue;
-        }
-        stack.extend(n.children(&mut cursor));
-    }
-    out.sort_by_key(|n| n.start_byte());
-    out
+/// Every comment whose range intersects [start, end), from the syntax tree
+/// or the lexical profile. Empty when the file's comments cannot be known.
+pub fn comments_in(file: &SourceFile, start: usize, end: usize) -> Vec<(usize, usize)> {
+    file.segments()
+        .iter()
+        .filter(|s| s.kind == crate::lex::SegKind::Comment && s.end > start && s.start < end)
+        .map(|s| (s.start, s.end))
+        .collect()
 }
 
 pub fn line_start(text: &str, byte: usize) -> usize {
@@ -356,6 +378,11 @@ pub const GENERIC_FACTS: &[FactDoc] = &[
         name: "siblings_after",
         signature: "siblings_after(nodes) -> nodes",
         doc: "All named siblings after the last node, excluding comments.",
+    },
+    FactDoc {
+        name: "earlier_same_field",
+        signature: "earlier_same_field(nodes, field) -> nodes",
+        doc: "The `field` child of the first earlier named sibling whose `field` child has exactly the same text as the node's own (for duplicate keys: `earlier_same_field(@pair, 'key')`). Empty when there is none. Linear in the number of siblings, unlike a shape that pairs every sibling with every other.",
     },
     FactDoc {
         name: "ancestor",
@@ -453,6 +480,51 @@ pub const GENERIC_FACTS: &[FactDoc] = &[
         doc: "True when every item of the first list is in the second.",
     },
     FactDoc {
+        name: "concat",
+        signature: "concat(text...) -> string",
+        doc: "The texts joined together.",
+    },
+    FactDoc {
+        name: "bang",
+        signature: "bang(text) -> string",
+        doc: "The C-style negation of an expression: `!x`, parenthesised unless x is a single name, member access or call.",
+    },
+    FactDoc {
+        name: "count_matches",
+        signature: "count_matches(text, regex) -> number",
+        doc: "How many times the regular expression matches in the text.",
+    },
+    FactDoc {
+        name: "file_purpose",
+        signature: "file_purpose() -> string",
+        doc: "What the file is for, from path conventions: 'library', 'test', 'example', 'script', 'docs' or 'benchmark' (tests/, *_test.go, *.spec.ts, examples/, scripts/, bin/, .github/, docs/, benches/...). For rules that should stay quiet where a behaviour is intentional, such as console output in an example.",
+    },
+    FactDoc {
+        name: "file_matches",
+        signature: "file_matches(regex) -> number",
+        doc: "How many times the regular expression matches in the whole file, in code only (not comments or strings) when the file's comments are known.",
+    },
+    FactDoc {
+        name: "kind_at",
+        signature: "kind_at(capture) -> string",
+        doc: "What the capture starts in: 'code', 'comment', 'string', or 'unknown' when the file's comments and strings cannot be told apart.",
+    },
+    FactDoc {
+        name: "language",
+        signature: "language() -> string",
+        doc: "The file's language, as GitHub names it: 'Python', 'Shell', 'PowerShell'...",
+    },
+    FactDoc {
+        name: "language_kind",
+        signature: "language_kind() -> string",
+        doc: "GitHub's type for the file's language: 'programming', 'markup', 'data' or 'prose'.",
+    },
+    FactDoc {
+        name: "tier",
+        signature: "tier() -> string",
+        doc: "How deeply the file is understood: 'deep' (syntax tree), 'lexical' (comments and strings) or 'recognized'.",
+    },
+    FactDoc {
         name: "file_name",
         signature: "file_name() -> string",
         doc: "Name of the file being examined, e.g. '__init__.py'.",
@@ -466,17 +538,24 @@ pub const GENERIC_FACTS: &[FactDoc] = &[
 
 fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'a>, EvalError> {
     if let Some((prefix, rest)) = name.split_once('.') {
-        if prefix != ctx.file.lang.prefix() {
-            return err(format!(
-                "'{name}' belongs to another language; this rule runs on {} files",
-                ctx.file.lang.id()
-            ));
-        }
-        return match ctx.file.lang.call(rest, args, ctx) {
-            Some(result) => result,
-            None => err(format!("unknown fact '{name}'")),
+        return match ctx.file.lang {
+            Some(lang) if lang.prefix() == prefix => match lang.call(rest, args, ctx) {
+                Some(result) => result,
+                None => err(format!("unknown fact '{name}'")),
+            },
+            _ => err(format!(
+                "'{name}' belongs to another language; this file is {}",
+                ctx.file.language_name()
+            )),
         };
     }
+    let extent = |what: &str| -> Result<Option<(usize, usize)>, EvalError> {
+        ctx.extent(
+            args.first()
+                .ok_or_else(|| EvalError(format!("{what}() needs an argument")))?,
+            what,
+        )
+    };
     let first_nodes = |what: &str| -> Result<Vec<Node<'a>>, EvalError> {
         ctx.nodes(
             args.first()
@@ -502,6 +581,8 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
             arity(name, args, 1, 1)?;
             Ok(Value::Num(match &args[0] {
                 Value::Nodes(n) if name == "count" => n.len() as i64,
+                Value::Spans(n) if name == "count" => n.len() as i64,
+                Value::Spans(_) => ctx.string(&args[0], name)?.chars().count() as i64,
                 Value::List(l) => l.len() as i64,
                 Value::Str(s) if name == "len" => s.chars().count() as i64,
                 Value::Nodes(n) => ctx.text_of(n).chars().count() as i64,
@@ -510,7 +591,7 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
         }
         "exists" | "empty" => {
             arity(name, args, 1, 1)?;
-            let any = !first_nodes(name)?.is_empty();
+            let any = !ctx.ranges(&args[0], name)?.is_empty();
             Ok(Value::Bool(if name == "exists" { any } else { !any }))
         }
         "field" | "field_count" => {
@@ -558,6 +639,52 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
                 first_nodes(name)?.first().and_then(prev_named).into_iter().collect(),
             ))
         }
+        "earlier_same_field" => {
+            arity(name, args, 2, 2)?;
+            let field = ctx.string(&args[1], name)?;
+            let Some(node) = first_nodes(name)?.first().copied() else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            let Some(own) = node.child_by_field_name(&field) else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            let own_text = &ctx.file.text[own.byte_range()];
+            // Walk forward from the first sibling: tree-sitter finds a
+            // previous sibling by rescanning from the parent's start, so a
+            // backward walk would be quadratic per call.
+            let Some(parent) = node.parent() else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            // Where each text first appears among the siblings, computed once
+            // per parent, so the whole container costs linear time.
+            let firsts = ctx
+                .file
+                .memo(format!("earlier_same_field:{}:{field}", parent.id()), || {
+                    let mut firsts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+                    let mut walker = parent.walk();
+                    for sib in parent.named_children(&mut walker) {
+                        if let Some(k) = sib.child_by_field_name(&field) {
+                            firsts
+                                .entry(ctx.file.text[k.byte_range()].to_string())
+                                .or_insert(k.start_byte());
+                        }
+                    }
+                    firsts
+                });
+            let Some(&first_start) = firsts.get(own_text) else {
+                return Ok(Value::Nodes(Vec::new()));
+            };
+            if first_start >= own.start_byte() {
+                return Ok(Value::Nodes(Vec::new()));
+            }
+            // A real duplicate (rare): find the earlier node itself.
+            let mut walker = parent.walk();
+            let found = parent
+                .named_children(&mut walker)
+                .filter_map(|sib| sib.child_by_field_name(&field))
+                .find(|k| k.start_byte() == first_start);
+            Ok(Value::Nodes(found.into_iter().collect()))
+        }
         "siblings_after" => {
             arity(name, args, 1, 1)?;
             let mut out = Vec::new();
@@ -599,10 +726,9 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
         }
         "has_comment" => {
             arity(name, args, 1, 1)?;
-            let nodes = first_nodes(name)?;
-            Ok(Value::Bool(match (nodes.first(), nodes.last()) {
-                (Some(a), Some(b)) => !comments_in(ctx.file, a.start_byte(), b.end_byte()).is_empty(),
-                _ => false,
+            Ok(Value::Bool(match extent(name)? {
+                Some((a, b)) => !comments_in(ctx.file, a, b).is_empty(),
+                None => false,
             }))
         }
         "has_error" => {
@@ -611,43 +737,39 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
         }
         "multiline" => {
             arity(name, args, 1, 1)?;
-            let nodes = first_nodes(name)?;
-            Ok(Value::Bool(match (nodes.first(), nodes.last()) {
-                (Some(a), Some(b)) => a.start_position().row != b.end_position().row,
-                _ => false,
+            Ok(Value::Bool(match extent(name)? {
+                Some((a, b)) => ctx.file.text[a..b].contains('\n'),
+                None => false,
             }))
         }
         "same_line" => {
             arity(name, args, 2, 2)?;
-            let a = ctx.nodes(&args[0], name)?;
-            let b = ctx.nodes(&args[1], name)?;
-            Ok(Value::Bool(match (a.first(), b.first()) {
-                (Some(a), Some(b)) => a.start_position().row == b.start_position().row,
+            let a = ctx.extent(&args[0], name)?;
+            let b = ctx.extent(&args[1], name)?;
+            Ok(Value::Bool(match (a, b) {
+                (Some(a), Some(b)) => ctx.file.line_of(a.0) == ctx.file.line_of(b.0),
                 _ => false,
             }))
         }
         "occupies_lines" => {
             arity(name, args, 1, 1)?;
-            let nodes = first_nodes(name)?;
-            Ok(Value::Bool(match (nodes.first(), nodes.last()) {
-                (Some(a), Some(b)) => occupies_lines(&ctx.file.text, a.start_byte(), b.end_byte()),
-                _ => false,
+            Ok(Value::Bool(match extent(name)? {
+                Some((a, b)) => occupies_lines(&ctx.file.text, a, b),
+                None => false,
             }))
         }
         "line" => {
             arity(name, args, 1, 1)?;
             Ok(Value::Num(
-                first_nodes(name)?
-                    .first()
-                    .map(|n| n.start_position().row as i64 + 1)
-                    .unwrap_or(0),
+                extent(name)?.map(|(a, _)| ctx.file.line_of(a) as i64).unwrap_or(0),
             ))
         }
         "matches" => {
             arity(name, args, 2, 2)?;
             let text = ctx.string(&args[0], name)?;
             let pattern = ctx.string(&args[1], name)?;
-            let re = regex::Regex::new(&pattern).map_err(|e| EvalError(format!("matches(): invalid regex: {e}")))?;
+            let re =
+                crate::regex_cache::get(&pattern).map_err(|e| EvalError(format!("matches(): invalid regex: {e}")))?;
             Ok(Value::Bool(re.is_match(&text)))
         }
         "starts_with" | "ends_with" => {
@@ -710,6 +832,63 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
             let b = ctx.strings(&args[1], name)?;
             Ok(Value::Bool(a.iter().all(|x| b.contains(x))))
         }
+        "concat" => {
+            let parts: Vec<String> = args.iter().map(|a| ctx.string(a, name)).collect::<Result<_, _>>()?;
+            Ok(Value::Str(parts.concat()))
+        }
+        "bang" => {
+            arity(name, args, 1, 1)?;
+            Ok(Value::Str(crate::template::bang(&ctx.string(&args[0], name)?)))
+        }
+        "count_matches" => {
+            arity(name, args, 2, 2)?;
+            let text = ctx.string(&args[0], name)?;
+            let re = crate::regex_cache::get(&ctx.string(&args[1], name)?)
+                .map_err(|e| EvalError(format!("count_matches(): invalid regex: {e}")))?;
+            Ok(Value::Num(re.find_iter(&text).count() as i64))
+        }
+        "file_purpose" => {
+            arity(name, args, 0, 0)?;
+            Ok(Value::Str(ctx.file.purpose().as_str().to_string()))
+        }
+        "file_matches" => {
+            arity(name, args, 1, 1)?;
+            let re = crate::regex_cache::get(&ctx.string(&args[0], name)?)
+                .map_err(|e| EvalError(format!("file_matches(): invalid regex: {e}")))?;
+            let file = ctx.file;
+            let n = re
+                .find_iter(&file.text)
+                .filter(|m| {
+                    !matches!(
+                        file.kind_at(m.start()),
+                        Some(crate::lex::SegKind::Comment | crate::lex::SegKind::String)
+                    )
+                })
+                .count();
+            Ok(Value::Num(n as i64))
+        }
+        "kind_at" => {
+            arity(name, args, 1, 1)?;
+            let kind = match extent(name)? {
+                Some((a, _)) => ctx.file.kind_at(a).map(|k| k.as_str()).unwrap_or("unknown"),
+                None => "unknown",
+            };
+            Ok(Value::Str(kind.to_string()))
+        }
+        "language" => {
+            arity(name, args, 0, 0)?;
+            Ok(Value::Str(ctx.file.language_name().to_string()))
+        }
+        "language_kind" => {
+            arity(name, args, 0, 0)?;
+            Ok(Value::Str(
+                ctx.file.linguist().map(|l| l.kind.as_str()).unwrap_or("").to_string(),
+            ))
+        }
+        "tier" => {
+            arity(name, args, 0, 0)?;
+            Ok(Value::Str(ctx.file.tier().as_str().to_string()))
+        }
         "file_name" => {
             arity(name, args, 0, 0)?;
             Ok(Value::Str(ctx.file.file_name()))
@@ -722,10 +901,16 @@ fn call<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Value<'
     }
 }
 
-/// True when `name` is a function the generic vocabulary or `lang` provides.
-pub fn is_known_fact(name: &str, lang: &dyn crate::lang::Language) -> bool {
+/// True when `name` is a function the generic vocabulary or one of `langs`
+/// provides.
+pub fn is_known_fact(name: &str, langs: &[&'static dyn crate::lang::Language]) -> bool {
     match name.split_once('.') {
-        Some((prefix, rest)) => prefix == lang.prefix() && lang.facts().iter().any(|f| f.name == rest),
+        Some((prefix, rest)) => {
+            !langs.is_empty()
+                && langs
+                    .iter()
+                    .all(|l| l.prefix() == prefix && l.facts().iter().any(|f| f.name == rest))
+        }
         None => GENERIC_FACTS.iter().any(|f| f.name == name),
     }
 }

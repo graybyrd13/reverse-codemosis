@@ -1,0 +1,54 @@
+diff --git a/src/cart.js b/src/cart.js
+--- a/src/cart.js
++++ b/src/cart.js
+@@ -4,7 +4,6 @@
+   }
+ 
+   add(sku, price, quantity = 1) {
+-    debugger;
+     this.items.push({ sku, price, quantity });
+   }
+ 
+@@ -13,14 +12,10 @@
+   }
+ 
+   isEmpty() {
+-    if (this.items.length === 0) {
+-      return true;
+-    } else {
+-      return false;
+-    }
++    return this.items.length === 0;
+   }
+ 
+   hasInvalidPrices() {
+-    return this.items.some((item) => item.price === NaN);
++    return this.items.some((item) => Number.isNaN(item.price));
+   }
+ }
+diff --git a/src/checkout.js b/src/checkout.js
+--- a/src/checkout.js
++++ b/src/checkout.js
+@@ -7,11 +7,8 @@
+ export async function checkout(cart, payment) {
+   if (cart.isEmpty()) {
+     throw new Error("empty cart");
+-    console.log("unreachable");
+   }
+-  console.log("charging", cart.total());
+   const receipt = await payment.charge(cart.total());
+-  await new Promise((resolve) => setTimeout(resolve, 300));
+   return { id: receipt.id, total: cart.total() };
+ }
+ 
+diff --git a/test/cart.test.js b/test/cart.test.js
+--- a/test/cart.test.js
++++ b/test/cart.test.js
+@@ -6,7 +6,6 @@
+   const cart = new Cart();
+   cart.add("A1", 5);
+   cart.add("B2", 2, 3);
+-  await new Promise((resolve) => setTimeout(resolve, 200));
+   assert.equal(cart.total(), 11);
+ });
+ 

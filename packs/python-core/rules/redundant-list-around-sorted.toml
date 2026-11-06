@@ -1,6 +1,7 @@
 id = "redundant-list-around-sorted"
 title = "list() around sorted()"
 category = "waste"
+equivalents = ["flake8:C413"]
 semantics = "preserved"
 summary = "`${call}` copies a list that sorted() has just created."
 explain = """
@@ -50,4 +51,20 @@ def sorted(items):
     return items
 
 print(list(sorted((3, 1))))
+'''
+
+[[counterexample]]
+name = "a local list() may do anything"
+code = '''
+def list(xs):
+    return tuple(xs)
+
+print(list(sorted([3, 1])))
+'''
+
+[[counterexample]]
+name = "a star import may redefine list or sorted"
+code = '''
+from compat import *
+names = list(sorted(["b", "a"]))
 '''

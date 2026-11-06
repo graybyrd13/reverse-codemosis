@@ -24,10 +24,20 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
-      # Pack examples are executed, so the self-tests need Python.
+      # Pack examples are executed with each language's own toolchain.
+      # Python, Rust and Node are required; the runner images also carry Go,
+      # Java, C/C++, Ruby, PHP and Bash, and a missing one is a reported skip.
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # gofmt and rustfmt: the formatting contract's tests run against both.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
       - uses: Swatinem/rust-cache@v2
       - name: Format
         run: cargo fmt --all -- --check
@@ -37,6 +47,12 @@ jobs:
         run: cargo test --workspace
       - name: Pack self-tests
         run: cargo run -q -- pack test --color always
+      - name: Pack lint
+        run: cargo run -q -- pack lint --deny-warnings --color always
+      # Every fact a rule checks must be needed by some example or
+      # counterexample: a fact nothing needs is either redundant or untested.
+      - name: Proof coverage (mutation testing)
+        run: cargo run -q -- pack test --mutations --max-unproven 0 --color always
       - name: Reverse Codemosis on its own source
         run: cargo run -q -- check crates --color always
 
@@ -49,9 +65,72 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
       - uses: Swatinem/rust-cache@v2
       - name: One broken repository, one command, a green test suite
         run: scripts/demo.sh
+
+  editors:
+    name: editor extensions (VS Code, Zed)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: VS Code extension (type-check, bundle, package)
+        working-directory: editors/vscode
+        run: |
+          npm ci --no-audit --no-fund
+          npm run package
+      - uses: actions/upload-artifact@v4
+        with:
+          name: codemosis-vscode
+          path: editors/vscode/codemosis.vsix
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip1
+          components: clippy, rustfmt
+      - name: Zed extension (WebAssembly)
+        working-directory: editors/zed
+        run: |
+          cargo fmt --check
+          cargo clippy --target wasm32-wasip1 -- -D warnings
+          cargo build --release --target wasm32-wasip1
+
+  docs:
+    name: API documentation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: cargo doc, with broken links and missing docs as errors
+        run: cargo doc --workspace --no-deps
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  supply-chain:
+    name: dependencies (advisories, licences, sources)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories licenses bans sources
+
+  action:
+    name: the GitHub Action, on this repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+      - uses: ./
+        with:
+          path: crates
+          fail-on: warning
 
   msrv:
     name: minimum Rust version

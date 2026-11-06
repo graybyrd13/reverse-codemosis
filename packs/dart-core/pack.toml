@@ -1,0 +1,9 @@
+[pack]
+id = "dart-core"
+version = "0.1.0"
+engine = "^0.1"
+language = "dart"
+summary = "Questions for Dart: print left in library code."
+authors = ["Reverse Codemosis contributors"]
+license = "MIT OR Apache-2.0"
+homepage = "https://github.com/graybyrd13/reverse-codemosis"

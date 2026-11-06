@@ -1,0 +1,233 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "codemosis.toml",
+  "type": "object",
+  "properties": {
+    "project": {
+      "$ref": "#/$defs/ProjectSection"
+    },
+    "oracle": {
+      "$ref": "#/$defs/OracleSection"
+    },
+    "packs": {
+      "$ref": "#/$defs/PacksSection"
+    },
+    "rules": {
+      "$ref": "#/$defs/RulesSection"
+    },
+    "policy": {
+      "$ref": "#/$defs/PolicySection"
+    },
+    "severity": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "default": {}
+    },
+    "suppress": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SuppressEntry"
+      }
+    },
+    "format": {
+      "$ref": "#/$defs/FormatSection"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "ProjectSection": {
+      "type": "object",
+      "properties": {
+        "include": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "exclude": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "OracleSection": {
+      "type": "object",
+      "properties": {
+        "build": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "test": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "timeout": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0,
+          "default": null
+        },
+        "env": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "default": {}
+        }
+      },
+      "additionalProperties": false
+    },
+    "PacksSection": {
+      "type": "object",
+      "properties": {
+        "builtin": {
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          },
+          "default": null
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "RulesSection": {
+      "type": "object",
+      "properties": {
+        "disable": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "PolicySection": {
+      "type": "object",
+      "properties": {
+        "fail_on": {
+          "description": "The threshold `codemosis check` fails on (default: any open finding).",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "baseline": {
+          "description": "A baseline file of accepted findings, relative to the project root.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false
+    },
+    "SuppressEntry": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "type": "string"
+        },
+        "paths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        },
+        "reason": {
+          "type": "string"
+        },
+        "until": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        },
+        "owner": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "default": null
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "reason"
+      ]
+    },
+    "FormatSection": {
+      "description": "`[format]` in `codemosis.toml`.",
+      "type": "object",
+      "properties": {
+        "mode": {
+          "description": "\"refuse\" (default): a step that would leave a formatted file\nunformatted is rolled back. \"reformat\": the formatter's output is\napplied when it only touches lines next to the correction. \"off\".",
+          "$ref": "#/$defs/Mode",
+          "default": "refuse"
+        },
+        "disable": {
+          "description": "Formatters never to run: rustfmt, gofmt, black, ruff, prettier,\nclang-format.",
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": []
+        }
+      },
+      "additionalProperties": false
+    },
+    "Mode": {
+      "description": "What to do when a correction would leave a formatted file unformatted.",
+      "oneOf": [
+        {
+          "description": "Refuse the step and report why.",
+          "type": "string",
+          "const": "refuse"
+        },
+        {
+          "description": "Apply the formatter's output, if it only changes lines next to the\ncorrection; refuse otherwise.",
+          "type": "string",
+          "const": "reformat"
+        },
+        {
+          "description": "Do not check formatting.",
+          "type": "string",
+          "const": "off"
+        }
+      ]
+    }
+  },
+  "description": "Reverse Codemosis project configuration."
+}

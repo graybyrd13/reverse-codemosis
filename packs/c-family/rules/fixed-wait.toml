@@ -1,0 +1,129 @@
+id = "fixed-wait"
+title = "Fixed wait"
+tags = ["timing", "flaky-tests"]
+category = "hazard"
+semantics = "preserved"
+summary = "`${call}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed sleep is a guess about timing: too short and the code is flaky (what it waited for is not ready yet), too long and every run is slow. The safe form waits for the condition itself: join the thread, wait on the channel or future, poll with a timeout.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported.
+
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+"""
+shape = '''
+(expression_statement
+  (call_expression function: (identifier) @function) @call
+  (#any-of? @function "sleep" "usleep" "nanosleep" "Sleep")) @stmt
+
+(expression_statement
+  (call_expression function: (_) @function) @call) @stmt
+'''
+focus = "@stmt"
+where = [
+  "file_purpose() not in ['example', 'docs', 'benchmark']",
+  "text(@function) in ['sleep', 'usleep', 'nanosleep', 'Sleep'] || matches(text(@function), '^(std::)?this_thread::sleep_(for|until)$')",
+  "!inside(@stmt, 'for_statement', 'while_statement', 'do_statement', 'for_range_loop', 'lambda_expression')",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+#define _DEFAULT_SOURCE
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+    puts("start");
+    usleep(1000);
+    puts("done");
+    return 0;
+}
+'''
+after = '''
+#define _DEFAULT_SOURCE
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+    puts("start");
+    puts("done");
+    return 0;
+}
+'''
+
+[[example]]
+name = "C++ sleep_for"
+language = "cpp"
+answer = "remove"
+before = '''
+#include <chrono>
+#include <iostream>
+#include <thread>
+
+int main() {
+    std::cout << "start\n";
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    std::cout << "done\n";
+}
+'''
+after = '''
+#include <chrono>
+#include <iostream>
+#include <thread>
+
+int main() {
+    std::cout << "start\n";
+    std::cout << "done\n";
+}
+'''
+
+[[counterexample]]
+name = "a polling loop"
+code = '''
+#include <unistd.h>
+int ready(void);
+void wait_ready(void) {
+    while (!ready()) {
+        usleep(1000);
+    }
+}
+'''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.c"
+language = "c"
+code = '''
+#include <stdio.h>
+#include <unistd.h>
+
+int main(void) {
+    puts("start");
+    usleep(1000);
+    puts("done");
+    return 0;
+}
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+language = "c"
+code = '''
+#include <unistd.h>
+void flush_all(void);
+void settle(void) { flush_all(); sleep(1); }
+'''

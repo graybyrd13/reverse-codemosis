@@ -1,6 +1,7 @@
 id = "none-equality"
 title = "Equality comparison with None"
 category = "hazard"
+equivalents = ["flake8:E711", "pylint:singleton-comparison"]
 semantics = "preserved"
 summary = "`${cmp}` asks the object whether it equals None; `${replacement} None` asks Python, which a redefined `==` cannot fool."
 explain = """
@@ -60,4 +61,11 @@ name = "already an identity test"
 code = '''
 value = 1
 print(value is None)
+'''
+
+[[counterexample]]
+name = "a chained comparison"
+code = '''
+x = None
+print(x == None == True)
 '''

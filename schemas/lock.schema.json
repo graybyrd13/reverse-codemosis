@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "codemosis.lock",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "integer",
+      "format": "uint32",
+      "minimum": 0
+    },
+    "engine": {
+      "description": "The engine that wrote the lock (informational).",
+      "type": "string"
+    },
+    "pack": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/LockedPack"
+      },
+      "default": []
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "engine"
+  ],
+  "$defs": {
+    "LockedPack": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "source": {
+          "description": "`builtin` or the pack's directory as configured.",
+          "type": "string"
+        },
+        "sha256": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "version",
+        "source",
+        "sha256"
+      ]
+    }
+  },
+  "description": "The packs a project was reviewed against, pinned by content."
+}

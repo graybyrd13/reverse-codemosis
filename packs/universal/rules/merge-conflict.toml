@@ -1,0 +1,121 @@
+id = "merge-conflict"
+title = "Unresolved merge conflict"
+category = "broken"
+semantics = "repaired"
+summary = "An unresolved merge conflict: both versions and the markers are still in the file."
+explain = """
+Git wrote both sides of a conflicting change into the file, between
+`<<<<<<<`, `=======` and `>>>>>>>` markers, and the conflict was never
+resolved. In almost every language the markers do not even parse, and where
+they do (prose, data) both versions are now present.
+
+Only you know which version is right, so the engine asks: keep the first
+version (the one marked with `<<<<<<<`, usually yours), the second, or both
+in order. If the markers are meant to be there, as in documentation that
+shows a conflict, answer keep. Markers inside strings or comments are not
+reported.
+"""
+pattern = '(?m)^<{7}(?: (?:[^\n]*))?\n(?P<ours>(?:[^\n]*\n)*?)(?:\|{7}[^\n]*\n(?:[^\n]*\n)*?)?={7}\n(?P<theirs>(?:[^\n]*\n)*?)>{7}(?: (?:[^\n]*))?(?:\n|$)'
+within = "any"
+focus = "@match"
+where = [
+  "kind_at(@match) != 'string'",
+  "kind_at(@match) != 'comment'",
+]
+
+[ask]
+question = "Which side of this conflict should stay?"
+
+[[ask.option]]
+answer = "ours"
+means = "keep the first version (between <<<<<<< and =======)"
+edits = [{ replace = "@match", with = "${ours}" }]
+
+[[ask.option]]
+answer = "theirs"
+means = "keep the second version (between ======= and >>>>>>>)"
+edits = [{ replace = "@match", with = "${theirs}" }]
+
+[[ask.option]]
+answer = "both"
+means = "keep both versions, the first then the second"
+edits = [{ replace = "@match", with = "${ours}${theirs}" }]
+
+[[ask.option]]
+answer = "keep"
+means = "this is not a conflict (documentation showing one); leave it"
+
+[[example]]
+name = "a Python setting, keeping theirs"
+path = "config.py"
+answer = "theirs"
+before = '''
+TIMEOUT = 30
+<<<<<<< HEAD
+RETRIES = 3
+=======
+RETRIES = 5
+>>>>>>> feature/retries
+print(TIMEOUT, RETRIES)
+'''
+after = '''
+TIMEOUT = 30
+RETRIES = 5
+print(TIMEOUT, RETRIES)
+'''
+output = "30 5\n"
+
+[[example]]
+name = "prose, keeping both"
+path = "NOTES.md"
+answer = "both"
+before = '''
+# Release notes
+<<<<<<< HEAD
+- Faster start-up.
+=======
+- New export format.
+>>>>>>> main
+'''
+after = '''
+# Release notes
+- Faster start-up.
+- New export format.
+'''
+
+[[counterexample]]
+name = "a heading underline is not a conflict"
+path = "README.md"
+code = '''
+Title
+=======
+
+Body text.
+'''
+
+[[counterexample]]
+name = "markers inside a string"
+path = "doc.py"
+code = '''
+EXAMPLE = """
+<<<<<<< HEAD
+a
+=======
+b
+>>>>>>> main
+"""
+'''
+
+[[counterexample]]
+name = "conflict markers inside a comment, documenting a merge"
+path = "merge_notes.c"
+code = '''
+/*
+<<<<<<< HEAD
+int x = 1;
+=======
+int x = 2;
+>>>>>>> feature
+*/
+int y = 0;
+'''

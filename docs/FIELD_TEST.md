@@ -1,0 +1,339 @@
+# Field test
+
+What Reverse Codemosis found, corrected, asked and explained on twenty
+well-known open-source projects, what that revealed about the tool, and what
+changed as a result. Run on 2026-11-04 and 2026-11-05 against engine 0.1.0;
+`scripts/field-test.sh` reruns it at the same commits.
+
+## In one paragraph
+
+On 10,780 files in eleven languages, the final run proposes **127 proven
+corrections, all of which were read and are correct**, asks **128
+questions** that a careful reviewer would also ask, and explains **9
+findings**, including **three genuine bugs** in rich and Django. The first
+run was far worse: one file in rich took about 20 minutes, and about 300
+questions and 190 corrections were noise. Those were fixed in the engine and
+the packs, not by tuning the repositories. One problem remains open and
+leads the [roadmap](ROADMAP.md): corrections are not yet checked against
+each project's formatter.
+
+## The repositories
+
+| Repository | Language | Files read | Commit |
+|---|---|---:|---|
+| [psf/requests](https://github.com/psf/requests) | Python | 122 | `3c7baaa` |
+| [pallets/flask](https://github.com/pallets/flask) | Python | 231 | `49943b5` |
+| [pallets/click](https://github.com/pallets/click) | Python | 176 | `2247b35` |
+| [encode/httpx](https://github.com/encode/httpx) | Python | 115 | `b5addb6` |
+| [Textualize/rich](https://github.com/Textualize/rich) | Python | 531 | `9d8f9a3` |
+| [django/django](https://github.com/django/django) | Python | 5,716 | `a762974` |
+| [expressjs/express](https://github.com/expressjs/express) | JavaScript | 216 | `43fca52` |
+| [axios/axios](https://github.com/axios/axios) | JavaScript, TypeScript | 513 | `fb88a1b` |
+| [chalk/chalk](https://github.com/chalk/chalk) | JavaScript | 33 | `7211001` |
+| [vercel/ms](https://github.com/vercel/ms) | TypeScript | 23 | `4ff48ce` |
+| [spf13/cobra](https://github.com/spf13/cobra) | Go | 65 | `adbc881` |
+| [gin-gonic/gin](https://github.com/gin-gonic/gin) | Go | 130 | `0f09c3a` |
+| [BurntSushi/ripgrep](https://github.com/BurntSushi/ripgrep) | Rust | 217 | `91f5d22` |
+| [google/gson](https://github.com/google/gson) | Java | 314 | `65df6e5` |
+| [sinatra/sinatra](https://github.com/sinatra/sinatra) | Ruby | 290 | `cb22afd` |
+| [guzzle/guzzle](https://github.com/guzzle/guzzle) | PHP | 183 | `7d9b1f4` |
+| [jqlang/jq](https://github.com/jqlang/jq) | C | 431 | `5c001b1` |
+| [nvm-sh/nvm](https://github.com/nvm-sh/nvm) | Shell | 528 | `4e8758a` |
+| [Alamofire/Alamofire](https://github.com/Alamofire/Alamofire) | Swift | 533 | `6c2892e` |
+| [square/okio](https://github.com/square/okio) | Kotlin | 413 | `1926f02` |
+
+## Method
+
+1. `codemosis check` on every repository. `check` executes nothing and
+   changes nothing.
+2. **Every proven correction was read** and judged: is it right in every
+   case, and is the result better code?
+3. **Every explanation was checked** against the source, and every
+   question rule was sampled for whether a careful reviewer would ask the
+   same thing.
+4. `codemosis fix --no-verify` on the eight repositories with corrections:
+   the corrections were written, `codemosis proof verify` replayed every
+   certificate, and every changed file was re-parsed with the language's
+   own parser (Python's `ast`, `gofmt`, `rustfmt`). The clones were then
+   restored.
+5. Performance with `check --timings`, on a 4-core machine.
+
+**Not done here: running each project's own test suite as the oracle.**
+That executes third-party code, which this environment's safety policy
+blocks, rightly. Doing it in an isolated CI job is the first milestone of
+the [roadmap](ROADMAP.md).
+
+## Results
+
+| Repository | Proven corrections | Questions | Explained | Suppressed by the project | Unparsed files | Seconds |
+|---|---:|---:|---:|---:|---:|---:|
+| requests | 2 | 3 | 4 | 0 | 0 | 0.44 |
+| flask | 0 | 5 | 0 | 0 | 0 | 0.34 |
+| click | 6 | 0 | 0 | 0 | 0 | 0.68 |
+| httpx | 1 | 0 | 0 | 0 | 0 | 0.36 |
+| rich | 3 | 16 | 2 | 4 | 0 | 0.85 |
+| django | 109 | 49 | 0 | 6 | 2 | 7.4 |
+| express | 0 | 0 | 0 | 0 | 0 | 0.41 |
+| axios | 0 | 1 | 1 | 1 | 0 | 0.77 |
+| chalk | 0 | 0 | 0 | 0 | 0 | 0.28 |
+| ms | 0 | 0 | 0 | 0 | 0 | 0.28 |
+| cobra | 1 | 0 | 0 | 0 | 0 | 0.12 |
+| gin | 1 | 8 | 1 | 0 | 0 | 0.12 |
+| ripgrep | 2 | 0 | 0 | 0 | 1 | 0.45 |
+| gson | 0 | 0 | 0 | 0 | 0 | 0.22 |
+| sinatra | 0 | 0 | 0 | 0 | 0 | 0.16 |
+| guzzle | 0 | 0 | 0 | 0 | 0 | 0.31 |
+| jq | 2 | 0 | 0 | 0 | 26 | 0.49 |
+| nvm | 0 | 15 | 0 | 0 | 2 | 0.38 |
+| Alamofire | 0 | 1 | 0 | 0 | 5 | 0.55 |
+| okio | 0 | 30 | 1 | 0 | 6 | 0.28 |
+| **Total** | **127** | **128** | **9** | **11** | **42** | **15.5** |
+
+Nine of the twenty projects get nothing at all. They are mature,
+heavily linted codebases, and the rules are deliberately narrow, so this is
+the expected result.
+
+### Proven corrections: 127, all correct
+
+| Rule | Count | Example |
+|---|---:|---|
+| `python-core/redundant-pass` | 112 | `pass` after a docstring or another statement (Django 103, click 5, jq's docs 2, requests 1, rich 1) |
+| `python-core/return-bool-if`, `-negated` | 8 | `if bypass: return True` / `return False` → `return bool(bypass)` (requests) |
+| `python-core/fstring-without-placeholders` | 2 | `f"unable to get the total number of bytes..."` (rich) |
+| `go-core/bool-literal-comparison` | 2 | `if compCmd.Hidden == false` → `if !compCmd.Hidden` (cobra, gin) |
+| `python-core/unreachable-code` | 1 | `super().setUpClass()` after `raise` (Django) |
+| `rust-core/needless-return` | 1 | ripgrep |
+| `rust-core/manual-assert` | 1 | `if !x { panic!(...) }` → `assert!(x, ...)` (ripgrep) |
+
+All 127 preserve behaviour. Three are correct but read less well than what
+a person would write, which the roadmap addresses:
+
+- `return bool((self.nargs != 1 or self.multiple) and value == ())`
+  (click): the `bool()` looks redundant but is not, because when the left
+  side is falsy the expression returns `self.multiple` itself. Dropping it
+  needs a type fact saying `self.multiple` is a `bool`.
+- `return not (engine != "InnoDB")` (Django): turning `!=` into `==` is
+  not provable in general, because a custom `__ne__` may disagree with
+  `__eq__`.
+- The ripgrep `assert!` is 81 characters wide; ripgrep's `rustfmt.toml`
+  allows 79. The file passed `rustfmt --check` before the correction and
+  fails after it, so the correction would fail ripgrep's CI formatting check.
+  **Fixed since:** corrections are now held to the project's formatter. By
+  default this step is refused ("crates/ignore/src/dir.rs is kept formatted
+  with rustfmt, and after the correction rustfmt would rewrite line 208");
+  with `[format] mode = "reformat"` rustfmt lays the `assert!` out over four
+  lines, `rustfmt --check` passes, and `proof verify` replays the layout
+  with rustfmt (or, without it, confirms it changes whitespace only).
+
+`fix --no-verify` applied all of them on the eight repositories (Django: 53
+files, 175 lines removed). Every proof certificate verified, and every
+changed file parses with its language's own parser.
+
+### Questions: 128
+
+| Rule | Count | Where | Would a careful reviewer ask? |
+|---|---:|---|---|
+| `python-core/fixed-wait` | 47 | Django and Flask tests, requests tests | yes: fixed sleeps in tests are the classic cause of flaky suites |
+| `kotlin-core/fixed-wait` | 28 | okio tests | yes |
+| `shell-core/unquoted-rm` | 17 | nvm and okio test scripts | yes (ShellCheck SC2086 flags the same lines) |
+| `python-core/none-equality` | 10 | rich tests | yes (pycodestyle E711) |
+| `python-core/mutable-default` | 9 | Django tests | yes (flake8-bugbear B006) |
+| `go-core/fixed-wait` | 8 | gin tests | yes |
+| `python-core/bare-except` | 6 | rich | yes (pycodestyle E722) |
+| `python-core/missing-f-prefix` | 1 | Django | yes: a genuine bug (below) |
+| others | 2 | | yes |
+
+### Explanations: 9
+
+- **Two genuine bugs in rich.** In `examples/suppress.py:19`, `name` is
+  undefined in `f"Hello {name}!"`; it is never reached, because `1 / 0`
+  raises first. In `tests/test_syntax.py:451`, `markdown` is undefined in
+  the file's `__main__` block.
+- **Six committed private keys**, all TLS test fixtures (requests ×4, axios,
+  gin). Explaining them is right: GitHub's secret scanning flags the same
+  files. A `[[suppress]]` entry with `paths = ["tests/certs/**"]` records
+  that they are intentional.
+- One empty `catch` in an okio sample.
+
+### Genuine issues found in the projects
+
+| Project | Where | Issue |
+|---|---|---|
+| rich | `examples/suppress.py:19` | undefined name `name` |
+| rich | `tests/test_syntax.py:451` | undefined name `markdown` in `__main__` |
+| Django | `tests/template_tests/syntax_tests/test_partials.py:49` | `"{k}={v}"` lacks its `f` prefix, so the helper produces the literal text `{k}={v}` |
+
+None has been reported upstream yet.
+
+## What the field test changed
+
+| | First run | Final run |
+|---|---|---|
+| Proven corrections | 318 | 127 |
+| Questions | 292 | 128 |
+| Explanations | 33 | 9 |
+| Findings already suppressed by the project's own comments | not recognised | 11 |
+| Slowest repository | rich: one file took about 20 minutes | Django, 5,716 files: 7.4 s |
+
+The changes, all in the engine and the packs:
+
+- **Cubic matching.** The duplicate-key rules paired every dictionary entry
+  with every other, and tree-sitter evaluates that in cubic time. rich's
+  3,600-entry emoji table took about 20 minutes. Both rules now match each
+  entry once and use a linear fact, `earlier_same_field`. Every shape now
+  runs under a deterministic partial-match limit that reports, rather
+  than hangs, on a runaway shape. A regression test keeps 6,000-entry
+  containers fast. Regexes in hot paths are compiled once, and Python
+  occurrences are indexed, which made `undefined-name` 4× faster on Django.
+- **Style churn.** 190 corrections removed the `f` from fragments of
+  implicit concatenations that do have placeholders. That is correct, but
+  Django writes them that way on purpose, and pyflakes treats the
+  concatenation as one f-string. The rule now does too.
+- **Readability.** Negated comparisons are parenthesised:
+  `not (a != b)`, not `not a != b`.
+- **Decisions already made.** Rules declare their equivalents in other
+  tools, and the engine honours `# noqa`, `# type: ignore[...]`,
+  `eslint-disable...`, `NOLINT`, `//nolint`, `# shellcheck disable`,
+  `#[allow(clippy::...)]` and their file-level forms.
+- **Purpose.** Files are classified as library, test, example, script,
+  docs or benchmark. Console output is asked about only in library code;
+  fixed waits are not asked about in examples, docs, benchmarks or
+  `__main__` blocks. This removed 123 questions about `console.log`, all in
+  tests, examples, scripts and docs.
+- **Python 3.12–3.15.** PEP 695 type aliases and type parameters are now
+  understood (10 false reports in Django), and `frozendict` is a builtin.
+- **Templates.** `missing-f-prefix` recognises gettext arguments, strings
+  whose result is `.format`-ed and template variables: 26 questions on click
+  and Django became the one genuine bug.
+- **Vendored code.** Well-known libraries copied into a project (jQuery,
+  typeahead...) and generated `.docset` directories are never edited.
+- **Parse damage** no longer spreads to a whole C header through its
+  include guard.
+- **zsh** (`.zsh` files, zsh shebangs, `#compdef` completions) is read in
+  the lexical tier instead of being misparsed by the bash grammar
+  (ripgrep: 3 damaged files → 1).
+
+## Grammar gaps
+
+42 files contain code a grammar could not parse; no correction is made
+there, and `check` lists them.
+
+- **C (jq, 26):** macros used as statements or loops
+  (`jv_array_foreach(...)`, X-macros).
+- **Kotlin (okio, 5):** multiplatform `actual constructor`.
+- **Swift (Alamofire, 5):** the empty-tuple expression `()`.
+- **Shell (nvm 2, okio 1, ripgrep 1):** POSIX `sh` that tree-sitter-bash
+  misreads: `case` patterns mixing globs and quotes (`--only=*' '*)`), a
+  `#(` comment after `case ... in` (Gradle's wrapper), and a file of fish
+  and zsh glob patterns named `.sh`. (Two zsh scripts in ripgrep were
+  counted here too; zsh is now read lexically.)
+- **JavaScript (Django, 2):** template-processed and Python-2-era files.
+
+## The new languages
+
+When 13 languages joined the deep tier (and 11 packs with them), one well-known project per language was
+checked (`check` only, at the commit shown), to catch what the corpus could not. These projects are a spot
+check, not part of the ledger.
+
+| Project | Language | Commit | Questions | Explained | Parse damage |
+|---|---|---|---|---|---|
+| phoenixframework/phoenix | Elixir | `6daf29b` | 8 | 3 | 0 |
+| terraform-aws-modules/terraform-aws-vpc | HCL | `b3abd6d` | 0 | 0 | 0 |
+| dart-lang/shelf | Dart | `9946de5` | 5 | 1 | 0 |
+| tidyverse/dplyr | R | `819c99f` | 0 | 0 | 1 |
+| koalaman/shellcheck | Haskell | `e11f964` | 1 | 3 | 2 |
+| nix-community/home-manager | Nix | `b787c48` | 0 | 0 | 7 |
+| OpenZeppelin/openzeppelin-contracts | Solidity | `efaa6f7` | 2 | 0 | 8 |
+| dahlbyk/posh-git | PowerShell | `bbc5ac3` | 0 | 0 | 15 |
+| zigtools/zls | Zig | `c275dd2` | 14 | 0 | 3 |
+| rtfeldman/elm-spa-example | Elm | `cb32acd` | 0 | 0 | 0 |
+| janestreet/base | OCaml | `49a861e` | 0 | 14 | 0 |
+| JuliaData/DataFrames.jl | Julia | `e867c34` | 2 | 0 | 2 |
+| ninenines/cowboy | Erlang | `b9ca9e9` | 129 | 3 | 0 |
+
+What the first run found, and what changed:
+
+- **R documentation**: dplyr's 112 `.Rd` files (LaTeX-like markup that Linguist files under R) were parsed as
+  R. They are now read lexically, like zsh; parse damage 113 → 1 (a C++ header the `.h` heuristic reads as C).
+- **OCaml interfaces** (`.mli`, which needs tree-sitter-ocaml's interface grammar) and `.mll`/`.mly` lexer and
+  parser specifications: read lexically; base's parse damage 37 → 0.
+- **Dart's `tool/`** directory holds scripts by convention: 11 of shelf's 16 `print` questions were there.
+  The other five are a compliance harness and the default request logger, which prints on purpose: a
+  question is the right answer.
+- **`Invoke-Expression` in tests**: all 28 in posh-git were in its test suite, where the evaluated string is
+  fixed by the test's author. Tests, examples and docs are now left alone.
+
+The rest was judged as intended. zls's `std.debug.print` calls are in a testing helper and debug dumps:
+questions the user answers in a moment. base's `Obj.magic` is deliberate inside its low-level arrays, and
+the explanation says what it risks. shellcheck's `newSTRef undefined` placeholders crash if read before
+they are written. cowboy's 129 fixed waits are in its test suite, which is what that question is for.
+The remaining parse damage is in the grammars: PowerShell bareword paths with variables
+(`$env:X\lib\$name*`), TypeScript 5's `export type *`, and shell scripts that are really Nix templates
+(`@initHomeManagerLib@`).
+
+## Rerunning it
+
+```console
+$ scripts/field-test.sh                  # clones into target/field-test
+$ scripts/field-test.sh /tmp/field       # or anywhere else
+```
+
+It prints the results table above; the JSON reports sit next to the clones.
+To add a repository, add a line with its name, `owner/repo` and full commit
+hash to `scripts/field-test-pins.txt`.
+
+### The precision ledger
+
+`scripts/field-test-baseline.json` records these results as reviewed: the
+counts per repository and rule, and every proven correction by fingerprint
+(each one read and judged correct). CI's field-test workflow compares every
+change to the engine or the packs against it:
+
+```console
+$ scripts/field-test.sh --compare scripts/field-test-baseline.json
+...
+Precision ledger against scripts/field-test-baseline.json
+  proven corrections                  127 → 127
+  questions per 1000 files          11.87 → 11.87
+  explanations per 1000 files        0.83 → 0.83
+  corrections refused                   2 → 2
+  files the grammar cannot parse       44 → 44
+  rule errors                           0 → 0
+ok: no unreviewed correction and no unexplained rise in noise
+```
+
+It fails on a proven correction that is not in the baseline (read it, then
+update the baseline in the same pull request), on a rise of more than 10%
+in questions or explanations per thousand files (say why in the pull
+request), and on more parse failures or rule errors. Fewer questions or a
+lost correction is reported for the baseline to be updated. To update it:
+
+```console
+$ scripts/field-test.sh --summary-json scripts/field-test-baseline.json
+```
+
+### Real oracles
+
+The first run in CI (pull request #2), each project's own build and test
+suite deciding every step:
+
+| Project | Correction kept | Tests before → after | `proof verify` | Tests re-run | Formatter |
+|---|---|---|---|---|---|
+| cobra | `go-core/bool-literal-comparison` | 429 → 429 | verified | pass | gofmt clean |
+| gin | `go-core/bool-literal-comparison` | 733 → 733 | verified | pass | gofmt clean |
+| ripgrep | `rust-core/needless-return` | 446 → 446 | verified | pass | rustfmt clean |
+
+ripgrep's `manual-assert` correction was refused by the formatting contract,
+as intended ("crates/ignore/src/dir.rs is kept formatted with rustfmt, and
+after the correction rustfmt would rewrite line 208"). No accepted step
+regressed a test.
+
+`scripts/field-test-oracle.sh NAME` runs `codemosis fix` on cobra, gin or
+ripgrep with the project's own build and tests as the oracle, then checks
+without trusting the engine: `proof verify` replays the certificate, the
+tests run again and must pass if they passed before, and every file the
+formatter accepted before must still be accepted. **It runs the project's
+code**, so it is meant for CI's disposable runners (the `oracle` job of
+`.github/workflows/field-test.yml`, weekly and on pull requests that touch
+the engine or the packs). `--from DIR` runs it on a local repository
+instead, for example your own.

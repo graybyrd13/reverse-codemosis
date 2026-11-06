@@ -21,6 +21,7 @@ Facts every language can use
   next(nodes) -> nodes                           Next named sibling of the last node, skipping comments.
   prev(nodes) -> nodes                           Previous named sibling of the first node, skipping comments.
   siblings_after(nodes) -> nodes                 All named siblings after the last node, excluding comments.
+  earlier_same_field(nodes, field) -> nodes      The `field` child of the first earlier named sibling whose `field` child has exactly the same text as the node's own (for duplicate keys: `earlier_same_field(@pair, 'key')`). Empty when there is none. Linear in the number of siblings, unlike a shape that pairs every sibling with every other.
   ancestor(nodes, kind...) -> nodes              Nearest ancestor of the first node with one of the kinds.
   inside(nodes, kind...) -> bool                 True when the first node has an ancestor of one of the kinds.
   contains(nodes, kind...) -> bool               True when any node, or any descendant, has one of the kinds.
@@ -40,6 +41,15 @@ Facts every language can use
   lookup(table, key) -> string                   The first string stored under a key of a pack map table (empty when absent).
   choose(condition, a, b) -> value               a when the condition is true, otherwise b.
   subset(list, list) -> bool                     True when every item of the first list is in the second.
+  concat(text...) -> string                      The texts joined together.
+  bang(text) -> string                           The C-style negation of an expression: `!x`, parenthesised unless x is a single name, member access or call.
+  count_matches(text, regex) -> number           How many times the regular expression matches in the text.
+  file_purpose() -> string                       What the file is for, from path conventions: 'library', 'test', 'example', 'script', 'docs' or 'benchmark' (tests/, *_test.go, *.spec.ts, examples/, scripts/, bin/, .github/, docs/, benches/...). For rules that should stay quiet where a behaviour is intentional, such as console output in an example.
+  file_matches(regex) -> number                  How many times the regular expression matches in the whole file, in code only (not comments or strings) when the file's comments are known.
+  kind_at(capture) -> string                     What the capture starts in: 'code', 'comment', 'string', or 'unknown' when the file's comments and strings cannot be told apart.
+  language() -> string                           The file's language, as GitHub names it: 'Python', 'Shell', 'PowerShell'...
+  language_kind() -> string                      GitHub's type for the file's language: 'programming', 'markup', 'data' or 'prose'.
+  tier() -> string                               How deeply the file is understood: 'deep' (syntax tree), 'lexical' (comments and strings) or 'recognized'.
   file_name() -> string                          Name of the file being examined, e.g. '__init__.py'.
   file_path() -> string                          Path of the file relative to the project root.
 
@@ -50,6 +60,7 @@ Template filters
   line                   The 1-based line number of the capture instead of its text.
   strip_parens           Remove one pair of parentheses that encloses the whole text.
   unescape_braces        Turn '{{' into '{' and '}}' into '}'.
+  bang                   The C-style negation `!x`, parenthesised unless x is a single name, member access or call.
   drop_string_prefix     Remove a letter (the argument) from a string literal's prefix: ${s|drop_string_prefix:f}.
   add_string_prefix      Add a letter (the argument) to a string literal's prefix: ${s|add_string_prefix:f}.
 
@@ -77,6 +88,8 @@ python facts (py.*)
   py.first_statement(block) -> nodes             The first statement of a block that is not its docstring (empty when there is none).
   py.is_docstring(nodes) -> bool                 True when the node is (or is the string of) a module, class or function docstring.
   py.top_level(nodes) -> bool                    True when the statement sits directly in the module, not inside a block.
+  py.used_as_template(string) -> bool            True when a string is evidently a template filled in later, so its `{...}` are not meant as f-string placeholders: an argument of a gettext-style call (`_`, `gettext`, `ngettext`, `pgettext`, `gettext_lazy`...), an argument of a call whose result is `.format`-ed, assigned to a name that is later `.format`-ed or whose name says template (`*template*`, `*fmt*`, `*format*`), or a statement on its own (an attribute docstring).
+  py.in_main_block(nodes) -> bool                True when the node is inside an `if __name__ == "__main__":` block: code that runs only when the file is executed as a script, often a demonstration.
   py.imported_elsewhere(name) -> bool            True when another file of the project imports the name from this module, or reads `module.name`.
   py.defined_in_project(name, module?) -> bool   True when another file of the project defines the name at module level, or the project has a module or package of that name: importing it from the standard library would then be a guess. Bindings that import the name from `module` itself (`import json`, `from pathlib import Path`) are not counted.
   py.string_prefix(string) -> string             The lower-cased prefix letters of a string literal: '', 'f', 'rb'...
@@ -84,4 +97,79 @@ python facts (py.*)
   py.yields_bool(expr) -> bool                   True when the expression always evaluates to True or False: `not x`, comparisons using only is / is not / in / not in, boolean literals, and and/or of such expressions.
   filter py.as_bool                              The expression if it always yields a bool, otherwise bool(expression).
   filter py.negate                               The logical negation of the expression, parenthesised as needed.
+
+javascript, typescript, tsx facts (js.*)
+  js.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+go facts (go.*)
+  go.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+java facts (java.*)
+  java.defines(name) -> bool                     True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+c, cpp facts (c.*)
+  c.defines(name) -> bool                        True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+csharp facts (cs.*)
+  cs.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+ruby facts (rb.*)
+  rb.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+php facts (php.*)
+  php.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+bash facts (sh.*)
+  sh.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+kotlin facts (kt.*)
+  kt.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+scala facts (scala.*)
+  scala.defines(name) -> bool                    True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+lua facts (lua.*)
+  lua.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+swift facts (swift.*)
+  swift.defines(name) -> bool                    True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+elixir facts (ex.*)
+  ex.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+haskell facts (hs.*)
+  hs.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+ocaml facts (ml.*)
+  ml.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+zig facts (zig.*)
+  zig.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+dart facts (dart.*)
+  dart.defines(name) -> bool                     True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+r facts (r.*)
+  r.defines(name) -> bool                        True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+julia facts (jl.*)
+  jl.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+erlang facts (erl.*)
+  erl.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+hcl facts (hcl.*)
+  hcl.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+powershell facts (ps.*)
+  ps.defines(name) -> bool                       True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+nix facts (nix.*)
+  nix.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+elm facts (elm.*)
+  elm.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
+
+solidity facts (sol.*)
+  sol.defines(name) -> bool                      True when anything in the file declares the name: a variable, constant, parameter, function, class, type or import. Over-approximates, so a rule requiring a name to be undeclared stays safe.
 ```

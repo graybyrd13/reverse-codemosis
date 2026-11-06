@@ -1,0 +1,11 @@
+// Reverse Codemosis for Sublime Text: with the LSP package installed, add
+// this client in Preferences > Package Settings > LSP > Settings.
+{
+  "clients": {
+    "codemosis": {
+      "enabled": true,
+      "command": ["codemosis", "lsp"],
+      "selector": "source | text.html.markdown | text.plain"
+    }
+  }
+}

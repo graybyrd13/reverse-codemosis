@@ -1,0 +1,59 @@
+id = "debug-dump"
+title = "Debugging dump left in the code"
+category = "waste"
+cwe = ["CWE-489"]
+semantics = "corrected"
+summary = "`${call}` prints a debugging dump of a value."
+explain = """
+`var_dump`, `print_r`, `dump` and `dd` are how PHP debugging starts, and
+they are often left behind, leaking internal data into pages and API
+responses (`dd` also stops the request). Some are deliberate (a debugging
+script), so the engine asks.
+"""
+shape = '''
+(expression_statement
+  (function_call_expression function: (name) @function) @call
+  (#any-of? @function "var_dump" "print_r" "dump" "dd" "var_export")) @stmt
+'''
+focus = "@stmt"
+where = ["occupies_lines(@stmt)"]
+
+[ask]
+question = "Keep this debugging output?"
+
+[[ask.option]]
+answer = "keep"
+means = "it is intended output; record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "it is leftover debugging; delete it"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+<?php
+$total = array_sum([1, 2, 3]);
+var_dump($total);
+echo $total, "\n";
+'''
+after = '''
+<?php
+$total = array_sum([1, 2, 3]);
+echo $total, "\n";
+'''
+output = "6\n"
+
+[[counterexample]]
+code = '''
+<?php
+echo json_encode(["ok" => true]);
+'''
+
+[[counterexample]]
+name = "a dump that shares its line"
+code = '''
+<?php
+function total($xs) { var_dump($xs); return array_sum($xs); }
+'''

@@ -1,0 +1,13 @@
+{
+  "description": "After every edit, Reverse Codemosis checks the lines Claude changed and reports proven corrections and questions for the user back to Claude.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          { "type": "command", "command": "codemosis hook", "timeout": 120 }
+        ]
+      }
+    ]
+  }
+}

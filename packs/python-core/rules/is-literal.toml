@@ -1,6 +1,8 @@
 id = "is-literal"
 title = "Identity comparison with a literal"
 category = "contradiction"
+cwe = ["CWE-595"]
+equivalents = ["flake8:F632"]
 semantics = "corrected"
 summary = "`${cmp}` asks whether two objects are the same object in memory, not whether they are equal."
 explain = """
@@ -19,13 +21,13 @@ singletons and are never touched.
 shape = '''
 [
   (comparison_operator
-    (_) @left
+    (_) @_left
     operators: ["is" "is not"] @op
-    [(integer) (float) (string) (concatenated_string)] @literal)
+    [(integer) (float) (string) (concatenated_string)] @_literal)
   (comparison_operator
-    [(integer) (float) (string) (concatenated_string)] @literal
+    [(integer) (float) (string) (concatenated_string)] @_literal
     operators: ["is" "is not"] @op
-    (_) @right)
+    (_) @_right)
 ] @cmp
 '''
 focus = "@cmp"
@@ -83,4 +85,11 @@ name = "comparing two names is a real identity test"
 code = '''
 a = b = []
 print(a is b)
+'''
+
+[[counterexample]]
+name = "a chained comparison is not a single identity test"
+code = '''
+x = 3
+print(x is 3 < 4)
 '''

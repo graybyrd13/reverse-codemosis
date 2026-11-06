@@ -1,0 +1,95 @@
+name: Field test
+
+# Reverse Codemosis on real open-source projects, pinned to exact commits.
+#
+# - ledger: `codemosis check` on all 20 repositories, compared with the
+#   reviewed baseline (scripts/field-test-baseline.json). Fails on a proven
+#   correction nobody has reviewed, or more than 10% more questions or
+#   explanations per thousand files. Executes nothing from the repositories.
+# - oracle: `codemosis fix` on cobra, gin and ripgrep with each project's own
+#   build and tests as the oracle, then `proof verify`, an independent re-run
+#   of the tests, and the formatter check. This executes their code, on a
+#   disposable runner with no secrets.
+
+on:
+  schedule:
+    - cron: "17 5 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "packs/**"
+      - "crates/**"
+      - "scripts/field-test*"
+      - "scripts/field_test_summary.py"
+      - ".github/workflows/field-test.yml"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  ledger:
+    name: precision ledger (check, 20 projects)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Check every pinned repository and compare with the baseline
+        run: |
+          set -o pipefail
+          scripts/field-test.sh --summary-json field-test-summary.json \
+            --compare scripts/field-test-baseline.json "$RUNNER_TEMP/field-test" | tee ledger.txt
+      - name: Job summary
+        if: always()
+        run: |
+          { echo '### Field test: precision ledger'; echo '```'; cat ledger.txt 2>/dev/null; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: field-test-summary
+          path: |
+            field-test-summary.json
+            ledger.txt
+          if-no-files-found: ignore
+
+  oracle:
+    name: fix with real oracles (${{ matrix.repo }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        repo: [cobra, gin, ripgrep]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: actions/setup-go@v5
+        with:
+          go-version: stable
+          cache: false
+      - uses: Swatinem/rust-cache@v2
+      - name: codemosis fix, proof verify, tests and formatter re-checked
+        run: |
+          # setup-go's problem matcher reads "file.go: ..." report lines as
+          # compiler errors; the job's own exit status is what counts.
+          echo "::remove-matcher owner=go::"
+          scripts/field-test-oracle.sh ${{ matrix.repo }} "$RUNNER_TEMP/oracle"
+      - name: Job summary
+        if: always()
+        run: |
+          {
+            echo "### Field test: ${{ matrix.repo }}"
+            echo '```'; cat "$RUNNER_TEMP/oracle/${{ matrix.repo }}.fix.txt" 2>/dev/null; echo '```'
+            echo '```diff'; cat "$RUNNER_TEMP/oracle/${{ matrix.repo }}.diff" 2>/dev/null; echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: field-test-oracle-${{ matrix.repo }}
+          path: ${{ runner.temp }}/oracle/*.*
+          if-no-files-found: ignore

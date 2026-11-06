@@ -165,7 +165,15 @@ impl Oracle {
         for (k, v) in &self.env {
             c.env(k, v);
         }
-        process::run(&mut c, self.timeout)
+        codemosis_core::debug!("oracle: running `{cmd}`");
+        let r = process::run(&mut c, self.timeout)?;
+        codemosis_core::debug!(
+            "oracle: `{cmd}` exited {} in {:.1?}{}",
+            r.code.map(|c| c.to_string()).unwrap_or_else(|| "by signal".into()),
+            r.elapsed,
+            if r.timed_out { " (timed out)" } else { "" }
+        );
+        Ok(r)
     }
 
     pub fn run(&self) -> std::io::Result<OracleRun> {

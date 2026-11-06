@@ -1,0 +1,62 @@
+id = "debug-log"
+title = "Debug.log left in code"
+tags = ["debugging"]
+category = "waste"
+semantics = "preserved"
+summary = "`${call}` logs a value for debugging; `elm make --optimize` refuses to build with it."
+explain = """
+`Debug.log label value` prints `value` and returns it unchanged, which is how Elm code is debugged, and
+`elm make --optimize` refuses any module that still uses `Debug`. Removing the log leaves `value` in its
+place, so the program computes the same thing. Some logs are wanted in development builds, so the engine
+asks: keep records it as intentional; remove replaces the call with its value.
+"""
+shape = '''
+(function_call_expr
+  target: (value_expr name: (value_qid (upper_case_identifier) @module (lower_case_identifier) @function))
+  arg: (_) @_label
+  arg: (_) @value
+  (#eq? @module "Debug")
+  (#eq? @function "log")) @call
+'''
+focus = "@call"
+
+[ask]
+question = "Keep this Debug.log?"
+
+[[ask.option]]
+answer = "keep"
+means = "it is wanted in development builds; record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "replace the call with the value it logs"
+edits = [{ replace = "@call", with = "${value}" }]
+
+[[example]]
+answer = "remove"
+before = '''
+module Cart exposing (total)
+
+
+total : List Int -> Int
+total items =
+    Debug.log "total" (List.sum items)
+'''
+after = '''
+module Cart exposing (total)
+
+
+total : List Int -> Int
+total items =
+    (List.sum items)
+'''
+
+[[counterexample]]
+code = '''
+module Cart exposing (total)
+
+
+total : List Int -> Int
+total items =
+    List.sum items
+'''

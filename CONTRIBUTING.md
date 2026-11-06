@@ -1,66 +1,66 @@
 # Contributing
 
-Reverse Codemosis gets stronger with every rule a stranger contributes. This
-guide covers rules (the most valuable contribution) and engine code.
+Reverse Codemosis gets stronger with every rule a stranger contributes.
+Thank you for being one.
 
-## Building and testing
+## Ways to help
 
-```console
-$ cargo build
-$ cargo test --workspace          # unit tests, the demo proof, pack self-tests
-$ cargo run -q -- pack test       # the built-in packs' proofs, in detail
-$ scripts/demo.sh                 # the proof, end to end
-```
+| Contribution | Effort | Start with |
+|---|---|---|
+| Report a correction that made code worse | minutes | the "A correction made code worse" issue template: the most serious kind of bug |
+| Add a wait idiom or other table entry | minutes | one line in `packs/waits/tables/waits.toml` ([developer guide](docs/DEVELOPING.md#teach-the-engine-a-language)) |
+| Add a counterexample that proves a fact | minutes | `cargo run -q -- pack test --mutations` lists the facts no counterexample needs yet |
+| Write a rule | an hour | the [tutorial](docs/TUTORIAL.md), then the [pack format](docs/PACK_FORMAT.md) |
+| Teach the engine a language | hours to days | the [developer guide](docs/DEVELOPING.md#teach-the-engine-a-language) |
+| Add a fact, guard or engine feature | days | the [developer guide](docs/DEVELOPING.md), [architecture](docs/ARCHITECTURE.md), [semantics](docs/SEMANTICS.md) |
+| Run it on real code and report what it got wrong or missed | an afternoon | [docs/FIELD_TEST.md](docs/FIELD_TEST.md) shows how |
 
-The tests need `python3` and `rustc` on the PATH, because pack examples are
-executed. Before sending a change:
+## The bar for a rule
+
+A rule is accepted when:
+
+- its correction is right in **every** case its facts admit, not most of
+  them; a rule that is usually right is a rule that asks;
+- it asks wherever intent decides, offering the answers a careful person
+  would choose between;
+- its examples prove its semantics claim by running, and its
+  counterexamples show the cases a careless rule would get wrong;
+- `pack lint --deny-warnings` is clean and every fact is needed by a
+  counterexample (`pack test --mutations`);
+- its explanation would satisfy a careful reviewer.
+
+## The bar for engine code
+
+- The acceptance contract holds ([docs/SEMANTICS.md](docs/SEMANTICS.md)).
+  Anything that could let a harmful step through needs a soundness test
+  that fails without the change.
+- Facts err towards blocking a correction when unsure.
+- Output stays deterministic, writes go through `fsguard`, printed source
+  goes through `redact`.
+- Formats, schemas, fingerprints and the fact vocabulary's guarantees
+  change only through an RFC ([GOVERNANCE.md](GOVERNANCE.md)) and the
+  [compatibility policy](docs/COMPATIBILITY.md).
+
+## Before you send a change
 
 ```console
 $ cargo fmt --all
 $ cargo clippy --all-targets -- -D warnings
 $ cargo test --workspace
+$ cargo run -q -- pack lint --deny-warnings     # if packs changed
+$ UPDATE_GOLDEN=1 cargo test -p codemosis-cli --test demo   # if generated docs changed; review the diff
+$ scripts/field-test.sh --compare scripts/field-test-baseline.json   # if rules or the engine changed
 ```
 
-## Contributing a rule
+The last one checks 20 real projects (about a minute, executing nothing of
+theirs). If it reports a new proven correction, read it; if it is right,
+update the baseline with `--summary-json scripts/field-test-baseline.json`
+in the same pull request, so the reviewer reads it too.
 
-1. Find the shape: write the bad code in a file and run
-   `codemosis tree file.py`.
-2. Write the rule in `packs/<pack>/rules/<id>.toml` (see
-   [docs/PACK_FORMAT.md](docs/PACK_FORMAT.md)).
-3. Write examples that would catch a wrong rule, and counterexamples for
-   every case where a careless version of the rule would be wrong.
-4. Run `cargo run -q -- pack test --rule <id> -v` until every check passes.
-5. Check it against a real project with `codemosis check`.
-
-A rule is accepted when its correction is right in every case its facts
-admit, it asks wherever intent decides, its examples prove its semantics
-claim by running, and its explanation would satisfy a careful reviewer. "It
-is usually right" is not enough: a rule that is usually right is a rule that
-asks.
-
-If the rule needs a fact the vocabulary lacks, add the fact to the engine
-(`crates/codemosis-core/src/eval.rs` for generic facts,
-`crates/codemosis-core/src/lang/<language>.rs` for language facts) with a
-`FactDoc` describing its exact meaning, tests in
-`crates/codemosis-core/tests/`, and conservative behaviour whenever it is
-unsure. Then regenerate the reference in `docs/FACTS.md`:
-
-```console
-$ UPDATE_GOLDEN=1 cargo test -p codemosis-cli --test demo
-```
-
-## Changing the engine
-
-- Keep the acceptance contract intact (see
-  [docs/SEMANTICS.md](docs/SEMANTICS.md)). A change that could let a step
-  through that makes the code worse needs a test proving it cannot.
-- If a change alters the demo's output, review `examples/broken-inventory.diff`
-  line by line and regenerate it with
-  `UPDATE_GOLDEN=1 cargo test -p codemosis-cli --test demo`.
-- Prefer small, documented functions over cleverness: people need to be able
-  to trust this code.
+Then open a pull request using the template, and add a line to
+[CHANGELOG.md](CHANGELOG.md) for anything users will notice.
 
 ## Licensing
 
-By contributing you agree that your contributions are licensed under both the
-MIT license and the Apache License 2.0, as the project is.
+By contributing you agree that your contributions are licensed under both
+the MIT license and the Apache License 2.0, as the project is.

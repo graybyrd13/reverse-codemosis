@@ -2,8 +2,10 @@
 //! can tell exactly which tests a step would break.
 //!
 //! Understood formats: Python unittest (`-v`), pytest (`-v` or `-rA`), Rust
-//! libtest (`cargo test`) and Go (`go test -v`). When nothing is recognised
-//! the engine falls back to the command's exit status.
+//! libtest (`cargo test`), Go (`go test -v`), TAP (Node's test runner when
+//! piped, tap, prove), Jest / Vitest / Mocha / node:test spec output, and
+//! `dotnet test` with normal verbosity. When nothing is recognised the
+//! engine falls back to the command's exit status.
 
 use regex::Regex;
 use serde::Serialize;
@@ -111,6 +113,95 @@ pub fn parse(output: &str) -> BTreeMap<String, TestStatus> {
         results.insert(c[2].to_string(), status);
     }
 
+    // TAP: "ok 1 - name", "not ok 2 - name", "ok 3 - name # SKIP". Nested
+    // subtests are indented; their names are prefixed with the parent's.
+    static TAP: OnceLock<Regex> = OnceLock::new();
+    let tap = re(
+        &TAP,
+        r"^(\s*)(not ok|ok) \d+(?: -)? ([^#\n]*?)\s*(#\s*(SKIP|TODO)\b.*)?$",
+    );
+    if output
+        .lines()
+        .any(|l| l.starts_with("TAP version") || l.trim_start().starts_with("1.."))
+    {
+        let mut pending: Vec<(usize, String, TestStatus)> = Vec::new();
+        for line in output.lines() {
+            let Some(c) = tap.captures(line) else { continue };
+            let depth = c[1].len();
+            let status = if c.get(4).is_some() {
+                TestStatus::Skipped
+            } else if &c[2] == "ok" {
+                TestStatus::Passed
+            } else {
+                TestStatus::Failed
+            };
+            pending.push((depth, c[3].trim().to_string(), status));
+        }
+        // A parent's result line follows its subtests, so walk backwards:
+        // a line followed (in reverse, preceded) by deeper lines is a parent.
+        let mut parents: Vec<(usize, String)> = Vec::new();
+        for i in (0..pending.len()).rev() {
+            let (depth, name, status) = &pending[i];
+            while parents.last().is_some_and(|(d, _)| d >= depth) {
+                parents.pop();
+            }
+            let is_parent = i > 0 && pending[i - 1].0 > *depth;
+            if is_parent {
+                parents.push((*depth, name.clone()));
+            } else {
+                let full = parents
+                    .iter()
+                    .map(|(_, n)| n.as_str())
+                    .chain([name.as_str()])
+                    .collect::<Vec<_>>()
+                    .join(" > ");
+                results.insert(full, *status);
+            }
+        }
+    }
+
+    // Spec reporters: "✓ name", "✔ name (1ms)", "✕ name", "✖ name", "× name".
+    static SPEC: OnceLock<Regex> = OnceLock::new();
+    static SPEC_FILE: OnceLock<Regex> = OnceLock::new();
+    let spec = re(&SPEC, r"^\s*([✓✔√✕✖×])\s+(.+?)(?:\s+\(\d+(?:\.\d+)?\s*m?s\))?\s*$");
+    let spec_file = re(&SPEC_FILE, r"^\s*(?:PASS|FAIL)\s+(\S+)");
+    let mut file = String::new();
+    for line in output.lines() {
+        if let Some(c) = spec_file.captures(line) {
+            file = c[1].to_string();
+            continue;
+        }
+        if let Some(c) = spec.captures(line) {
+            let status = if matches!(&c[1], "✓" | "✔" | "√") {
+                TestStatus::Passed
+            } else {
+                TestStatus::Failed
+            };
+            let name = if file.is_empty() {
+                c[2].to_string()
+            } else {
+                format!("{file} > {}", &c[2])
+            };
+            results.entry(name).or_insert(status);
+        }
+    }
+
+    // dotnet test --logger "console;verbosity=normal"
+    static DOTNET: OnceLock<Regex> = OnceLock::new();
+    for c in re(
+        &DOTNET,
+        r"(?m)^\s+(Passed|Failed|Skipped) ([\w.+`<>,]+)(?: \[[^\]]*\])?\s*$",
+    )
+    .captures_iter(output)
+    {
+        let status = match &c[1] {
+            "Passed" => TestStatus::Passed,
+            "Skipped" => TestStatus::Skipped,
+            _ => TestStatus::Failed,
+        };
+        results.insert(c[2].to_string(), status);
+    }
+
     results
 }
 
@@ -146,6 +237,44 @@ tests.test_models (unittest.loader._FailedTest.tests.test_models) ... ERROR
         assert_eq!(r["tests/test_a.py::test_one"], TestStatus::Passed);
         assert_eq!(r["tests/test_a.py::test_two"], TestStatus::Failed);
         assert_eq!(r["TestX"], TestStatus::Passed);
+    }
+
+    #[test]
+    fn tap_from_node_test() {
+        let out = "\
+TAP version 13
+# Subtest: cart
+    # Subtest: adds items
+    ok 1 - adds items
+    not ok 2 - totals
+    ok 3 - discounts # SKIP later
+    1..3
+not ok 1 - cart
+1..1
+";
+        let r = parse(out);
+        assert_eq!(r["cart > adds items"], TestStatus::Passed);
+        assert_eq!(r["cart > totals"], TestStatus::Failed);
+        assert_eq!(r["cart > discounts"], TestStatus::Skipped);
+        assert!(!r.contains_key("cart"), "parents are not tests themselves");
+    }
+
+    #[test]
+    fn spec_reporters() {
+        let out = "PASS src/cart.test.js\n  cart\n    ✓ adds items (3 ms)\n    ✕ totals (1 ms)\n";
+        let r = parse(out);
+        assert_eq!(r["src/cart.test.js > adds items"], TestStatus::Passed);
+        assert_eq!(r["src/cart.test.js > totals"], TestStatus::Failed);
+        let r = parse("✔ adds items (0.5ms)\n✖ totals (1.2ms)\n");
+        assert_eq!(r["adds items"], TestStatus::Passed);
+        assert_eq!(r["totals"], TestStatus::Failed);
+    }
+
+    #[test]
+    fn dotnet() {
+        let r = parse("  Passed Shop.Tests.CartTests.Adds [2 ms]\n  Failed Shop.Tests.CartTests.Totals [1 ms]\n");
+        assert_eq!(r["Shop.Tests.CartTests.Adds"], TestStatus::Passed);
+        assert_eq!(r["Shop.Tests.CartTests.Totals"], TestStatus::Failed);
     }
 
     #[test]

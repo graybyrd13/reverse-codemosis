@@ -20,12 +20,18 @@ use std::fmt;
 use std::path::Path;
 use std::sync::Arc;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct PackMeta {
     pub id: String,
     pub version: String,
-    pub language: String,
+    /// A grammar id (`python`), or `*` for rules that read any text file.
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Several grammar ids whose node kinds the rules share
+    /// (`["javascript", "typescript", "tsx"]`).
+    #[serde(default)]
+    pub languages: Vec<String>,
     pub summary: String,
     #[serde(default)]
     pub description: Option<String>,
@@ -34,15 +40,23 @@ pub struct PackMeta {
     pub license: String,
     #[serde(default)]
     pub homepage: Option<String>,
+    /// The engine versions this pack works with, like ">=0.1, <0.3".
+    /// A pack whose requirement the running engine does not meet does not
+    /// load, rather than silently misbehaving.
+    #[serde(default)]
+    pub engine: Option<String>,
+    /// Set when the pack should no longer be used: why, and what instead.
+    #[serde(default)]
+    pub deprecated: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-struct ManifestFile {
-    pack: PackMeta,
+pub struct ManifestFile {
+    pub pack: PackMeta,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RuleSpec {
     pub id: String,
@@ -55,12 +69,25 @@ pub struct RuleSpec {
     /// The plain-language explanation shown by `codemosis explain`.
     pub explain: String,
     /// A tree-sitter query. Captures name the parts the rule talks about.
-    pub shape: String,
+    #[serde(default)]
+    pub shape: Option<String>,
+    /// A regular expression matched against the text, for rules that work
+    /// on any language. Named groups become captures; `@match` is the whole match.
+    #[serde(default)]
+    pub pattern: Option<String>,
+    /// The name of a table mapping GitHub language names to regular
+    /// expressions: the rule uses the patterns of each file's language.
+    #[serde(default)]
+    pub patterns: Option<String>,
+    /// Where a text match must start: "code" (default), "comment", "string" or "any".
+    #[serde(default)]
+    pub within: Option<String>,
     /// Facts that must all hold.
     #[serde(default, rename = "where")]
     pub facts: Vec<String>,
     /// Derived captures, evaluated in order: `name = "expression"`.
     #[serde(default, rename = "let")]
+    #[schemars(with = "std::collections::BTreeMap<String, String>")]
     pub lets: toml::Table,
     /// The capture reported as the finding's location.
     #[serde(default)]
@@ -76,33 +103,65 @@ pub struct RuleSpec {
     pub ask: Option<AskSpec>,
     #[serde(default)]
     pub references: Vec<String>,
+    /// Free-form labels for filtering and reports ("performance", "async").
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Common Weakness Enumeration ids the rule addresses ("CWE-396").
+    #[serde(default)]
+    pub cwe: Vec<String>,
+    /// The same check in other tools, as `tool:code` ("flake8:F821",
+    /// "eslint:no-console", "clippy:needless_return"). A suppression a
+    /// project wrote for one of them (`# noqa: F821`) also suppresses this
+    /// rule there.
+    #[serde(default)]
+    pub equivalents: Vec<String>,
+    /// Set when the rule should no longer be used: why, and what instead.
+    /// A deprecated rule still runs; its findings and `explain` say so.
+    #[serde(default)]
+    pub deprecated: Option<String>,
+    /// The rule that replaces this one, as a qualified id.
+    #[serde(default)]
+    pub replaced_by: Option<String>,
     #[serde(default, rename = "example")]
     pub examples: Vec<ExampleSpec>,
     #[serde(default, rename = "counterexample")]
     pub counterexamples: Vec<CounterexampleSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EvidenceSpec {
     pub at: String,
     pub label: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct FixSpec {
     pub edits: Vec<EditSpec>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AskSpec {
-    /// Phrased so that "yes" applies the correction.
+    /// Without options, phrased so that "yes" applies the `fix`.
     pub question: String,
+    /// Named answers, each with its own edits (none means keep the code).
+    #[serde(default, rename = "option")]
+    pub options: Vec<OptionSpec>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct OptionSpec {
+    pub answer: String,
+    /// What choosing this answer means, in a few words.
+    pub means: String,
+    #[serde(default)]
+    pub edits: Vec<EditSpec>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct EditSpec {
     pub replace: Option<String>,
@@ -117,7 +176,7 @@ pub struct EditSpec {
     pub with: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct ExampleSpec {
     #[serde(default)]
@@ -139,9 +198,16 @@ pub struct ExampleSpec {
     /// Set to false when the example cannot be executed on its own.
     #[serde(default)]
     pub run: Option<bool>,
+    /// The answer to the rule's question in this example (default: "yes",
+    /// or the first option that changes code).
+    #[serde(default)]
+    pub answer: Option<String>,
+    /// For packs with several grammars: which one this example is in.
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CounterexampleSpec {
     #[serde(default)]
@@ -149,6 +215,13 @@ pub struct CounterexampleSpec {
     #[serde(default)]
     pub path: Option<String>,
     pub code: String,
+    #[serde(default)]
+    pub language: Option<String>,
+    /// Other files of the same project, by path, for facts that look across
+    /// files (`py.defined_in_project`, `py.imported_elsewhere`). The rule is
+    /// checked on `code` only; these files must exist for it to stop.
+    #[serde(default)]
+    pub files: std::collections::BTreeMap<String, String>,
 }
 
 /// The raw files of a pack, before compilation.
@@ -185,9 +258,56 @@ impl std::error::Error for PackError {}
 pub struct Pack {
     pub meta: PackMeta,
     pub origin: String,
-    pub language: &'static dyn Language,
+    /// The grammars its rules are written for; empty for text packs, which
+    /// read any file.
+    pub languages: Vec<&'static dyn Language>,
     pub rules: Vec<CompiledRule>,
     pub tables: Arc<Tables>,
+    /// SHA-256 of the pack's files (manifest, rules and tables, by name), so
+    /// a lockfile can pin exactly what was reviewed.
+    pub digest: String,
+}
+
+impl PackSource {
+    /// SHA-256 over every file of the pack, in a fixed order, with names.
+    pub fn digest(&self) -> String {
+        use sha2::{Digest, Sha256};
+        let mut h = Sha256::new();
+        let mut feed = |name: &str, text: &str| {
+            h.update((name.len() as u64).to_le_bytes());
+            h.update(name.as_bytes());
+            let text = text.replace("\r\n", "\n");
+            h.update((text.len() as u64).to_le_bytes());
+            h.update(text.as_bytes());
+        };
+        feed("pack.toml", &self.manifest);
+        let mut files: Vec<&(String, String)> = self.rules.iter().chain(self.tables.iter()).collect();
+        files.sort();
+        for (name, text) in files {
+            feed(name, text);
+        }
+        h.finalize().iter().map(|b| format!("{b:02x}")).collect()
+    }
+}
+
+impl Pack {
+    pub fn is_text(&self) -> bool {
+        self.languages.is_empty()
+    }
+
+    /// "python", "javascript+typescript+tsx", or "any text".
+    pub fn target(&self) -> String {
+        if self.is_text() {
+            "any text".to_string()
+        } else {
+            self.languages.iter().map(|l| l.id()).collect::<Vec<_>>().join("+")
+        }
+    }
+
+    /// True when the pack applies to a project containing these grammars.
+    pub fn applies_to(&self, grammar_ids: &[&str]) -> bool {
+        self.is_text() || self.languages.iter().any(|l| grammar_ids.contains(&l.id()))
+    }
 }
 
 impl fmt::Debug for Pack {
@@ -245,6 +365,45 @@ pub fn read_dir(dir: &Path) -> Result<PackSource, PackError> {
     })
 }
 
+/// What can be known about a pack without compiling it.
+#[derive(Clone, Debug)]
+pub struct PackIndex {
+    pub id: String,
+    pub version: String,
+    /// Grammar ids; empty for a text pack (`language = "*"`).
+    pub languages: Vec<String>,
+    /// Qualified rule ids.
+    pub rules: Vec<String>,
+    pub digest: String,
+}
+
+/// Read a pack's identity, languages and rule ids cheaply, without compiling
+/// its queries. None when the manifest does not parse (compiling reports why).
+pub fn index(src: &PackSource) -> Option<PackIndex> {
+    let manifest: ManifestFile = toml::from_str(&src.manifest).ok()?;
+    let m = manifest.pack;
+    let languages = match (&m.language, m.languages.is_empty()) {
+        (Some(l), true) if l == "*" => Vec::new(),
+        (Some(l), true) => vec![l.clone()],
+        _ => m.languages.clone(),
+    };
+    let rules = src
+        .rules
+        .iter()
+        .filter_map(|(_, text)| {
+            let v: toml::Table = toml::from_str(text).ok()?;
+            v.get("id").and_then(|i| i.as_str()).map(|i| format!("{}/{i}", m.id))
+        })
+        .collect();
+    Some(PackIndex {
+        id: m.id,
+        version: m.version,
+        languages,
+        rules,
+        digest: src.digest(),
+    })
+}
+
 /// Validate and compile a pack.
 pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
     let mut problems = Vec::new();
@@ -264,17 +423,54 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
             meta.id
         ));
     }
-    let Some(language) = lang::by_id(&meta.language) else {
-        let known: Vec<&str> = lang::all().iter().map(|l| l.id()).collect();
-        return Err(PackError {
-            origin: src.origin.clone(),
-            problems: vec![format!(
-                "pack.toml: unknown language '{}' (this build knows: {})",
-                meta.language,
-                known.join(", ")
-            )],
-        });
+    if let Some(req) = &meta.engine {
+        match crate::version::Requirement::parse(req) {
+            Ok(r) if !r.matches(crate::version::engine()) => {
+                return Err(PackError {
+                    origin: src.origin.clone(),
+                    problems: vec![format!(
+                        "pack.toml: this pack needs engine {r}, and this is {}; use a matching version of codemosis or of the pack",
+                        crate::version::ENGINE_VERSION
+                    )],
+                })
+            }
+            Ok(_) => {}
+            Err(e) => problems.push(format!("pack.toml: engine: {e}")),
+        }
+    }
+    if crate::version::Version::parse(&meta.version).is_err() {
+        problems.push(format!("pack.toml: version '{}' is not like 1.2.3", meta.version));
+    }
+    let ids: Vec<String> = match (&meta.language, meta.languages.is_empty()) {
+        (Some(l), true) if l == "*" => Vec::new(),
+        (Some(l), true) => vec![l.clone()],
+        (None, false) => meta.languages.clone(),
+        _ => {
+            return Err(PackError {
+                origin: src.origin.clone(),
+                problems: vec![
+                    "pack.toml: give either `language` (a grammar id, or \"*\" for any text) or `languages` (a list of grammar ids)"
+                        .to_string(),
+                ],
+            })
+        }
     };
+    let mut languages = Vec::new();
+    for id in &ids {
+        match lang::by_id(id) {
+            Some(l) => languages.push(l),
+            None => {
+                let known: Vec<&str> = lang::all().iter().map(|l| l.id()).collect();
+                return Err(PackError {
+                    origin: src.origin.clone(),
+                    problems: vec![format!(
+                        "pack.toml: unknown language '{id}' (grammars in this build: {}; use \"*\" for rules that read any text)",
+                        known.join(", ")
+                    )],
+                });
+            }
+        }
+    }
     let mut tables = Tables::default();
     for (name, text) in &src.tables {
         if let Err(e) = tables.merge_toml(text) {
@@ -304,7 +500,7 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
             problems.push(format!("{name}: duplicate rule id '{}'", spec.id));
             continue;
         }
-        match CompiledRule::compile(&meta.id, spec, language, tables.clone()) {
+        match CompiledRule::compile(&meta.id, spec, &languages, tables.clone()) {
             Ok(rule) => rules.push(rule),
             Err(errs) => problems.extend(errs.into_iter().map(|e| format!("{name}: {e}"))),
         }
@@ -318,9 +514,10 @@ pub fn compile(src: &PackSource) -> Result<Pack, PackError> {
     Ok(Pack {
         meta,
         origin: src.origin.clone(),
-        language,
+        languages,
         rules,
         tables,
+        digest: src.digest(),
     })
 }
 
@@ -350,5 +547,5 @@ pub fn builtin_sources() -> Vec<PackSource> {
 /// Compile every built-in pack. A broken built-in pack is a bug in this
 /// build, caught by the test suite.
 pub fn builtin() -> Result<Vec<Pack>, PackError> {
-    builtin_sources().iter().map(compile).collect()
+    crate::parallel::map(&builtin_sources(), compile).into_iter().collect()
 }

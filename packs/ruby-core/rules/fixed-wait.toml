@@ -1,0 +1,111 @@
+id = "fixed-wait"
+title = "Fixed wait"
+tags = ["timing", "flaky-tests"]
+category = "hazard"
+semantics = "preserved"
+summary = "`${stmt}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed sleep is a guess about timing: too short and the code is flaky (what it waited for is not ready yet), too long and every run is slow. The safe form waits for the condition itself: poll it with a timeout, wait for the process or the event.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine asks. keep records the wait as intentional; remove deletes it. Waits inside loops are polling intervals and are not reported. Waits inside blocks (`loop do`, `.each do`) are treated as loops.
+
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+"""
+shape = '''
+(call
+  method: (identifier) @method
+  arguments: (argument_list . [(integer) (float)] @_delay .)
+  (#eq? @method "sleep")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "file_purpose() not in ['example', 'docs', 'benchmark']",
+  "empty(field(@stmt, 'receiver'))",
+  "kind(parent(@stmt)) in ['program', 'body_statement', 'begin_block', 'then', 'else']",
+  "!inside(@stmt, 'while', 'until', 'for', 'do_block', 'block')",
+  "occupies_lines(@stmt)",
+]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+puts "start"
+sleep 0.01
+puts "done"
+'''
+after = '''
+puts "start"
+puts "done"
+'''
+
+[[counterexample]]
+name = "a polling loop"
+code = '''
+until File.exist?("ready")
+  sleep 0.1
+end
+'''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/demo.rb"
+code = '''
+puts "start"
+sleep 0.01
+puts "done"
+'''
+
+[[counterexample]]
+name = "a method named sleep on some other object"
+code = '''
+def idle(machine)
+  machine.sleep(5)
+end
+'''
+
+[[counterexample]]
+name = "a wait whose value is used: deleting the line would delete the assignment"
+code = '''
+def pause
+  slept = sleep(1)
+  puts slept
+end
+'''
+
+[[counterexample]]
+name = "a wait inside a block runs once per iteration"
+code = '''
+def drip
+  3.times do
+    sleep 1
+  end
+end
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+code = '''
+def settle; flush; sleep 1; end
+'''
+
+[[counterexample]]
+name = "a wait on its own line as an argument: deleting the line would break the call"
+code = '''
+def pause
+  puts(
+    sleep(1)
+  )
+end
+'''

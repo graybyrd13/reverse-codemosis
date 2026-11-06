@@ -15,7 +15,8 @@ pub struct Answer {
     /// Where the question was asked, for the human reading the ledger.
     pub location: String,
     pub question: String,
-    /// "yes" applies the correction; "no" keeps the code as intentional.
+    /// One of the question's answers: "yes" / "no", or an option such as
+    /// "keep" or "remove".
     pub answer: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub note: Option<String>,
@@ -41,9 +42,9 @@ impl Answers {
         let text = std::fs::read_to_string(&path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
         let answers: Answers = toml::from_str(&text).map_err(|e| format!("{} is not valid: {e}", path.display()))?;
         for a in &answers.entries {
-            if a.answer != "yes" && a.answer != "no" {
+            if a.answer.is_empty() || !a.answer.chars().all(|c| c.is_ascii_lowercase() || c == '-') {
                 return Err(format!(
-                    "{}: answer to {} must be \"yes\" or \"no\", found \"{}\"",
+                    "{}: the answer to {} must be one of the question's answers (a lowercase word), found \"{}\"",
                     path.display(),
                     a.id,
                     a.answer
@@ -55,24 +56,24 @@ impl Answers {
 
     pub fn save(&self, root: &Path) -> Result<(), String> {
         let path = Answers::path(root);
-        if let Some(dir) = path.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("cannot create {}: {e}", dir.display()))?;
-        }
         let body = toml::to_string_pretty(self).map_err(|e| e.to_string())?;
         let text = format!(
             "# Facts supplied by people, recorded by Reverse Codemosis.\n\
-             # \"yes\" lets the correction be applied; \"no\" keeps the code as intentional.\n\
+             # Each answer is one of its question's options: an answer that changes code\n\
+             # lets that correction be applied; one that keeps it records the code as intentional.\n\
              # Review this file like code, and commit it.\n\n{body}"
         );
-        std::fs::write(&path, text).map_err(|e| format!("cannot write {}: {e}", path.display()))
+        let rel = path.strip_prefix(root).unwrap_or(&path);
+        crate::fsguard::write_confined(root, rel, text.as_bytes())
+            .map_err(|e| format!("cannot write {}: {e}", path.display()))
     }
 
     /// The recorded answer to a question, if any.
-    pub fn get(&self, id: &str) -> Option<bool> {
+    pub fn get(&self, id: &str) -> Option<String> {
         self.entries
             .iter()
             .find(|a| a.id.eq_ignore_ascii_case(id))
-            .map(|a| a.answer == "yes")
+            .map(|a| a.answer.clone())
     }
 
     pub fn set(&mut self, answer: Answer) {

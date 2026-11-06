@@ -1,6 +1,7 @@
 id = "redundant-field-init"
 title = "Redundant field name in struct initializer"
 category = "simplification"
+equivalents = ["clippy:redundant_field_names"]
 semantics = "preserved"
 summary = "`${init}` can be written `${field}`: the field is initialised from a variable of the same name."
 explain = """

@@ -5,7 +5,10 @@ semantics = "repaired"
 summary = "`${stmt}` is a Python 2 print statement writing to `${dest}`; Python 3 does not compile it."
 explain = """
 `print >>stream, a, b` writes to `stream`; in Python 3 that is
-`print(a, b, file=stream)`.
+`print(a, b, file=stream)`, and the chevron form is a syntax error. The
+items, their separators and the final newline are the same in both, so the
+call is the only repair. A trailing comma (which suppressed the newline in
+Python 2) is left to a person, since it needs `end=" "`.
 """
 shape = "(print_statement (chevron (_) @dest)) @stmt"
 where = [
@@ -35,4 +38,18 @@ name = "Python 3 print to a file"
 code = '''
 import sys
 print("x", file=sys.stderr)
+'''
+
+[[counterexample]]
+name = "a chevron with nothing to print"
+code = '''
+import sys
+print >>sys.stderr
+'''
+
+[[counterexample]]
+name = "a trailing comma suppresses the newline"
+code = '''
+import sys
+print >>sys.stderr, "progress:",
 '''

@@ -1,6 +1,8 @@
 id = "unreachable-code"
 title = "Unreachable code"
 category = "waste"
+cwe = ["CWE-561"]
+equivalents = ["pylint:unreachable", "pylint:W0101"]
 semantics = "preserved"
 summary = "This code can never run: the block always leaves at line ${jump|line} before reaching it."
 explain = """
@@ -20,7 +22,7 @@ reported.
 shape = "(block [(return_statement) (raise_statement) (break_statement) (continue_statement)] @jump)"
 focus = "@dead"
 where = [
-  "exists(@dead)",
+  # occupies_lines() of a missing capture is false: there must be dead code.
   "occupies_lines(@dead)",
   "py.removal_preserves_scope(@dead)",
 ]

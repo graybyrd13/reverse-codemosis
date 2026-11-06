@@ -1,0 +1,59 @@
+id = "empty-catch"
+title = "Empty catch block"
+category = "hazard"
+cwe = ["CWE-390"]
+summary = "This catch block swallows the exception without a trace."
+explain = """
+An empty catch hides every exception of that type, including the unexpected
+ones. When ignoring is right, a comment saying why makes it a decision (and
+the rule stays quiet); otherwise handle, log or rethrow. Which one is a
+design question, so nothing is changed.
+"""
+shape = "(catch_clause body: (block) @body) @clause"
+focus = "@clause"
+where = [
+  "count(children(@body)) == 0",
+  "!has_comment(@body)",
+]
+
+[[example]]
+before = '''
+class Loader {
+    void load() {
+        try {
+            read();
+        } catch (Exception e) {
+        }
+    }
+    void read() throws Exception {}
+}
+'''
+
+[[counterexample]]
+code = '''
+class Loader {
+    void load() {
+        try {
+            read();
+        } catch (Exception e) {
+            // optional file; absence is fine
+        }
+    }
+    void read() throws Exception {}
+}
+'''
+
+[[counterexample]]
+name = "a catch that handles the exception"
+code = '''
+class Loader {
+    void load() {
+        try {
+            read();
+        } catch (Exception e) {
+            System.err.println("cannot load: " + e);
+        }
+    }
+    void read() throws Exception {}
+}
+'''

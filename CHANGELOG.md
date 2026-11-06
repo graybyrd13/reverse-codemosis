@@ -1,0 +1,107 @@
+# Changelog
+
+All notable changes are recorded here. The format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project
+follows [Semantic Versioning](https://semver.org/) as described in
+[docs/COMPATIBILITY.md](docs/COMPATIBILITY.md).
+
+## Unreleased
+
+### Added
+
+- Every language on GitHub (845, from Linguist) in three tiers: 17 with a
+  syntax tree, 343 with comment and string syntax, the rest recognized.
+- Questions with named answers; `ask`, `fix --interactive`; fixed waits in
+  32+ languages; merge conflicts (ours, theirs, both).
+- CI outputs: SARIF 2.1.0, GitLab Code Quality, GitHub annotations and job
+  summaries, pull-request reviews with suggested changes, versioned JSON.
+- Policy: inline `codemosis: ignore[...]` and configured suppressions with
+  reasons and expiry dates, baselines, severity levels, `--fail-on`.
+- Pack tooling: `pack lint`, `pack test --mutations`, `pack docs`, rule
+  metadata (tags, CWE, deprecation), engine ranges, `codemosis lock`.
+- Proof certificates for every `fix`, verified by replay with
+  `codemosis proof verify`; an audit log.
+- Guards: binding preservation (Python), conditional compilation, Rust
+  `#[cfg]` and macros, parse damage; soundness, conformance and property
+  test suites.
+- Parallel analysis, `--timings`, `--log`, `codemosis doctor`.
+- A language server, a GitHub Action, pre-commit hooks, a GitLab CI
+  component, JSON Schemas, shell completions and man pages.
+- Security hardening: sandboxed pack examples, confined writes, redaction.
+
+- Field test on 20 open-source repositories (docs/FIELD_TEST.md,
+  scripts/field-test.sh).
+- The formatting contract: a file kept formatted by rustfmt, gofmt, Black,
+  Ruff, Prettier or clang-format stays formatted. `[format] mode` refuses
+  the step (default) or lets the formatter lay out the corrected lines,
+  only next to the correction. Certificates record the layout, and
+  `proof verify` replays it with the same formatter version or accepts it
+  only if it changes whitespace alone. `doctor` and `map` show the
+  formatters and why.
+- The precision ledger: `scripts/field-test.sh --summary-json/--compare`
+  and a reviewed baseline of every proven correction on the field test;
+  CI fails on an unreviewed correction or a >10% rise in noise.
+- `.github/workflows/field-test.yml`: the ledger on pull requests, and
+  `codemosis fix` on cobra, gin and ripgrep with their own tests as the
+  oracle, re-checked independently (`scripts/field-test-oracle.sh`).
+- 13 more languages in the deep tier (30 in all): Elixir, Erlang, Haskell,
+  OCaml, Zig, Dart, R, Julia, Elm, Nix, HCL/Terraform, PowerShell and
+  Solidity, each with a conformance corpus. Heuristics for `.ex` (Elixir
+  or Euphoria), `.ml` (OCaml or Standard ML) and `.sol` (Solidity or
+  Gerber); definitions named by `*` or by call targets (Elixir's `def`).
+- Packs for the new languages, every fact proven by a counterexample:
+  `elixir-core` (IO.inspect left in code), `r-core` (comparisons with
+  NA, browser()), `haskell-core` (undefined in library code), `terraform`
+  (public bucket ACLs, SSH/RDP open to the internet, secrets in code),
+  `solidity-core` (tx.origin authorization, selfdestruct), `nix-core`
+  (fetches without a hash), `powershell-core` (Invoke-Expression),
+  `elm-core` (Debug.log), `ocaml-core` (Obj.magic), `zig-core`
+  (std.debug.print), `dart-core` (print in library code). Spot-checked on
+  one real project per language (docs/FIELD_TEST.md). `.Rd`, `.mli`,
+  `.mll` and `.mly` files are read lexically, and Dart's `tool/` holds
+  scripts.
+- Agentic coding tools: `codemosis mcp` (an MCP server with check, fix,
+  answer, explain, map, rules and verify_proof), `codemosis hook` (reports
+  findings on the lines an agent just changed, with what to do; exit 2 feeds
+  it back), `codemosis integrate <tool>` (writes Claude Code, Cursor, VS
+  Code, Gemini CLI, Zed, Continue, opencode, Aider and AGENTS.md
+  configuration, merging into existing files), a Claude Code plugin with a
+  marketplace entry, and `check --file/--changed/--format compact`.
+- Editors: a VS Code extension (language client, `codemosis mcp` offered
+  to Copilot's agent mode, commands, schema validation), a Zed extension
+  (language server and MCP context server), a Neovim plugin (LSP,
+  `:Codemosis`, `:CodemosisQuickfix`), an Emacs package (lsp-mode add-on,
+  eglot, compilation buffer), Helix and Sublime Text settings, and
+  instructions for Vim and JetBrains IDEs (docs/EDITORS.md). CI builds and
+  packages both extensions.
+- Proof coverage: every one of the 144 facts in the built-in packs is now
+  proven necessary by a counterexample (from 55 of 160). Implied facts
+  were removed, and table invariants are tested. `pack test --mutations
+  --max-unproven N` is enforced in CI at 0. Counterexamples can carry
+  other project files (`files`) for cross-file facts.
+- zsh (`.zsh`, zsh shebangs, `#compdef`) is read in the lexical tier rather
+  than misparsed by the bash grammar; `map` says so.
+- Suppressions written for other tools are honoured through rules'
+  `equivalents` (flake8/ruff, mypy, pyright, pylint, eslint, clang-tidy,
+  golangci-lint, ShellCheck, clippy).
+- File purpose (`file_purpose()`), `py.in_main_block`,
+  `py.used_as_template`, `earlier_same_field`; PEP 695 scopes.
+- A user guide, a developer guide and a documentation index.
+
+### Fixed
+
+- A dictionary or object with thousands of entries took minutes (cubic
+  matching in the duplicate-key rules); every shape now runs under a
+  partial-match limit.
+- fstring-without-placeholders no longer flags fragments of a
+  concatenation that has a placeholder; negated comparisons keep their
+  parentheses; vendored libraries and generated docsets are never edited.
+- Unified diffs had wrong hunk headers in some cases (from `similar`'s
+  header computation); the engine now writes them itself.
+- Redaction was not idempotent when one match overlapped another.
+
+## 0.1.0
+
+The foundation: the engine, the fact language, fix packs with proofs, the
+correction loop verified by the project's build and tests, and the Python
+demonstration.

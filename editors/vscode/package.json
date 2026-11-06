@@ -1,0 +1,157 @@
+{
+  "name": "codemosis",
+  "displayName": "Reverse Codemosis",
+  "description": "Find where code falls short, apply only the corrections that can be proven, and answer the questions that are yours. For every language GitHub knows.",
+  "version": "0.1.0",
+  "publisher": "reverse-codemosis",
+  "license": "MIT OR Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/graybyrd13/reverse-codemosis",
+    "directory": "editors/vscode"
+  },
+  "homepage": "https://github.com/graybyrd13/reverse-codemosis/blob/main/docs/EDITORS.md",
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "Linters",
+    "Programming Languages",
+    "AI"
+  ],
+  "keywords": [
+    "static analysis",
+    "correctness",
+    "proof",
+    "lint",
+    "mcp",
+    "agent"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "codemosis.check",
+        "title": "Check the project",
+        "category": "Reverse Codemosis"
+      },
+      {
+        "command": "codemosis.checkChanged",
+        "title": "Check files changed since the last commit",
+        "category": "Reverse Codemosis"
+      },
+      {
+        "command": "codemosis.fixPreview",
+        "title": "Preview the proven corrections",
+        "category": "Reverse Codemosis"
+      },
+      {
+        "command": "codemosis.fix",
+        "title": "Apply the proven corrections (verified by build and tests)",
+        "category": "Reverse Codemosis"
+      },
+      {
+        "command": "codemosis.ask",
+        "title": "Answer the open questions",
+        "category": "Reverse Codemosis"
+      },
+      {
+        "command": "codemosis.map",
+        "title": "Show what it understands about this project",
+        "category": "Reverse Codemosis"
+      },
+      {
+        "command": "codemosis.restart",
+        "title": "Restart the language server",
+        "category": "Reverse Codemosis"
+      },
+      {
+        "command": "codemosis.showOutput",
+        "title": "Show the output",
+        "category": "Reverse Codemosis"
+      }
+    ],
+    "configuration": {
+      "title": "Reverse Codemosis",
+      "properties": {
+        "codemosis.path": {
+          "type": "string",
+          "default": "codemosis",
+          "scope": "machine-overridable",
+          "markdownDescription": "The `codemosis` executable. Install it with `cargo install --locked --path crates/codemosis-cli`, or give its full path."
+        },
+        "codemosis.languageServer.enable": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show findings as you type, with proven corrections as quick fixes."
+        },
+        "codemosis.mcp.enable": {
+          "type": "boolean",
+          "default": true,
+          "markdownDescription": "Offer the `codemosis mcp` server to Copilot's agent mode and other MCP clients in VS Code, so agents can check code, apply proven corrections and bring questions back to you."
+        },
+        "codemosis.trace.server": {
+          "type": "string",
+          "enum": [
+            "off",
+            "messages",
+            "verbose"
+          ],
+          "default": "off",
+          "description": "Trace the messages between VS Code and the language server."
+        }
+      }
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "codemosis.mcp",
+        "label": "Reverse Codemosis"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": ".codemosis/proofs/*.json",
+        "url": "./schemas/proof.schema.json"
+      },
+      {
+        "fileMatch": ".codemosis/baseline.json",
+        "url": "./schemas/baseline.schema.json"
+      }
+    ],
+    "tomlValidation": [
+      {
+        "fileMatch": "codemosis.toml",
+        "url": "./schemas/config.schema.json"
+      },
+      {
+        "fileMatch": "codemosis.lock",
+        "url": "./schemas/lock.schema.json"
+      },
+      {
+        "fileMatch": "pack.toml",
+        "url": "./schemas/pack.schema.json"
+      }
+    ]
+  },
+  "scripts": {
+    "schemas": "node scripts/copy-schemas.js",
+    "check": "tsc -p . --noEmit",
+    "bundle": "esbuild src/extension.ts --bundle --outfile=out/extension.js --external:vscode --format=cjs --platform=node --target=node20 --sourcemap",
+    "compile": "npm run schemas && npm run check && npm run bundle",
+    "package": "npm run compile && vsce package --no-dependencies --out codemosis.vsix",
+    "vscode:prepublish": "npm run compile"
+  },
+  "dependencies": {
+    "vscode-languageclient": "^11.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "~1.101.0",
+    "@vscode/vsce": "^4.1.0",
+    "typescript": "^5.6.0",
+    "esbuild": "^0.28.2"
+  }
+}

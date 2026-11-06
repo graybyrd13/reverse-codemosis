@@ -1,6 +1,7 @@
 id = "mutable-default"
 title = "Mutable default argument"
 category = "hazard"
+equivalents = ["flake8:B006", "pylint:dangerous-default-value", "pylint:W0102"]
 semantics = "corrected"
 summary = "`${param}=${value}` is evaluated once, when `${function}` is defined; every call that omits `${param}` shares that one object."
 explain = """
@@ -23,7 +24,7 @@ shape = '''
       (default_parameter name: (identifier) @param value: [(list) (dictionary) (set)] @value)
       (typed_default_parameter name: (identifier) @param value: [(list) (dictionary) (set)] @value)
     ])
-  body: (block) @body) @def
+  body: (block) @body) @_def
 '''
 focus = "@value"
 where = [
@@ -102,4 +103,11 @@ def f(items=(), name="x", limit=None):
 name = "a one-line function has no room for the guard"
 code = '''
 def f(items=[]): return items
+'''
+
+[[counterexample]]
+name = "a body that is only a docstring has no statement to guard"
+code = '''
+def configure(options={}):
+    """Reserved for future use."""
 '''

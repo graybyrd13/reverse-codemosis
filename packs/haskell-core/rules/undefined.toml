@@ -1,0 +1,50 @@
+id = "undefined"
+title = "undefined in library code"
+category = "hazard"
+summary = "`${v}` crashes the program when it is evaluated."
+explain = """
+`undefined` stands for a value that is not written yet: evaluating it throws an exception with no useful
+message. In library code it is a crash waiting for the right input. Write the value, or use `error` with a
+message that says what went wrong; for work in progress, a typed hole (`_`) makes the compiler say what is
+missing. Nothing is changed automatically: only the author knows the value.
+
+Tests are left alone: `undefined` is a common way to say "this argument is never used".
+"""
+shape = '((variable) @v (#eq? @v "undefined"))'
+focus = "@v"
+where = [
+  "file_purpose() == 'library'",
+  "!hs.defines('undefined')",
+]
+
+[[example]]
+path = "src/Price.hs"
+before = '''
+module Price where
+
+discount :: Int -> Int
+discount n = undefined
+'''
+
+[[counterexample]]
+name = "a test"
+path = "test/PriceSpec.hs"
+code = '''
+module PriceSpec where
+
+ignored :: Int
+ignored = undefined
+'''
+
+[[counterexample]]
+name = "undefined is defined here"
+path = "src/Price.hs"
+code = '''
+module Price where
+
+undefined :: Int
+undefined = 0
+
+discount :: Int -> Int
+discount n = n - undefined
+'''

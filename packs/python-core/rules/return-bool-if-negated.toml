@@ -1,6 +1,7 @@
 id = "return-bool-if-negated"
 title = "if/else that returns False or True"
 category = "simplification"
+equivalents = ["flake8:SIM103"]
 semantics = "preserved"
 summary = "This if/else returns the opposite truth value of its condition; it is `return ${cond|py.negate}`."
 explain = """
@@ -25,7 +26,8 @@ shape = '''
 ]
 '''
 focus = "@whole"
-where = ["occupies_lines(@whole)"]
+# No occupies_lines(@whole) fact: an if statement always starts its line and
+# the return must end its block, so the match always spans whole lines.
 
 [fix]
 edits = [{ replace = "@whole", with = "return ${cond|py.negate}" }]
@@ -68,4 +70,23 @@ def f(n):
     if n:
         return 0
     return 1
+'''
+
+[[example]]
+name = "a negated comparison keeps its parentheses"
+before = '''
+def uses_innodb(engine):
+    if engine != "InnoDB":
+        return False
+    return True
+
+
+print(uses_innodb("InnoDB"), uses_innodb("MyISAM"))
+'''
+after = '''
+def uses_innodb(engine):
+    return not (engine != "InnoDB")
+
+
+print(uses_innodb("InnoDB"), uses_innodb("MyISAM"))
 '''

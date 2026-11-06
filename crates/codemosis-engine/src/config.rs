@@ -18,9 +18,24 @@
 //!
 //! [rules]
 //! disable = ["python-core/redundant-pass"]
+//!
+//! [policy]                  # see `policy.rs`
+//! fail_on = "warning"
+//!
+//! [severity]
+//! "python-core/redundant-pass" = "warning"
+//!
+//! [[suppress]]
+//! rule = "python-core/bare-except"
+//! paths = ["legacy/**"]
+//! reason = "legacy worker, replaced in Q1"
+//!
+//! [format]                  # see `formatter.rs`
+//! mode = "refuse"           # or "reformat", or "off"
+//! disable = ["prettier"]
 //! ```
 
-use codemosis_core::pack::{self, Pack, PackError};
+use codemosis_core::pack::{self, Pack, PackError, PackSource};
 use codemosis_core::FileFilter;
 use serde::Deserialize;
 use std::collections::BTreeMap;
@@ -29,23 +44,27 @@ use thiserror::Error;
 
 pub const FILE_NAME: &str = "codemosis.toml";
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct Config {
     pub project: ProjectSection,
     pub oracle: OracleSection,
     pub packs: PacksSection,
     pub rules: RulesSection,
+    pub policy: crate::policy::PolicySection,
+    pub severity: BTreeMap<String, String>,
+    pub suppress: Vec<crate::policy::SuppressEntry>,
+    pub format: crate::formatter::FormatSection,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct ProjectSection {
     pub include: Vec<PathBuf>,
     pub exclude: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct OracleSection {
     pub build: Option<String>,
@@ -54,14 +73,14 @@ pub struct OracleSection {
     pub env: BTreeMap<String, String>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct PacksSection {
     pub builtin: Option<Vec<String>>,
     pub paths: Vec<PathBuf>,
 }
 
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields, default)]
 pub struct RulesSection {
     pub disable: Vec<String>,
@@ -88,6 +107,17 @@ impl Config {
         }
         let text = std::fs::read_to_string(&path).map_err(|e| ConfigError::Read(path.clone(), e))?;
         let cfg: Config = toml::from_str(&text).map_err(|e| ConfigError::Parse(path.clone(), e.to_string()))?;
+        let unknown = cfg.format.unknown_names();
+        if !unknown.is_empty() {
+            return Err(ConfigError::Parse(
+                path,
+                format!(
+                    "[format] disable: {} is not a formatter; known: {}",
+                    unknown.join(", "),
+                    crate::formatter::Kind::ALL.map(|k| k.name()).join(", ")
+                ),
+            ));
+        }
         Ok((cfg, Some(path)))
     }
 
@@ -100,21 +130,23 @@ impl Config {
 
     /// The packs that apply to this project: the selected built-in packs and
     /// any packs listed by path (relative to the project root).
-    pub fn load_packs(&self, root: &Path, extra: &[PathBuf]) -> Result<Vec<Pack>, ConfigError> {
-        let mut packs = Vec::new();
-        for src in pack::builtin_sources() {
-            let p = pack::compile(&src)?;
-            let wanted = match &self.packs.builtin {
-                None => true,
-                Some(list) => list.contains(&p.meta.id),
-            };
-            if wanted {
-                packs.push(p);
-            }
-        }
+    /// The sources of the packs that apply to this project: the selected
+    /// built-in packs and any packs listed by path (relative to the project
+    /// root), a path pack replacing a built-in pack with the same id.
+    pub fn pack_sources(&self, root: &Path, extra: &[PathBuf]) -> Result<Vec<PackSource>, ConfigError> {
+        let mut sources: Vec<PackSource> = pack::builtin_sources()
+            .into_iter()
+            .filter(|src| {
+                let dir = src.origin.trim_start_matches("builtin:");
+                self.packs
+                    .builtin
+                    .as_ref()
+                    .is_none_or(|list| list.iter().any(|id| id == dir))
+            })
+            .collect();
         if let Some(list) = &self.packs.builtin {
             for id in list {
-                if !packs.iter().any(|p| p.meta.id == *id) {
+                if !sources.iter().any(|s| s.origin == format!("builtin:{id}")) {
                     return Err(ConfigError::Other(format!("there is no built-in pack named '{id}'")));
                 }
             }
@@ -126,13 +158,23 @@ impl Config {
             .map(|p| root.join(p))
             .chain(extra.iter().cloned())
         {
-            let p = pack::compile(&pack::read_dir(&dir)?)?;
-            if let Some(i) = packs.iter().position(|q| q.meta.id == p.meta.id) {
-                packs.remove(i);
-            }
-            packs.push(p);
+            let src = pack::read_dir(&dir)?;
+            let id = pack::index(&src).map(|i| i.id).unwrap_or_default();
+            sources.retain(|s| pack::index(s).map(|i| i.id).unwrap_or_default() != id);
+            sources.push(src);
         }
-        Ok(packs)
+        Ok(sources)
+    }
+
+    /// Every configured pack, compiled. Packs are independent, so they
+    /// compile in parallel (query compilation dominates start-up).
+    pub fn load_packs(&self, root: &Path, extra: &[PathBuf]) -> Result<Vec<Pack>, ConfigError> {
+        let sources = self.pack_sources(root, extra)?;
+        compile_all(&sources)
+    }
+
+    pub fn policy(&self) -> Result<crate::policy::Policy, ConfigError> {
+        crate::policy::Policy::new(&self.policy, &self.severity, &self.suppress).map_err(ConfigError::Other)
     }
 
     pub fn rule_enabled(&self, id: &str) -> bool {
@@ -144,14 +186,132 @@ impl Config {
     }
 }
 
-/// Guess the oracle of a project that has no `[oracle]` section.
+/// Compile pack sources in parallel, keeping their order.
+pub fn compile_all(sources: &[PackSource]) -> Result<Vec<Pack>, ConfigError> {
+    let mut packs = Vec::new();
+    for compiled in codemosis_core::parallel::map(sources, pack::compile) {
+        packs.push(compiled?);
+    }
+    Ok(packs)
+}
+
+/// Guess the oracle of a project that has no `[oracle]` section, from the
+/// build files at its root. The first ecosystem found, in this order, wins:
+/// Cargo, Go, npm (pnpm, yarn, bun), Maven, Gradle, .NET, Mix, SwiftPM,
+/// Bundler, Composer, Python, Make.
 pub fn detect_oracle(root: &Path) -> OracleSection {
     let mut o = OracleSection::default();
-    if root.join("Cargo.toml").is_file() {
-        o.build = Some("cargo build --all-targets".to_string());
-        o.test = Some("cargo test".to_string());
+    let has = |f: &str| root.join(f).is_file();
+    let set = |o: &mut OracleSection, build: Option<&str>, test: Option<String>| {
+        o.build = build.map(|b| b.to_string());
+        o.test = test;
+    };
+    if has("Cargo.toml") {
+        set(&mut o, Some("cargo build --all-targets"), Some("cargo test".into()));
         return o;
     }
+    if has("go.mod") {
+        set(&mut o, Some("go build ./..."), Some("go test -v ./...".into()));
+        return o;
+    }
+    if has("package.json") {
+        let scripts: serde_json::Map<String, serde_json::Value> = std::fs::read_to_string(root.join("package.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .and_then(|v| v.get("scripts").and_then(|s| s.as_object()).cloned())
+            .unwrap_or_default();
+        let runner = if has("pnpm-lock.yaml") {
+            "pnpm"
+        } else if has("yarn.lock") {
+            "yarn"
+        } else if has("bun.lockb") || has("bun.lock") {
+            "bun"
+        } else {
+            "npm"
+        };
+        let real_test = scripts
+            .get("test")
+            .and_then(|t| t.as_str())
+            .is_some_and(|t| !t.contains("no test specified"));
+        o.test = real_test.then(|| format!("{runner} test"));
+        o.build = scripts.contains_key("build").then(|| format!("{runner} run build"));
+        return o;
+    }
+    if has("pom.xml") {
+        set(&mut o, Some("mvn -q -B compile"), Some("mvn -q -B test".into()));
+        return o;
+    }
+    if has("build.gradle") || has("build.gradle.kts") {
+        let g = if has("gradlew") { "./gradlew" } else { "gradle" };
+        o.build = Some(format!("{g} assemble"));
+        o.test = Some(format!("{g} test"));
+        return o;
+    }
+    let dotnet = std::fs::read_dir(root)
+        .map(|rd| {
+            rd.flatten().any(|e| {
+                let n = e.file_name().to_string_lossy().into_owned();
+                n.ends_with(".sln") || n.ends_with(".csproj") || n.ends_with(".fsproj")
+            })
+        })
+        .unwrap_or(false);
+    if dotnet {
+        set(
+            &mut o,
+            Some("dotnet build"),
+            Some("dotnet test --logger \"console;verbosity=normal\"".into()),
+        );
+        return o;
+    }
+    if has("mix.exs") {
+        set(&mut o, Some("mix compile"), Some("mix test".into()));
+        return o;
+    }
+    if has("Package.swift") {
+        set(&mut o, Some("swift build"), Some("swift test".into()));
+        return o;
+    }
+    if has("Gemfile") {
+        let test = if root.join("spec").is_dir() {
+            Some("bundle exec rspec".to_string())
+        } else if has("Rakefile") {
+            Some("bundle exec rake test".to_string())
+        } else {
+            None
+        };
+        set(&mut o, None, test);
+        return o;
+    }
+    if has("composer.json") {
+        let scripted = std::fs::read_to_string(root.join("composer.json"))
+            .ok()
+            .and_then(|t| serde_json::from_str::<serde_json::Value>(&t).ok())
+            .is_some_and(|v| v.pointer("/scripts/test").is_some());
+        let test = if scripted {
+            Some("composer test".to_string())
+        } else if has("vendor/bin/phpunit") {
+            Some("vendor/bin/phpunit".to_string())
+        } else {
+            None
+        };
+        set(&mut o, None, test);
+        return o;
+    }
+    let python = detect_python(root);
+    if python.build.is_some() || python.test.is_some() {
+        return python;
+    }
+    if has("Makefile") {
+        let text = std::fs::read_to_string(root.join("Makefile")).unwrap_or_default();
+        let has_target = |t: &str| text.lines().any(|l| l.starts_with(&format!("{t}:")));
+        o.build = Some("make".to_string());
+        o.test = has_target("test").then(|| "make test".to_string());
+    }
+    o
+}
+
+fn detect_python(root: &Path) -> OracleSection {
+    let mut o = OracleSection::default();
     let has_python = ["setup.py", "pyproject.toml", "setup.cfg", "requirements.txt"]
         .iter()
         .any(|f| root.join(f).is_file())

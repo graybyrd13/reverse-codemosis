@@ -1,0 +1,16 @@
+name: Performance
+description: Something is slower than it should be.
+labels: ["performance"]
+body:
+  - type: textarea
+    id: timings
+    attributes:
+      label: codemosis check --timings
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: project
+    attributes:
+      label: The project
+      description: Size, languages, and whether it is public.

@@ -1,0 +1,80 @@
+id = "nan-comparison"
+title = "Comparison with NaN"
+category = "contradiction"
+cwe = ["CWE-1077"]
+equivalents = ["eslint:use-isnan"]
+semantics = "corrected"
+summary = "`${cmp}` is always ${always}: NaN is not equal to anything, itself included."
+explain = """
+`x === NaN` is false for every `x`, NaN included, and `x !== NaN` is always
+true: NaN compares unequal to everything. The code clearly means "is x NaN?",
+which is `Number.isNaN(x)`. The rule applies only when the file does not
+redefine `NaN` or `Number`.
+"""
+shape = '''
+(binary_expression
+  left: (_) @value
+  operator: ["===" "!==" "==" "!="] @op
+  right: (identifier) @nan
+  (#eq? @nan "NaN")) @cmp
+
+(binary_expression
+  left: (identifier) @nan
+  operator: ["===" "!==" "==" "!="] @op
+  right: (_) @value
+  (#eq? @nan "NaN")) @cmp
+'''
+focus = "@cmp"
+where = [
+  "!js.defines('NaN')",
+  "!js.defines('Number')",
+  "text(@value) != 'NaN'",
+]
+
+[let]
+negated = "text(@op) in ['!==', '!=']"
+always = "choose(@negated, 'true', 'false')"
+check = "choose(@negated, concat('!Number.isNaN(', text(@value), ')'), concat('Number.isNaN(', text(@value), ')'))"
+
+[fix]
+edits = [{ replace = "@cmp", with = "${check}" }]
+
+[[example]]
+before = '''
+const values = [1, NaN, 3];
+console.log(values.filter((v) => v === NaN).length);
+console.log(values.filter((v) => NaN != v).length);
+'''
+after = '''
+const values = [1, NaN, 3];
+console.log(values.filter((v) => Number.isNaN(v)).length);
+console.log(values.filter((v) => !Number.isNaN(v)).length);
+'''
+output = "1\n2\n"
+output_before = "0\n3\n"
+
+[[counterexample]]
+code = '''
+const v = 1;
+console.log(Number.isNaN(v));
+'''
+
+[[counterexample]]
+name = "a local NaN is an ordinary value"
+code = '''
+const NaN = 0;
+console.log(1 === NaN);
+'''
+
+[[counterexample]]
+name = "a local Number has no isNaN"
+code = '''
+const Number = { parse: (s) => +s };
+console.log(Number.parse("1") === NaN);
+'''
+
+[[counterexample]]
+name = "NaN against itself: a demonstration of IEEE 754, not a mistaken check"
+code = '''
+console.log(NaN === NaN);
+'''

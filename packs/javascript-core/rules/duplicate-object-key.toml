@@ -1,0 +1,56 @@
+id = "duplicate-object-key"
+title = "Object key given twice"
+category = "contradiction"
+cwe = ["CWE-462"]
+equivalents = ["eslint:no-dupe-keys"]
+summary = "Key ${second} appears twice in this object; the value given on line ${first|line} is silently discarded."
+explain = """
+In an object literal a repeated key keeps only its last value. One of the
+keys is a typo, or one entry is stale; which one is a question about intent,
+so nothing is changed.
+"""
+# Each entry is matched once and compared with the entries before it: a
+# shape pairing every entry with every other would be quadratic in the size
+# of the object.
+shape = "(object (pair key: (_) @second) @pair)"
+focus = "@second"
+where = [
+  # kind() of a missing capture is "", so this also requires an earlier key.
+  "kind(@first) in ['property_identifier', 'string', 'number']",
+]
+
+[let]
+first = "earlier_same_field(@pair, 'key')"
+
+[[evidence]]
+at = "@first"
+label = "first given here; this value is discarded"
+
+[[example]]
+before = '''
+const limits = {
+  retries: 3,
+  timeout: 1000,
+  retries: 5,
+};
+'''
+
+[[counterexample]]
+code = '''
+const limits = { retries: 3, timeout: 1000 };
+'''
+
+[[counterexample]]
+name = "distinct keys"
+code = '''
+const limits = { min: 1, max: 10, "default": 5 };
+'''
+
+[[counterexample]]
+name = "computed keys are evaluated each time and may differ"
+code = '''
+let n = 0;
+const next = () => `id${n++}`;
+const ids = { [next()]: "a", [next()]: "b" };
+console.log(Object.keys(ids));
+'''

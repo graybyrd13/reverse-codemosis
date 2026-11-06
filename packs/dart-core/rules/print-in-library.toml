@@ -1,0 +1,79 @@
+id = "print-in-library"
+title = "print in library code"
+tags = ["debugging"]
+category = "waste"
+semantics = "preserved"
+summary = "`${stmt}` prints from library code."
+explain = """
+`print` in library code is usually debugging left behind (the `avoid_print` lint). Libraries report through
+a logger the application configures, or `debugPrint` in Flutter. It may be real output, so the engine asks:
+keep records it as intentional; remove deletes the line. Scripts, examples and tests are left alone.
+"""
+shape = '''
+(expression_statement
+  (call_expression function: (identifier) @function)
+  (#eq? @function "print")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "file_purpose() == 'library'",
+  "occupies_lines(@stmt)",
+  "!dart.defines('print')",
+]
+[ask]
+question = "Keep this print?"
+
+[[ask.option]]
+answer = "keep"
+means = "it is real output; record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "it is leftover debugging; delete it"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+path = "lib/cart.dart"
+before = '''
+int total(List<int> items) {
+  print(items);
+  return items.fold(0, (a, b) => a + b);
+}
+'''
+after = '''
+int total(List<int> items) {
+  return items.fold(0, (a, b) => a + b);
+}
+'''
+
+[[counterexample]]
+name = "in an example, printing is the point"
+path = "example/main.dart"
+code = '''
+void main() {
+  print('hello');
+  return;
+}
+'''
+
+[[counterexample]]
+name = "a statement that shares its line"
+path = "lib/cart.dart"
+code = '''
+int total(List<int> items) {
+  print(items); return items.length;
+}
+'''
+
+[[counterexample]]
+name = "print is defined here"
+path = "lib/report.dart"
+code = '''
+void print(Object o) {}
+
+void report(int n) {
+  print(n);
+  return;
+}
+'''

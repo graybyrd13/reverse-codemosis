@@ -1,9 +1,17 @@
 //! `codemosis`: correct code the way a proof corrects an argument.
 
+mod agent;
+mod doctor;
+mod integrate;
+mod interactive;
+mod lsp;
+mod map;
+mod mcp;
+mod packdocs;
 mod scaffold;
 
 use anyhow::{anyhow, bail, Context, Result};
-use clap::{Parser, Subcommand, ValueEnum};
+use clap::{CommandFactory, Parser, Subcommand, ValueEnum};
 use codemosis_core::selftest::{self, Outcome};
 use codemosis_core::{lang, pack, Category, Finding, Pack, Status};
 use codemosis_engine::answers::Answer;
@@ -27,6 +35,10 @@ struct Cli {
     /// When to use colour.
     #[arg(long, value_enum, default_value_t = ColorChoice::Auto, global = true)]
     color: ColorChoice,
+    /// Log what the engine does to standard error: debug or trace.
+    /// Also: CODEMOSIS_LOG=debug|trace, CODEMOSIS_LOG_FORMAT=json.
+    #[arg(long, value_name = "LEVEL", global = true, value_parser = ["debug", "trace"])]
+    log: Option<String>,
     #[command(subcommand)]
     command: Command,
 }
@@ -45,6 +57,27 @@ enum Format {
     Markdown,
 }
 
+#[derive(Clone, Copy, ValueEnum, PartialEq, Eq)]
+enum CheckFormat {
+    /// Compiler-style findings for a terminal.
+    Text,
+    /// Every finding, with fingerprints (schema codemosis/check/v1).
+    Json,
+    /// A Markdown summary, for a pull-request comment.
+    Markdown,
+    /// SARIF 2.1.0, for GitHub code scanning and other dashboards.
+    Sarif,
+    /// A GitLab Code Quality report.
+    Gitlab,
+    /// GitHub Actions annotations, plus a job summary in $GITHUB_STEP_SUMMARY.
+    Github,
+    /// A GitHub pull-request review with suggested changes, as JSON for the API.
+    Review,
+    /// One line per finding, `path:line:col: level: message [rule; status]`,
+    /// for hooks, editors' quickfix lists and grep.
+    Compact,
+}
+
 #[derive(Subcommand)]
 enum Command {
     /// Measure a project against its packs and report every finding. Changes nothing.
@@ -52,14 +85,55 @@ enum Command {
         /// Project root.
         #[arg(default_value = ".")]
         path: PathBuf,
-        #[arg(long, value_enum, default_value_t = Format::Text)]
-        format: Format,
+        #[arg(long, value_enum, default_value_t = CheckFormat::Text)]
+        format: CheckFormat,
+        /// Write the report to this file instead of standard output.
+        #[arg(long, short, value_name = "FILE")]
+        output: Option<PathBuf>,
         /// Also load the pack in this directory.
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
         /// Only run these rules (or packs).
         #[arg(long = "rule", value_name = "ID")]
         rules: Vec<String>,
+        /// Exit 1 when a new open finding reaches this threshold: error, warning,
+        /// note, any or never, or a category (findings in it or more serious ones).
+        /// Default: `[policy] fail_on`, or any.
+        #[arg(long, value_name = "THRESHOLD")]
+        fail_on: Option<String>,
+        /// Accept the findings recorded in this baseline; report and fail only on new ones.
+        /// Default: `[policy] baseline`, if set.
+        #[arg(long, value_name = "FILE")]
+        baseline: Option<PathBuf>,
+        /// Ignore any configured baseline.
+        #[arg(long, conflicts_with = "baseline")]
+        no_baseline: bool,
+        /// Also list suppressed findings, with who suppressed them and why.
+        #[arg(long)]
+        show_suppressed: bool,
+        /// Show the proven corrections as a diff (not verified by the build and tests; `fix` does that).
+        #[arg(long)]
+        diff: bool,
+        /// Print where the time went (loading, matching, the slowest rules) to standard error.
+        #[arg(long)]
+        timings: bool,
+        /// Only report findings in this file (repeatable). The whole project is
+        /// still read, for facts that look across files.
+        #[arg(long = "file", value_name = "PATH")]
+        files: Vec<PathBuf>,
+        /// Only report findings in files that differ from the last commit
+        /// (modified, staged or untracked).
+        #[arg(long)]
+        changed: bool,
+    },
+    /// Record today's open findings as accepted, so `check --baseline` fails only on new ones.
+    Baseline {
+        /// Project root.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Where to write it, relative to the project root.
+        #[arg(long, short, default_value = codemosis_engine::policy::DEFAULT_BASELINE)]
+        output: PathBuf,
     },
     /// Apply every correction that can be proven, verifying each step with the build and tests.
     Fix {
@@ -86,19 +160,39 @@ enum Command {
         report: Option<PathBuf>,
         #[arg(long, value_enum, default_value_t = Format::Text)]
         format: Format,
+        /// Also load the pack in this directory (repeatable).
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
+        /// Only these rules, or every rule of these packs (repeatable).
         #[arg(long = "rule", value_name = "ID")]
         rules: Vec<String>,
         /// Stop after this many attempted steps.
         #[arg(long, default_value_t = 500)]
         max_steps: usize,
+        /// Ask every open question first, then correct with your answers.
+        #[arg(long, short)]
+        interactive: bool,
+        /// Do not write a proof certificate to .codemosis/proofs.
+        #[arg(long)]
+        no_proof: bool,
     },
-    /// Record your answer to a question. "yes" applies the correction; "no" keeps the code.
+    /// Ask the open questions one by one and record your answers.
+    Ask {
+        /// Project root.
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Also load the pack in this directory (repeatable).
+        #[arg(long = "pack", value_name = "DIR")]
+        packs: Vec<PathBuf>,
+        /// Only these rules, or every rule of these packs (repeatable).
+        #[arg(long = "rule", value_name = "ID")]
+        rules: Vec<String>,
+    },
+    /// Record your answer to one question, such as "yes", "no", "keep" or "remove".
     Answer {
         /// The question id, like Q-1a2b3c4d.
         id: String,
-        #[arg(value_parser = ["yes", "no"])]
+        /// One of the question's answers.
         answer: String,
         /// Project root.
         #[arg(default_value = ".")]
@@ -111,11 +205,13 @@ enum Command {
     Explain {
         /// Rule id, like python-core/is-literal.
         rule: String,
+        /// Also load the pack in this directory (repeatable).
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
     },
     /// List the available rules.
     Rules {
+        /// Also load the pack in this directory (repeatable).
         #[arg(long = "pack", value_name = "DIR")]
         packs: Vec<PathBuf>,
     },
@@ -123,6 +219,24 @@ enum Command {
     Pack {
         #[command(subcommand)]
         command: PackCommand,
+    },
+    /// Show what Reverse Codemosis understands about a project: its languages,
+    /// how deeply each is understood, its build and tests, its definitions.
+    Map {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// List every language GitHub knows, and how deeply each is understood.
+    Languages {
+        /// Only languages whose name contains this text.
+        #[arg(long)]
+        search: Option<String>,
+        /// Only languages understood at this depth: deep, lexical or recognized.
+        #[arg(long)]
+        tier: Option<String>,
+        /// text, or the full compatibility matrix as json or markdown.
+        #[arg(long, default_value = "text", value_parser = ["text", "json", "markdown"])]
+        format: String,
     },
     /// Print the syntax tree of a file, to help write rule shapes.
     Tree { file: PathBuf },
@@ -132,9 +246,102 @@ enum Command {
         #[arg(long)]
         language: Option<String>,
     },
+    /// Check that everything Reverse Codemosis relies on is in place: configuration,
+    /// packs, lockfile, answers, the build and test commands, and the toolchains.
+    Doctor {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+    /// Run the language server (LSP over standard input and output) for editors.
+    Lsp,
+    /// Run the Model Context Protocol server (over standard input and output)
+    /// for agentic coding tools: check, fix, answer, explain, map, rules and
+    /// verify_proof as tools.
+    Mcp {
+        /// Project directory (default: the current directory).
+        #[arg(long)]
+        path: Option<PathBuf>,
+    },
+    /// Connect Reverse Codemosis to an agentic coding tool or editor by writing
+    /// its project configuration (merged, never replaced). Without a tool,
+    /// lists them: claude-code, cursor, vscode, gemini, zed, continue,
+    /// opencode, aider, agents-md, codex, windsurf, cline.
+    Integrate {
+        /// The tool to connect.
+        tool: Option<String>,
+        /// Project root.
+        #[arg(long, default_value = ".")]
+        path: PathBuf,
+    },
+    /// For agentic coding tools' hooks: check what the agent just changed.
+    /// Reads the tool's hook payload (JSON) from standard input; checks the
+    /// files it names, or every changed file if it names none; reports only
+    /// findings on lines changed since the last commit, with what to do about
+    /// each, to standard error, and exits 2 (fed back to the agent). Silent,
+    /// with status 0, when there is nothing to report.
+    Hook {
+        /// Project directory (default: the payload's `cwd`, or the current directory).
+        #[arg(long)]
+        path: Option<PathBuf>,
+        /// Report findings anywhere in the files, not only on changed lines.
+        #[arg(long)]
+        all_lines: bool,
+        /// Exit status when there are findings.
+        #[arg(long, default_value_t = 2)]
+        exit_code: u8,
+        /// Print the findings as JSON on standard output and exit 0.
+        #[arg(long)]
+        json: bool,
+    },
+    /// Print a shell completion script: bash, zsh, fish, powershell or elvish.
+    Completions {
+        #[arg(value_enum)]
+        shell: clap_complete::Shell,
+    },
+    /// Print the JSON Schema of a file format, for editor completion and validation:
+    /// config, pack, rule, lock, baseline or proof. With --output, write them all.
+    Schema {
+        /// Which schema (omit with --output to write all of them).
+        name: Option<String>,
+        /// Write every schema to this directory.
+        #[arg(long, short)]
+        output: Option<PathBuf>,
+    },
+    /// Write man pages for codemosis and every subcommand.
+    Man {
+        /// Output directory.
+        #[arg(long, short, default_value = "man")]
+        output: PathBuf,
+    },
+    /// Work with proof certificates.
+    Proof {
+        #[command(subcommand)]
+        command: ProofCommand,
+    },
+    /// Pin the packs a project uses by content hash in codemosis.lock.
+    Lock {
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Only check that the lock matches; change nothing.
+        #[arg(long)]
+        check: bool,
+    },
     /// Write a codemosis.toml for a project, with the build and test commands detected.
     Init {
         #[arg(default_value = ".")]
+        path: PathBuf,
+    },
+}
+
+#[derive(Subcommand)]
+enum ProofCommand {
+    /// Re-derive a recorded change: recover the original code from the patch and
+    /// replay every step with the pinned rules, checking each reproduces exactly.
+    Verify {
+        /// The certificate (a .json file in .codemosis/proofs).
+        certificate: PathBuf,
+        /// Project root.
+        #[arg(long, default_value = ".")]
         path: PathBuf,
     },
 }
@@ -154,6 +361,33 @@ enum PackCommand {
         /// Show passing checks too.
         #[arg(long, short)]
         verbose: bool,
+        /// Mutation testing: remove each rule's facts one at a time and report the
+        /// facts no example or counterexample needs.
+        #[arg(long)]
+        mutations: bool,
+        /// With --mutations: fail (exit 1) if more facts than this are unproven.
+        #[arg(long, value_name = "N", requires = "mutations")]
+        max_unproven: Option<usize>,
+    },
+    /// Find weaknesses in packs that still load: unused captures and tables,
+    /// unproven semantics, thin explanations, missing keep options.
+    Lint {
+        /// Pack directories (default: the built-in packs).
+        dirs: Vec<PathBuf>,
+        /// Exit 1 on warnings too.
+        #[arg(long)]
+        deny_warnings: bool,
+        /// Show notes as well as warnings.
+        #[arg(long, short)]
+        verbose: bool,
+    },
+    /// Write a Markdown reference page for each pack, generated from its rules.
+    Docs {
+        /// Pack directories (default: the built-in packs).
+        dirs: Vec<PathBuf>,
+        /// Output directory.
+        #[arg(long, short, default_value = "docs/packs")]
+        output: PathBuf,
     },
     /// Create a new pack with one working rule to start from.
     New {
@@ -182,6 +416,11 @@ fn main() -> ExitCode {
         libc::signal(libc::SIGPIPE, libc::SIG_DFL);
     }
     let cli = Cli::parse();
+    codemosis_core::log::init(match cli.log.as_deref() {
+        Some("trace") => codemosis_core::log::TRACE,
+        Some(_) => codemosis_core::log::DEBUG,
+        None => 0,
+    });
     let out = style(cli.color, std::io::stdout().is_terminal());
     let err = style(cli.color, std::io::stderr().is_terminal());
     match run(cli.command, out, err) {
@@ -193,9 +432,9 @@ fn main() -> ExitCode {
     }
 }
 
-/// The packs written for a language the project contains.
+/// The packs that apply to a project with these grammars.
 fn applicable<'p>(packs: &'p [Pack], languages: &[&str]) -> Vec<&'p Pack> {
-    packs.iter().filter(|p| languages.contains(&p.language.id())).collect()
+    packs.iter().filter(|p| p.applies_to(languages)).collect()
 }
 
 fn canonical(path: &Path) -> Result<PathBuf> {
@@ -227,9 +466,36 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
         Command::Check {
             path,
             format,
+            output,
             packs,
             rules,
-        } => check(&path, format, &packs, &rules, s),
+            fail_on,
+            baseline,
+            no_baseline,
+            show_suppressed,
+            diff,
+            timings,
+            files,
+            changed,
+        } => check(
+            &path,
+            CheckOptions {
+                format,
+                output: output.as_deref(),
+                fail_on: fail_on.as_deref(),
+                baseline: baseline.as_deref(),
+                no_baseline,
+                show_suppressed,
+                diff,
+                timings,
+                files: &files,
+                changed,
+            },
+            &packs,
+            &rules,
+            s,
+        ),
+        Command::Baseline { path, output } => baseline_cmd(&path, &output),
         Command::Fix {
             path,
             dry_run,
@@ -242,6 +508,8 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             packs,
             rules,
             max_steps,
+            interactive,
+            no_proof,
         } => {
             let root = canonical(&path)?;
             if !dry_run {
@@ -263,17 +531,45 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             }
             fix(
                 &root,
-                dry_run,
-                no_verify,
-                diff,
-                report.as_deref(),
-                format,
+                FixOptions {
+                    dry_run,
+                    no_verify,
+                    show_diff: diff,
+                    report_path: report.as_deref(),
+                    format,
+                    max_steps,
+                    interactive,
+                    proof: !no_proof,
+                },
                 &packs,
                 &rules,
-                max_steps,
                 s,
                 e,
             )
+        }
+        Command::Ask { path, packs, rules } => {
+            let root = canonical(&path)?;
+            let mut ws = Workspace::open(&root, &packs)?;
+            let stdin = std::io::stdin();
+            let recorded = interactive::ask(&mut ws, &rules, s, &mut stdin.lock(), &mut std::io::stdout())?;
+            if recorded > 0 {
+                println!("\nRun `codemosis fix` to apply the corrections you chose.");
+            }
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Map { path } => {
+            let root = canonical(&path)?;
+            let ws = Workspace::open(&root, &[])?;
+            print!("{}", map::render(&ws, &display_root(&root), s));
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Languages { search, tier, format } => {
+            match format.as_str() {
+                "json" => print!("{}", map::languages_json()?),
+                "markdown" => print!("{}", map::languages_markdown()?),
+                _ => print!("{}", map::languages(search.as_deref(), tier.as_deref(), s)?),
+            }
+            Ok(ExitCode::SUCCESS)
         }
         Command::Answer { id, answer, path, note } => answer_cmd(&id, &answer, &path, note, s),
         Command::Explain { rule, packs } => explain(&rule, &packs, s),
@@ -284,7 +580,32 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
                 no_run,
                 rule,
                 verbose,
-            } => pack_test(&dirs, !no_run, rule.as_deref(), verbose, s),
+                mutations,
+                max_unproven,
+            } => {
+                if mutations {
+                    pack_mutations(&dirs, rule.as_deref(), verbose, max_unproven, s)
+                } else {
+                    pack_test(&dirs, !no_run, rule.as_deref(), verbose, s)
+                }
+            }
+            PackCommand::Lint {
+                dirs,
+                deny_warnings,
+                verbose,
+            } => pack_lint(&dirs, deny_warnings, verbose, s),
+            PackCommand::Docs { dirs, output } => {
+                let packs = packs_from(&dirs)?;
+                std::fs::create_dir_all(&output).with_context(|| format!("cannot create {}", output.display()))?;
+                for p in &packs {
+                    let file = output.join(format!("{}.md", p.meta.id));
+                    std::fs::write(&file, packdocs::pack_page(p))
+                        .with_context(|| format!("cannot write {}", file.display()))?;
+                }
+                std::fs::write(output.join("README.md"), packdocs::index_page(&packs))?;
+                println!("Wrote {} pack page(s) to {}.", packs.len(), output.display());
+                Ok(ExitCode::SUCCESS)
+            }
             PackCommand::New { dir, id, language } => {
                 scaffold::new_pack(&dir, &id, &language)?;
                 println!("Created pack '{id}' in {}.", dir.display());
@@ -296,122 +617,454 @@ fn run(command: Command, s: Style, e: Style) -> Result<ExitCode> {
             }
         },
         Command::Tree { file } => {
-            let lang =
-                lang::for_path(&file).ok_or_else(|| anyhow!("no language is registered for {}", file.display()))?;
             let text = std::fs::read_to_string(&file).with_context(|| format!("cannot read {}", file.display()))?;
-            let f = codemosis_core::SourceFile::parse(&file, lang, text)?;
+            let f = codemosis_core::SourceFile::new(&file, text);
+            if f.tree.is_none() {
+                bail!(
+                    "{} is {} ({} tier): this build has no grammar for it, so it has no syntax tree",
+                    file.display(),
+                    f.language_name(),
+                    f.tier().as_str()
+                );
+            }
             print!("{}", codemosis_core::render_tree(&f));
             Ok(ExitCode::SUCCESS)
         }
         Command::Facts { language } => facts(language.as_deref(), s),
         Command::Init { path } => init(&path),
+        Command::Lock { path, check } => lock_cmd(&path, check),
+        Command::Lsp => {
+            lsp::serve()?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Integrate { tool, path } => {
+            integrate::integrate(&canonical(&path)?, tool.as_deref())?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Mcp { path } => {
+            mcp::serve(path)?;
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Hook {
+            path,
+            all_lines,
+            exit_code,
+            json,
+        } => agent::hook(agent::HookOptions {
+            path,
+            all_lines,
+            exit_code,
+            json,
+        }),
+        Command::Schema { name, output } => schema_cmd(name.as_deref(), output.as_deref()),
+        Command::Completions { shell } => {
+            clap_complete::generate(shell, &mut Cli::command(), "codemosis", &mut std::io::stdout());
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Man { output } => {
+            std::fs::create_dir_all(&output).with_context(|| format!("cannot create {}", output.display()))?;
+            let n = write_man_pages(&Cli::command(), "codemosis", &output)?;
+            println!("Wrote {n} man page(s) to {}.", output.display());
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Doctor { path } => {
+            let root = canonical(&path)?;
+            Ok(if doctor::run(&root, s) {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
+        }
+        Command::Proof {
+            command: ProofCommand::Verify { certificate, path },
+        } => proof_verify(&certificate, &path, s),
     }
 }
 
-fn check(path: &Path, format: Format, extra: &[PathBuf], only: &[String], s: Style) -> Result<ExitCode> {
-    let root = canonical(path)?;
-    let ws = Workspace::open(&root, extra)?;
-    let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
-    let answers = |id: &str| ws.answers.get(id);
-    let scan = codemosis_core::scan(&ws.project, rules, &answers, None);
-    let open: Vec<&Finding> = scan
-        .findings
-        .iter()
-        .filter(|f| !matches!(f.status, Status::Declined { .. }))
-        .collect();
-    let distance = codemosis_core::Distance::from_findings(&scan.findings);
-    match format {
-        Format::Json => {
-            let v = serde_json::json!({
-                "project": root.display().to_string(),
-                "distance": distance,
-                "findings": scan.findings,
-                "rule_errors": scan.errors.iter().map(|e| e.to_string()).collect::<Vec<_>>(),
-            });
-            println!("{}", serde_json::to_string_pretty(&v)?);
-        }
-        Format::Markdown => {
-            println!("# Reverse Codemosis findings\n\nDistance: {distance}\n");
-            for f in &open {
-                println!(
-                    "- **{}** `{}:{}` ({}): {}",
-                    f.rule,
-                    f.file.display(),
-                    f.span.start.line,
-                    f.status.label(),
-                    f.message
-                );
+struct CheckOptions<'a> {
+    format: CheckFormat,
+    output: Option<&'a Path>,
+    fail_on: Option<&'a str>,
+    baseline: Option<&'a Path>,
+    no_baseline: bool,
+    show_suppressed: bool,
+    diff: bool,
+    timings: bool,
+    files: &'a [PathBuf],
+    changed: bool,
+}
+
+fn finding_json(f: &Finding, policy: &codemosis_engine::policy::Policy, baselined: bool) -> serde_json::Value {
+    let mut v = serde_json::to_value(f).unwrap_or_default();
+    v["fingerprint"] = serde_json::json!(f.fingerprint());
+    v["level"] = serde_json::json!(policy.level(&f.rule, f.category).as_str());
+    v["confidence"] = serde_json::json!(f.confidence().as_str());
+    if baselined {
+        v["baselined"] = serde_json::json!(true);
+    }
+    v
+}
+
+/// The proven corrections of a scan applied in memory, as a diff: one
+/// non-overlapping set of edits per file. Nothing is verified or written.
+fn proposed_diff(project: &codemosis_core::Project, findings: &[&Finding]) -> String {
+    let mut out = String::new();
+    for file in &project.files {
+        let mut chosen: Vec<codemosis_core::Edit> = Vec::new();
+        for f in findings.iter().filter(|f| f.file == file.path && f.is_fixable()) {
+            let clash = f
+                .edits
+                .iter()
+                .any(|a| chosen.iter().any(|b| codemosis_core::edit::overlaps(a, b)));
+            if !clash {
+                chosen.extend(f.edits.iter().cloned());
             }
         }
-        Format::Text => {
-            println!(
+        if chosen.is_empty() {
+            continue;
+        }
+        if let Ok(new) = codemosis_core::edit::apply(&file.text, &chosen) {
+            out.push_str(&codemosis_engine::session::unified_diff(
+                &file.display_path(),
+                &file.text,
+                &new,
+            ));
+        }
+    }
+    codemosis_core::redact::redact(&out).into_owned()
+}
+
+fn check(path: &Path, o: CheckOptions, extra: &[PathBuf], only: &[String], s: Style) -> Result<ExitCode> {
+    use codemosis_engine::ci;
+    use codemosis_engine::policy::{Baseline, FailOn};
+    let root = canonical(path)?;
+    let started = std::time::Instant::now();
+    let ws = Workspace::open(&root, extra)?;
+    let loaded = started.elapsed();
+    let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
+    let scan_started = std::time::Instant::now();
+    let scan = match agent::scope(&root, &ws.project, o.files, o.changed)? {
+        Some(files) => ws.scan_files(only, &files),
+        None => ws.scan_rules(only),
+    };
+    let scanned = scan_started.elapsed();
+    if o.timings {
+        print_timings(&ws, &scan, loaded, scanned);
+    }
+    let fail_on = match o.fail_on {
+        Some(t) => FailOn::parse(t).map_err(|e| anyhow!("--fail-on: {e}"))?,
+        None => ws.policy.fail_on,
+    };
+    let baseline_path = match (o.no_baseline, o.baseline, &ws.config.policy.baseline) {
+        (true, _, _) => None,
+        (false, Some(p), _) => Some(p.to_path_buf()),
+        (false, None, Some(p)) => Some(root.join(p)),
+        _ => None,
+    };
+    let baseline = match &baseline_path {
+        Some(p) => Some(Baseline::load(p).map_err(|e| anyhow!(e))?),
+        None => None,
+    };
+    let baselined: Option<std::collections::BTreeSet<String>> = baseline.as_ref().map(|b| {
+        scan.findings
+            .iter()
+            .filter(|f| b.contains(f))
+            .map(|f| f.fingerprint())
+            .collect()
+    });
+    let out = ci::CheckOutput {
+        project: &ws.project,
+        findings: &scan.findings,
+        baselined: baselined.as_ref(),
+        rules: &rules,
+        policy: &ws.policy,
+    };
+    let new = out.new_findings();
+    let fails = ws.policy.fails(&new, fail_on);
+    let distance = codemosis_core::Distance::from_findings(new.iter().copied());
+    let is_baselined = |f: &Finding| baselined.as_ref().is_some_and(|b| b.contains(&f.fingerprint()));
+    let mut body = String::new();
+    use std::fmt::Write as _;
+    match o.format {
+        CheckFormat::Json => {
+            let v = serde_json::json!({
+                "schema": ci::JSON_CHECK_SCHEMA,
+                "version": env!("CARGO_PKG_VERSION"),
+                "project": root.display().to_string(),
+                "distance": distance,
+                "fail_on_tripped": fails,
+                "findings": scan.findings.iter().map(|f| finding_json(f, &ws.policy, is_baselined(f))).collect::<Vec<_>>(),
+                "parse_hazards": ci::parse_hazards(&ws.project).iter().map(|(file, line)| serde_json::json!({"file": file, "line": line})).collect::<Vec<_>>(),
+                "rule_errors": scan.errors.iter().map(|e| e.to_string()).collect::<Vec<_>>(),
+            });
+            body = serde_json::to_string_pretty(&v)? + "\n";
+        }
+        CheckFormat::Sarif => {
+            let root_uri = format!("file://{}/", root.display().to_string().replace('\\', "/"));
+            body = serde_json::to_string_pretty(&ci::sarif(&out, Some(&root_uri)))? + "\n";
+        }
+        CheckFormat::Gitlab => body = serde_json::to_string_pretty(&ci::gitlab(&out))? + "\n",
+        CheckFormat::Compact => {
+            for f in scan
+                .findings
+                .iter()
+                .filter(|f| o.show_suppressed || !matches!(f.status, Status::Suppressed { .. }))
+                .filter(|f| !is_baselined(f))
+            {
+                let _ = writeln!(body, "{}", agent::compact_line(f, &ws.policy));
+            }
+        }
+        CheckFormat::Review => body = serde_json::to_string_pretty(&ci::github_review(&out))? + "\n",
+        CheckFormat::Github => {
+            body = ci::github_annotations(&out);
+            let link = github_link();
+            let summary =
+                ci::summary_markdown(&out, &distance, link.as_ref().map(|l| l as &dyn Fn(&Finding) -> String));
+            if let Some(p) = std::env::var_os("GITHUB_STEP_SUMMARY") {
+                let mut f = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(&p)
+                    .with_context(|| format!("cannot write the job summary to {}", Path::new(&p).display()))?;
+                writeln!(f, "{summary}")?;
+            }
+        }
+        CheckFormat::Markdown => {
+            body = ci::summary_markdown(&out, &distance, None);
+            if o.diff {
+                let d = proposed_diff(&ws.project, &new);
+                if !d.is_empty() {
+                    let _ = write!(body, "\n### Proven corrections (not yet verified)\n\n```diff\n{d}```\n");
+                }
+            }
+        }
+        CheckFormat::Text => {
+            let _ = writeln!(
+                body,
                 "{}",
                 s.bold(&format!("Reverse Codemosis {}", env!("CARGO_PKG_VERSION")))
             );
-            println!("  project   {}", display_root(&root));
-            println!(
+            let _ = writeln!(body, "  project   {}", display_root(&root));
+            let _ = writeln!(
+                body,
                 "  packs     {}\n",
                 report::packs_line(&applicable(&ws.packs, &ws.project.languages()))
             );
             for c in Category::ALL {
-                for f in open.iter().filter(|f| f.category == c) {
-                    println!("{}", report::finding(f, &ws.project, s));
+                for f in new.iter().filter(|f| f.category == c) {
+                    let _ = writeln!(body, "{}", report::finding(f, &ws.project, s));
+                }
+            }
+            let suppressed: Vec<&Finding> = scan
+                .findings
+                .iter()
+                .filter(|f| matches!(f.status, Status::Suppressed { .. }))
+                .collect();
+            if o.show_suppressed {
+                for f in &suppressed {
+                    let _ = writeln!(body, "{}", report::finding(f, &ws.project, s));
                 }
             }
             for err in &scan.errors {
-                println!("{} {err}", s.red("rule error:"));
+                let _ = writeln!(body, "{} {err}", s.red("rule error:"));
             }
-            let fixable = open.iter().filter(|f| f.is_fixable()).count();
-            let questions = open
+            if o.diff {
+                let d = proposed_diff(&ws.project, &new);
+                if !d.is_empty() {
+                    let _ = writeln!(
+                        body,
+                        "{}\n{}",
+                        s.bold("Proven corrections (not yet verified by your build and tests)"),
+                        d
+                    );
+                }
+            }
+            let fixable = new.iter().filter(|f| f.is_fixable()).count();
+            let questions = new
                 .iter()
                 .filter(|f| matches!(f.status, Status::NeedsAnswer { .. }))
                 .count();
-            let other = open.len() - fixable - questions;
-            println!("{}", s.bold("Summary"));
-            println!("  distance  {}", report::distance(&distance, s));
-            println!(
-                "  findings  {} provably fixable · {} need your decision · {} explained",
-                fixable, questions, other
+            let other = new.len() - fixable - questions;
+            let _ = writeln!(body, "{}", s.bold("Summary"));
+            let _ = writeln!(body, "  distance  {}", report::distance(&distance, s));
+            let _ = writeln!(
+                body,
+                "  findings  {fixable} provably fixable · {questions} need your decision · {other} explained"
             );
+            let hazards = ci::parse_hazards(&ws.project);
+            if !hazards.is_empty() {
+                let shown: Vec<String> = hazards.iter().take(5).map(|(f, l)| format!("{f}:{l}")).collect();
+                let _ = writeln!(
+                    body,
+                    "  unparsed  {} file(s) have code the grammar could not parse; no correction is made there: {}{}",
+                    hazards.len(),
+                    shown.join(", "),
+                    if hazards.len() > 5 { ", ..." } else { "" }
+                );
+            }
+            let in_baseline = baselined.as_ref().map(|b| b.len()).unwrap_or(0);
+            if !suppressed.is_empty() || baseline.is_some() {
+                let mut parts = Vec::new();
+                if !suppressed.is_empty() {
+                    parts.push(format!(
+                        "{} suppressed{}",
+                        suppressed.len(),
+                        if o.show_suppressed {
+                            ""
+                        } else {
+                            " (--show-suppressed lists them)"
+                        }
+                    ));
+                }
+                if let Some(b) = &baseline {
+                    let resolved = b.resolved(&scan.findings).len();
+                    let mut text = format!("{in_baseline} accepted by the baseline");
+                    if resolved > 0 {
+                        text.push_str(&format!(
+                            "; {resolved} baseline entr{} fixed since (run `codemosis baseline` to shrink it)",
+                            if resolved == 1 { "y is" } else { "ies are" }
+                        ));
+                    }
+                    parts.push(text);
+                }
+                let _ = writeln!(body, "  hidden    {}", parts.join(" · "));
+            }
             if fixable > 0 {
-                println!("\nRun `codemosis fix` to apply the provable corrections, verified by your build and tests.");
+                let _ = writeln!(
+                    body,
+                    "\nRun `codemosis fix` to apply the provable corrections, verified by your build and tests."
+                );
             }
         }
     }
-    Ok(if open.is_empty() {
-        ExitCode::SUCCESS
-    } else {
-        ExitCode::from(1)
+    match o.output {
+        Some(p) => {
+            std::fs::write(p, &body).with_context(|| format!("cannot write {}", p.display()))?;
+            if o.format == CheckFormat::Text {
+                eprintln!("Report written to {}", p.display());
+            }
+        }
+        None => print!("{body}"),
+    }
+    Ok(if fails { ExitCode::from(1) } else { ExitCode::SUCCESS })
+}
+
+/// `check --timings`: where the time went, on standard error.
+fn print_timings(
+    ws: &Workspace,
+    scan: &codemosis_core::Scan,
+    loaded: std::time::Duration,
+    scanned: std::time::Duration,
+) {
+    let bytes: usize = ws.project.files.iter().map(|f| f.text.len()).sum();
+    let cpu: std::time::Duration = scan.timings.iter().map(|(_, t)| *t).sum();
+    eprintln!("Timings ({} thread(s))", codemosis_core::parallel::threads());
+    eprintln!(
+        "  load      {:>9.2?}  configuration, {} pack(s), {} file(s) read and parsed ({:.1} MB)",
+        loaded,
+        ws.packs.len(),
+        ws.project.files.len(),
+        bytes as f64 / 1_048_576.0
+    );
+    eprintln!(
+        "  match     {:>9.2?}  wall · {:.2?} CPU over {} rule(s) · {:.0} files/s",
+        scanned,
+        cpu,
+        scan.timings.len(),
+        ws.project.files.len() as f64 / scanned.as_secs_f64().max(1e-9)
+    );
+    let mut slowest: Vec<&(String, std::time::Duration)> = scan.timings.iter().collect();
+    slowest.sort_by_key(|x| std::cmp::Reverse(x.1));
+    for (rule, t) in slowest.iter().take(8).filter(|(_, t)| !t.is_zero()) {
+        eprintln!(
+            "    {:>9.2?}  {:>4.1}%  {rule}",
+            t,
+            100.0 * t.as_secs_f64() / cpu.as_secs_f64().max(1e-9)
+        );
+    }
+}
+
+/// A link to a finding on GitHub, inside a GitHub Actions run.
+fn github_link() -> Option<impl Fn(&Finding) -> String> {
+    let server = std::env::var("GITHUB_SERVER_URL").ok()?;
+    let repo = std::env::var("GITHUB_REPOSITORY").ok()?;
+    let sha = std::env::var("GITHUB_SHA").ok()?;
+    Some(move |f: &Finding| {
+        format!(
+            "{server}/{repo}/blob/{sha}/{}#L{}",
+            f.file.to_string_lossy().replace('\\', "/"),
+            f.span.start.line
+        )
     })
 }
 
-#[allow(clippy::too_many_arguments)]
-fn fix(
-    root: &Path,
+fn baseline_cmd(path: &Path, output: &Path) -> Result<ExitCode> {
+    use codemosis_engine::policy::Baseline;
+    let root = canonical(path)?;
+    let ws = Workspace::open(&root, &[])?;
+    let scan = ws.scan();
+    let b = Baseline::from_findings(&scan.findings, &codemosis_core::suppress::today());
+    let rel = output.strip_prefix(&root).unwrap_or(output);
+    codemosis_engine::fsguard::write_confined(&root, rel, b.to_json().as_bytes())
+        .with_context(|| format!("cannot write {}", output.display()))?;
+    let _ = codemosis_engine::audit::record(
+        &root,
+        "baseline",
+        serde_json::json!({"file": rel.display().to_string(), "findings": b.findings.len()}),
+    );
+    println!(
+        "Recorded {} open finding(s) in {}.\n`codemosis check --baseline {}` now fails only on new findings; commit the file.",
+        b.findings.len(),
+        rel.display(),
+        rel.display()
+    );
+    Ok(ExitCode::SUCCESS)
+}
+
+struct FixOptions<'a> {
     dry_run: bool,
     no_verify: bool,
     show_diff: bool,
-    report_path: Option<&Path>,
+    report_path: Option<&'a Path>,
     format: Format,
-    extra: &[PathBuf],
-    only: &[String],
     max_steps: usize,
-    s: Style,
-    e: Style,
-) -> Result<ExitCode> {
+    interactive: bool,
+    proof: bool,
+}
+
+fn fix(root: &Path, o: FixOptions, extra: &[PathBuf], only: &[String], s: Style, e: Style) -> Result<ExitCode> {
+    let FixOptions {
+        dry_run,
+        no_verify,
+        show_diff,
+        report_path,
+        format,
+        max_steps,
+        interactive,
+        proof,
+    } = o;
     let mut ws = Workspace::open(root, extra)?;
+    if interactive {
+        // Prompts go to stderr when stdout carries JSON or Markdown.
+        let stdin = std::io::stdin();
+        if format == Format::Text {
+            interactive::ask(&mut ws, only, s, &mut stdin.lock(), &mut std::io::stdout())?;
+            println!();
+        } else {
+            interactive::ask(&mut ws, only, e, &mut stdin.lock(), &mut std::io::stderr())?;
+        }
+    }
     let (section, detected) = ws.oracle_section();
     let oracle = (!no_verify && !dry_run).then(|| oracle_from(root, &section));
     let text = format == Format::Text;
     let languages = ws.project.languages();
-    let shown = applicable(&ws.packs, &languages);
     if text {
         print!(
             "{}",
             report::header(
                 &report::Header {
                     root: &display_root(root),
-                    packs: &shown,
+                    packs: &applicable(&ws.packs, &languages),
                     build: oracle.as_ref().and(section.build.as_deref()),
                     test: oracle.as_ref().and(section.test.as_deref()),
                     detected,
@@ -421,43 +1074,44 @@ fn fix(
         );
         let _ = std::io::stdout().flush();
     }
-    let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
-    let answers_ledger = ws.answers.clone();
-    let answers = |id: &str| answers_ledger.get(id);
-    let session = Session {
-        project: &mut ws.project,
-        rules,
-        answers: &answers,
-        oracle: oracle.as_ref(),
-        options: Options {
-            write: !dry_run,
-            max_steps,
-        },
-    };
     let live = std::io::stderr().is_terminal() && text;
     if live && oracle.as_ref().is_some_and(|o| o.is_configured()) {
         eprintln!("{}", e.dim("  measuring: running the build and tests..."));
     }
-    let report = session.run(&mut |ev| {
-        if !live {
-            return;
-        }
-        match ev {
-            Event::Baseline(_) => eprintln!("{}", e.dim("  baseline measured; correcting...")),
-            Event::Step(st) => eprintln!(
-                "{}",
-                e.dim(&format!(
-                    "  ✓ {} {} ({} change(s))",
-                    st.number,
-                    st.rule,
-                    st.findings.len()
-                ))
-            ),
-            Event::Rejected(r) => eprintln!("{}", e.dim(&format!("  ✗ {} rejected", r.finding.rule))),
-        }
-    })?;
+    let (report, certificate_path) = run_session(
+        root,
+        &mut ws,
+        only,
+        SessionMode {
+            write: !dry_run,
+            max_steps,
+            proof,
+            oracle: oracle.as_ref(),
+            section: &section,
+        },
+        e,
+        &mut |ev| {
+            if !live {
+                return;
+            }
+            match ev {
+                Event::Baseline(_) => eprintln!("{}", e.dim("  baseline measured; correcting...")),
+                Event::Step(st) => eprintln!(
+                    "{}",
+                    e.dim(&format!(
+                        "  ✓ {} {} ({} change(s))",
+                        st.number,
+                        st.rule,
+                        st.findings.len()
+                    ))
+                ),
+                Event::Rejected(r) => eprintln!("{}", e.dim(&format!("  ✗ {} rejected", r.finding.rule))),
+            }
+        },
+    )?;
+    let shown = applicable(&ws.packs, &languages);
     match format {
-        Format::Json => println!("{}", serde_json::to_string_pretty(&report)?),
+        Format::Json => println!("{}", fix_json(&report)?),
         Format::Markdown => println!("{}", report::session_markdown(&report, &display_root(root), &shown)),
         Format::Text => print!(
             "{}",
@@ -466,7 +1120,7 @@ fn fix(
     }
     if let Some(p) = report_path {
         let body = if p.extension().is_some_and(|x| x == "json") {
-            serde_json::to_string_pretty(&report)?
+            fix_json(&report)?
         } else {
             report::session_markdown(&report, &display_root(root), &shown)
         };
@@ -475,12 +1129,227 @@ fn fix(
             println!("Report written to {}", p.display());
         }
     }
+    if let (Some(p), true) = (&certificate_path, text) {
+        println!(
+            "Proof certificate: {}\nAnyone can re-derive this change from it with `codemosis proof verify {}`.",
+            p.display(),
+            p.display()
+        );
+    }
     Ok(ExitCode::SUCCESS)
 }
 
-fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Style) -> Result<ExitCode> {
-    let root = canonical(path)?;
-    let mut ws = Workspace::open(&root, &[])?;
+/// How a correction session runs.
+struct SessionMode<'a> {
+    /// Write the corrections (and verify them, if there is an oracle).
+    write: bool,
+    max_steps: usize,
+    /// Write a proof certificate when something changed.
+    proof: bool,
+    /// The build and tests that verify each step, and their commands.
+    oracle: Option<&'a codemosis_engine::oracle::Oracle>,
+    section: &'a config::OracleSection,
+}
+
+/// Run the correction loop over a workspace and, when it wrote something,
+/// record its proof certificate and an audit entry. Prints nothing to
+/// standard output, so the MCP server can share it.
+fn run_session(
+    root: &Path,
+    ws: &mut Workspace,
+    only: &[String],
+    mode: SessionMode,
+    e: Style,
+    on_event: &mut dyn FnMut(Event),
+) -> Result<(codemosis_engine::session::Report, Option<PathBuf>)> {
+    let (oracle, section) = (mode.oracle, mode.section);
+    let rules = enabled_rules(&ws.packs, &ws.config, &ws.project, only);
+    let policy = ws.policy.clone();
+    let answers_ledger = ws.answers.clone();
+    let answers = |id: &str| answers_ledger.get(id);
+    // Formatters that can run the project's own code wait for the same
+    // consent as its build and tests.
+    let formatters = codemosis_engine::formatter::Formatters::new(
+        root,
+        &ws.config.format,
+        oracle.is_some_and(|o| o.is_configured()),
+    );
+    let session = Session {
+        project: &mut ws.project,
+        rules,
+        answers: &answers,
+        oracle,
+        policy: Some(&policy),
+        formatters: Some(&formatters),
+        options: Options {
+            write: mode.write,
+            max_steps: mode.max_steps,
+        },
+    };
+    let report = session.run(on_event)?;
+    let mut certificate_path = None;
+    if mode.write && !report.steps.is_empty() {
+        let cert = codemosis_engine::proof::Certificate::of(
+            &report,
+            root,
+            &ws.project,
+            &ws.packs,
+            &ws.answers,
+            oracle.map(|_| (&section.build, &section.test)),
+        );
+        if let Some(cert) = cert.filter(|_| mode.proof) {
+            let rel = cert.file_name();
+            match codemosis_engine::fsguard::write_confined(root, &rel, cert.to_json().as_bytes()) {
+                Ok(()) => certificate_path = Some(rel),
+                Err(err) => eprintln!("{} cannot write the proof certificate: {err}", e.yellow("warning:")),
+            }
+        }
+        let logged = codemosis_engine::audit::record(
+            root,
+            "fix",
+            serde_json::json!({
+                "steps": report.steps.len(),
+                "rejected": report.rejected.len(),
+                "files": report.files_changed,
+                "distance_before": report.distance_before,
+                "distance_after": report.distance_after,
+                "verified": report.verified,
+                "proof": certificate_path.as_ref().map(|p| p.display().to_string()),
+            }),
+        );
+        if let Err(err) = logged {
+            eprintln!("{} cannot write the audit log: {err}", e.yellow("warning:"));
+        }
+    }
+    Ok((report, certificate_path))
+}
+
+/// The JSON Schemas of every file format: (name, file it describes, schema).
+fn schemas() -> Vec<(&'static str, &'static str, serde_json::Value)> {
+    fn of<T: schemars::JsonSchema>(title: &str, description: &str) -> serde_json::Value {
+        let mut v = serde_json::to_value(schemars::schema_for!(T)).expect("schemas serialize");
+        if let Some(o) = v.as_object_mut() {
+            o.insert("title".into(), serde_json::json!(title));
+            o.insert("description".into(), serde_json::json!(description));
+        }
+        v
+    }
+    vec![
+        (
+            "config",
+            "codemosis.toml",
+            of::<config::Config>("codemosis.toml", "Reverse Codemosis project configuration."),
+        ),
+        (
+            "pack",
+            "pack.toml",
+            of::<pack::ManifestFile>("pack.toml", "A fix pack's manifest."),
+        ),
+        (
+            "rule",
+            "rules/*.toml",
+            of::<pack::RuleSpec>(
+                "Fix pack rule",
+                "One rule of a fix pack: a shape or pattern, facts, a correction or question, and its proof.",
+            ),
+        ),
+        (
+            "lock",
+            "codemosis.lock",
+            of::<codemosis_engine::lock::Lock>(
+                "codemosis.lock",
+                "The packs a project was reviewed against, pinned by content.",
+            ),
+        ),
+        (
+            "baseline",
+            ".codemosis/baseline.json",
+            of::<codemosis_engine::policy::Baseline>(
+                "Baseline",
+                "Findings accepted for now; checks fail only on new ones.",
+            ),
+        ),
+        (
+            "proof",
+            ".codemosis/proofs/*.json",
+            of::<codemosis_engine::proof::Certificate>(
+                "Proof certificate",
+                "What justified each correction, replayable by `codemosis proof verify`.",
+            ),
+        ),
+    ]
+}
+
+fn schema_cmd(name: Option<&str>, output: Option<&Path>) -> Result<ExitCode> {
+    let all = schemas();
+    match (name, output) {
+        (_, Some(dir)) => {
+            std::fs::create_dir_all(dir).with_context(|| format!("cannot create {}", dir.display()))?;
+            for (n, _, v) in all.iter().filter(|(n, _, _)| name.is_none_or(|x| x == *n)) {
+                std::fs::write(
+                    dir.join(format!("{n}.schema.json")),
+                    serde_json::to_string_pretty(v)? + "\n",
+                )?;
+            }
+            println!("Wrote the schemas to {}.", dir.display());
+        }
+        (Some(n), None) => {
+            let (_, _, v) = all.iter().find(|(x, _, _)| *x == n).ok_or_else(|| {
+                anyhow!(
+                    "no schema named '{n}'; the schemas are: {}",
+                    all.iter()
+                        .map(|(x, f, _)| format!("{x} ({f})"))
+                        .collect::<Vec<_>>()
+                        .join(", ")
+                )
+            })?;
+            println!("{}", serde_json::to_string_pretty(v)?);
+        }
+        (None, None) => {
+            for (n, f, _) in &all {
+                println!("{n:<10} {f}");
+            }
+        }
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// codemosis.1, codemosis-check.1, codemosis-pack-test.1... for a command tree.
+fn write_man_pages(cmd: &clap::Command, name: &str, dir: &Path) -> Result<usize> {
+    let cmd = cmd.clone().name(name.to_string());
+    let mut buf = Vec::new();
+    clap_mangen::Man::new(cmd.clone()).render(&mut buf)?;
+    std::fs::write(dir.join(format!("{name}.1")), buf)?;
+    let mut n = 1;
+    for sub in cmd.get_subcommands().filter(|s| s.get_name() != "help") {
+        n += write_man_pages(sub, &format!("{name}-{}", sub.get_name()), dir)?;
+    }
+    Ok(n)
+}
+
+/// The fix report as JSON (schema codemosis/fix/v1).
+fn fix_json(report: &codemosis_engine::session::Report) -> Result<String> {
+    let mut v = serde_json::json!({
+        "schema": codemosis_engine::ci::JSON_FIX_SCHEMA,
+        "version": env!("CARGO_PKG_VERSION"),
+    });
+    if let (Some(obj), serde_json::Value::Object(rest)) = (v.as_object_mut(), serde_json::to_value(report)?) {
+        obj.extend(rest);
+    }
+    Ok(serde_json::to_string_pretty(&v)?)
+}
+
+/// What recording an answer did.
+struct Recorded {
+    question: String,
+    answer: String,
+    /// The answer asks for a change, which `fix` will make.
+    changes: bool,
+}
+
+/// Record a person's answer to an open question in `.codemosis/answers.toml`.
+fn record_answer(root: &Path, id: &str, answer: &str, note: Option<String>) -> Result<Recorded> {
+    let mut ws = Workspace::open(root, &[])?;
     let scan = ws.scan();
     let finding = scan
         .findings
@@ -493,22 +1362,50 @@ fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Styl
             )
         })?;
     let q = finding.question().expect("found by question");
+    let Some(option) = q.option(answer) else {
+        bail!(
+            "{} is not an answer to {}; its answers are: {}",
+            answer,
+            q.id,
+            q.choices()
+        );
+    };
+    if let Some(why) = &option.unavailable {
+        bail!("{answer} is not possible here: {why}");
+    }
+    let changes = option.changes;
+    let answer = option.answer.clone();
     ws.answers.set(Answer {
         id: q.id.clone(),
         rule: finding.rule.clone(),
         location: format!("{}:{}", finding.file.display(), finding.span.start.line),
         question: q.text.clone(),
-        answer: answer.to_string(),
+        answer: answer.clone(),
         note,
     });
-    ws.answers.save(&root).map_err(|e| anyhow!(e))?;
+    ws.answers.save(root).map_err(|e| anyhow!(e))?;
+    let _ = codemosis_engine::audit::record(
+        root,
+        "answer",
+        serde_json::json!({"id": q.id, "rule": finding.rule, "answer": answer}),
+    );
+    Ok(Recorded {
+        question: q.id.clone(),
+        answer,
+        changes,
+    })
+}
+
+fn answer_cmd(id: &str, answer: &str, path: &Path, note: Option<String>, s: Style) -> Result<ExitCode> {
+    let root = canonical(path)?;
+    let r = record_answer(&root, id, answer, note)?;
     println!(
         "Recorded {} to {} in {}.",
-        s.bold(answer),
-        q.id,
+        s.bold(&r.answer),
+        r.question,
         codemosis_engine::answers::FILE
     );
-    if answer == "yes" {
+    if r.changes {
         println!("Run `codemosis fix` to apply the correction.");
     } else {
         println!("The code stays as it is and will not be reported again.");
@@ -523,62 +1420,111 @@ fn find_rule<'p>(packs: &'p [Pack], id: &str) -> Option<&'p codemosis_core::Comp
         .find(|r| r.id == id || r.spec.id == id)
 }
 
-fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
+/// A rule's explanation: what it finds, why, its facts, question and proof.
+fn explain_text(id: &str, extra: &[PathBuf], s: Style) -> Result<String> {
+    use std::fmt::Write as _;
+    let mut out = String::new();
     let packs = all_packs(extra)?;
     let rule = find_rule(&packs, id).ok_or_else(|| anyhow!("no rule named '{id}'; `codemosis rules` lists them"))?;
     let spec = &rule.spec;
-    println!("{}  {}", s.bold(&rule.id), spec.title);
+    let _ = writeln!(out, "{}  {}", s.bold(&rule.id), spec.title);
+    let sem = spec.semantics.map(|x| x.describe()).unwrap_or("");
     let kind = match (&spec.fix, &spec.ask) {
-        (Some(_), None) => format!(
-            "corrects automatically ({})",
-            spec.semantics.map(|x| x.describe()).unwrap_or("")
-        ),
-        (Some(_), Some(_)) => format!(
-            "corrects after you answer yes ({})",
-            spec.semantics.map(|x| x.describe()).unwrap_or("")
-        ),
+        (Some(_), None) => format!("corrects automatically ({sem})"),
+        (_, Some(ask)) if !ask.options.is_empty() => format!("asks, then corrects as you choose ({sem})"),
+        (Some(_), Some(_)) => format!("corrects after you answer yes ({sem})"),
         _ => "explains only".to_string(),
     };
-    println!("  category  {} — {}", spec.category, spec.category.describe());
-    println!("  language  {}", rule.language.id());
-    println!("  action    {kind}\n");
-    println!("{}\n", spec.explain.trim());
-    println!("{}", s.bold("Shape"));
-    for l in spec.shape.trim().lines() {
-        println!("  {l}");
+    let target = if rule.languages.is_empty() {
+        let langs = rule.pattern_languages();
+        if langs.is_empty() {
+            "any text file".to_string()
+        } else {
+            format!("{} languages: {}", langs.len(), langs.join(", "))
+        }
+    } else {
+        rule.languages.iter().map(|l| l.id()).collect::<Vec<_>>().join(", ")
+    };
+    let _ = writeln!(out, "  category  {} — {}", spec.category, spec.category.describe());
+    let _ = writeln!(out, "  language  {target}");
+    let _ = writeln!(out, "  action    {kind}");
+    if !spec.cwe.is_empty() {
+        let _ = writeln!(out, "  weakness  {}", spec.cwe.join(", "));
+    }
+    if !spec.tags.is_empty() {
+        let _ = writeln!(out, "  tags      {}", spec.tags.join(", "));
+    }
+    if let Some(d) = &spec.deprecated {
+        let by = spec
+            .replaced_by
+            .as_deref()
+            .map(|r| format!(" Use {r} instead."))
+            .unwrap_or_default();
+        let _ = writeln!(out, "  {}  {d}{by}", s.yellow("deprecated"));
+    }
+    let _ = writeln!(out);
+    let _ = writeln!(out, "{}\n", spec.explain.trim());
+    let (title, body) = match (&spec.shape, &spec.pattern, &spec.patterns) {
+        (Some(q), _, _) => ("Shape", q.clone()),
+        (_, Some(p), _) => ("Pattern", p.clone()),
+        (_, _, Some(t)) => ("Patterns", format!("one per language, from the table '{t}'")),
+        _ => ("Shape", String::new()),
+    };
+    let _ = writeln!(out, "{}", s.bold(title));
+    for l in body.trim().lines() {
+        let _ = writeln!(out, "  {l}");
     }
     if !spec.facts.is_empty() {
-        println!("\n{}", s.bold("Facts that must hold"));
+        let _ = writeln!(out, "\n{}", s.bold("Facts that must hold"));
         for f in &spec.facts {
-            println!("  {f}");
+            let _ = writeln!(out, "  {f}");
         }
     }
     if let Some(ask) = &spec.ask {
-        println!("\n{}\n  {}", s.bold("Question"), ask.question);
+        let _ = writeln!(out, "\n{}\n  {}", s.bold("Question"), ask.question);
+        for o in &ask.options {
+            let _ = writeln!(out, "    {:<8} {}", o.answer, o.means);
+        }
     }
     if let Some(ex) = spec.examples.first() {
-        println!("\n{}", s.bold("Example"));
+        let _ = writeln!(out, "\n{}", s.bold("Example"));
         match &ex.after {
-            Some(after) => print!(
-                "{}",
-                codemosis_engine::session::unified_diff(rule.language.example_file(), &ex.before, after)
-            ),
+            Some(after) => {
+                let _ = write!(
+                    out,
+                    "{}",
+                    codemosis_engine::session::unified_diff(
+                        ex.path
+                            .as_deref()
+                            .or(rule.languages.first().map(|l| l.example_file()))
+                            .unwrap_or("example"),
+                        &ex.before,
+                        after
+                    )
+                );
+            }
             None => {
                 for l in ex.before.lines() {
-                    println!("  {l}");
+                    let _ = writeln!(out, "  {l}");
                 }
             }
         }
     }
-    println!(
+    let _ = writeln!(
+        out,
         "\n{} example(s) and {} counterexample(s) prove this rule; run `codemosis pack test --rule {}`.",
         spec.examples.len(),
         spec.counterexamples.len(),
         spec.id
     );
     for r in &spec.references {
-        println!("See also: {r}");
+        let _ = writeln!(out, "See also: {r}");
     }
+    Ok(out)
+}
+
+fn explain(id: &str, extra: &[PathBuf], s: Style) -> Result<ExitCode> {
+    print!("{}", explain_text(id, extra, s)?);
     Ok(ExitCode::SUCCESS)
 }
 
@@ -589,24 +1535,231 @@ fn list_rules(extra: &[PathBuf], s: Style) -> Result<ExitCode> {
             s.bold(&p.meta.id),
             p.meta.version,
             p.meta.summary,
-            p.language.id()
+            p.target()
         );
         for r in &p.rules {
-            let kind = match (&r.spec.fix, &r.spec.ask) {
-                (Some(_), None) => "fix",
-                (Some(_), Some(_)) => "ask",
+            let kind = match (r.changes_code(), r.asks()) {
+                (true, false) => "fix",
+                (true, true) => "ask",
                 _ => "explain",
+            };
+            let title = match &r.spec.deprecated {
+                Some(_) => format!("{} (deprecated)", r.spec.title),
+                None => r.spec.title.clone(),
             };
             println!(
                 "  {} {:<7} {:<44} {}",
                 s.category(r.spec.category),
                 kind,
                 r.id,
-                s.dim(&r.spec.title)
+                s.dim(&title)
             );
         }
         println!();
     }
+    Ok(ExitCode::SUCCESS)
+}
+
+/// Packs from directories, or the built-in packs when none are given.
+fn packs_from(dirs: &[PathBuf]) -> Result<Vec<Pack>> {
+    if dirs.is_empty() {
+        return pack::builtin().map_err(|e| anyhow!("{e}"));
+    }
+    let mut v = Vec::new();
+    for d in dirs {
+        let src = pack::read_dir(d).map_err(|e| anyhow!("{e}"))?;
+        v.push(pack::compile(&src).map_err(|e| anyhow!("{e}"))?);
+    }
+    Ok(v)
+}
+
+fn pack_lint(dirs: &[PathBuf], deny_warnings: bool, verbose: bool, s: Style) -> Result<ExitCode> {
+    use codemosis_core::lint::{lint_pack, Severity};
+    let packs = packs_from(dirs)?;
+    let (mut warnings, mut notes) = (0, 0);
+    for p in &packs {
+        let lints = lint_pack(p);
+        let shown: Vec<_> = lints
+            .iter()
+            .filter(|l| verbose || l.severity == Severity::Warning)
+            .collect();
+        let mark = if lints.iter().any(|l| l.severity == Severity::Warning) {
+            s.yellow("!")
+        } else {
+            s.green("✓")
+        };
+        println!("{mark} {} {}", s.bold(&p.meta.id), p.meta.version);
+        for l in shown {
+            let label = match l.severity {
+                Severity::Warning => s.yellow("warning"),
+                Severity::Note => s.dim("note"),
+            };
+            println!("    {label} [{}] {}: {}", l.code, l.at, l.message);
+        }
+        warnings += lints.iter().filter(|l| l.severity == Severity::Warning).count();
+        notes += lints.iter().filter(|l| l.severity == Severity::Note).count();
+    }
+    println!(
+        "\n{} warning(s) · {} note(s){}",
+        warnings,
+        notes,
+        if verbose || notes == 0 { "" } else { " (-v shows notes)" }
+    );
+    Ok(if deny_warnings && warnings > 0 {
+        ExitCode::from(1)
+    } else {
+        ExitCode::SUCCESS
+    })
+}
+
+fn pack_mutations(
+    dirs: &[PathBuf],
+    filter: Option<&str>,
+    verbose: bool,
+    max_unproven: Option<usize>,
+    s: Style,
+) -> Result<ExitCode> {
+    let packs = packs_from(dirs)?;
+    let (mut total, mut survived) = (0, 0);
+    for p in &packs {
+        println!("{} {}", s.bold(&p.meta.id), p.meta.version);
+        for r in &p.rules {
+            if filter.is_some_and(|f| !r.id.contains(f)) || r.spec.facts.is_empty() {
+                continue;
+            }
+            let ms = selftest::mutants(r);
+            total += ms.len();
+            let alive: Vec<_> = ms.iter().filter(|m| m.survived()).collect();
+            survived += alive.len();
+            let mark = if alive.is_empty() {
+                s.green("✓")
+            } else {
+                s.yellow("!")
+            };
+            println!(
+                "  {mark} {} {}",
+                r.id,
+                s.dim(&format!(
+                    "({} of {} facts proven necessary)",
+                    ms.len() - alive.len(),
+                    ms.len()
+                ))
+            );
+            for m in &ms {
+                match &m.killed_by {
+                    None => println!(
+                        "      {} without `{}` every check still passes: add a counterexample that needs it",
+                        s.yellow("survived"),
+                        m.fact
+                    ),
+                    Some(by) if verbose => println!("      {} `{}` (by: {by})", s.green("killed"), m.fact),
+                    Some(_) => {}
+                }
+            }
+        }
+    }
+    println!(
+        "\n{} of {} facts are proven necessary by an example or counterexample · {} unproven",
+        total - survived,
+        total,
+        survived
+    );
+    if let Some(max) = max_unproven.filter(|m| survived > *m) {
+        println!(
+            "{} {survived} unproven facts, more than the {max} allowed: add the counterexamples above",
+            s.red("error:")
+        );
+        return Ok(ExitCode::from(1));
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
+fn proof_verify(certificate: &Path, path: &Path, s: Style) -> Result<ExitCode> {
+    use codemosis_engine::proof::{verify, Certificate};
+    let root = canonical(path)?;
+    let cert_path = if certificate.is_relative() && !certificate.exists() {
+        root.join(certificate)
+    } else {
+        certificate.to_path_buf()
+    };
+    let cert = Certificate::load(&cert_path).map_err(|e| anyhow!(e))?;
+    let (cfg, _) = config::Config::load(&root)?;
+    let packs = cfg.load_packs(&root, &[])?;
+    let mut project = codemosis_core::Project::load(&root, &cfg.filter())?;
+    println!(
+        "{} {} ({} step(s), {} file(s), engine {}, created {})",
+        s.bold("Verifying"),
+        cert_path.display(),
+        cert.steps.len(),
+        cert.files.len(),
+        cert.engine.version,
+        cert.created
+    );
+    // Verifying runs none of the project's code: formatters that could are
+    // not replayed, and their layout must then be whitespace only.
+    let formatters = codemosis_engine::formatter::Formatters::new(&root, &cfg.format, false);
+    let v = verify(&cert, &root, &mut project, &packs, Some(&formatters));
+    for (name, r) in &v.checks {
+        match r {
+            Ok(()) => println!("  {} {name}", s.green("✓")),
+            Err(why) => println!("  {} {name}: {why}", s.red("✗")),
+        }
+    }
+    if v.ok() {
+        let answers = if cert.answers.is_empty() {
+            String::new()
+        } else {
+            format!(", given {} recorded answer(s)", cert.answers.len())
+        };
+        println!("\nVerified: the change is exactly what the pinned rules prove{answers}.");
+        if let Some(o) = &cert.oracle {
+            if let (Some(b), Some(a)) = (&o.before, &o.after) {
+                println!(
+                    "Recorded oracle: tests passing {} -> {}, failing {} -> {} (re-run your test suite to confirm it).",
+                    b.passed, a.passed, b.failed, a.failed
+                );
+            }
+        }
+        Ok(ExitCode::SUCCESS)
+    } else {
+        println!("\nNot verified.");
+        Ok(ExitCode::from(1))
+    }
+}
+
+fn lock_cmd(path: &Path, check: bool) -> Result<ExitCode> {
+    use codemosis_engine::lock::{Lock, LOCK_FILE};
+    let root = canonical(path)?;
+    let (cfg, _) = config::Config::load(&root)?;
+    let packs = cfg.load_packs(&root, &[])?;
+    let fresh = Lock::of(&packs);
+    if check {
+        return match Lock::load(&root).map_err(|e| anyhow!(e))? {
+            None => bail!(
+                "{} has no {LOCK_FILE}; run `codemosis lock` to create it",
+                root.display()
+            ),
+            Some(l) => {
+                let problems = l.verify(&packs);
+                if problems.is_empty() {
+                    println!("{LOCK_FILE} matches all {} pack(s).", packs.len());
+                    Ok(ExitCode::SUCCESS)
+                } else {
+                    for p in problems {
+                        println!("  - {p}");
+                    }
+                    Ok(ExitCode::from(1))
+                }
+            }
+        };
+    }
+    codemosis_engine::fsguard::write_confined(&root, Path::new(LOCK_FILE), fresh.to_toml().as_bytes())?;
+    let _ = codemosis_engine::audit::record(
+        &root,
+        "lock",
+        serde_json::json!({"packs": fresh.packs.iter().map(|p| format!("{}@{}", p.id, &p.sha256[..12])).collect::<Vec<_>>()}),
+    );
+    println!("Pinned {} pack(s) in {LOCK_FILE}. Commit it.", fresh.packs.len());
     Ok(ExitCode::SUCCESS)
 }
 
@@ -703,6 +1856,7 @@ fn facts(language: Option<&str>, s: Style) -> Result<ExitCode> {
             println!("  {:<22} {}", n, s.dim(d));
         }
     }
+    let mut seen = std::collections::BTreeSet::new();
     for l in lang::all() {
         if language.is_some_and(|x| x != l.id()) {
             continue;
@@ -710,9 +1864,21 @@ fn facts(language: Option<&str>, s: Style) -> Result<ExitCode> {
         if l.facts().is_empty() && l.filters().is_empty() {
             continue;
         }
-        println!("\n{}", s.bold(&format!("{} facts ({}.*)", l.id(), l.prefix())));
+        if !seen.insert(l.prefix()) {
+            continue;
+        }
+        let sharing: Vec<&str> = lang::all()
+            .iter()
+            .filter(|o| o.prefix() == l.prefix())
+            .map(|o| o.id())
+            .collect();
+        println!(
+            "\n{}",
+            s.bold(&format!("{} facts ({}.*)", sharing.join(", "), l.prefix()))
+        );
         for f in l.facts() {
-            println!("  {:<46} {}", f.signature, s.dim(f.doc));
+            let sig = f.signature.replace("<prefix>", l.prefix());
+            println!("  {:<46} {}", sig, s.dim(f.doc));
         }
         for (n, d) in l.filters() {
             println!("  filter {:<39} {}", format!("{}.{n}", l.prefix()), s.dim(d));

@@ -1,6 +1,7 @@
 id = "needless-return"
 title = "return as the last statement of a function"
 category = "simplification"
+equivalents = ["clippy:needless_return"]
 semantics = "preserved"
 summary = "`${ret}` is the last statement of the function; the value can simply be its tail expression."
 explain = """
@@ -16,7 +17,7 @@ leading construct as a statement of its own.
 shape = '''
 (function_item
   body: (block
-    (expression_statement (return_expression (_) @value)) @ret .)) @fn
+    (expression_statement (return_expression (_) @value)) @ret .)) @_fn
 '''
 focus = "@ret"
 where = [
@@ -67,5 +68,14 @@ code = '''
 fn one() -> i32 {
     return 1;
     // done
+}
+'''
+
+[[counterexample]]
+name = "a value that starts with a block-like expression and continues"
+code = '''
+fn score(x: i32) -> i32 {
+    let base = 10;
+    return match x { 0 => 1, _ => 2 } + base;
 }
 '''

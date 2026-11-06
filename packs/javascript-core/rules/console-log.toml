@@ -1,0 +1,95 @@
+id = "console-log"
+title = "console.log left in the code"
+category = "waste"
+cwe = ["CWE-489"]
+equivalents = ["eslint:no-console"]
+semantics = "corrected"
+summary = "`${call}` writes debugging output."
+explain = """
+`console.log` and `console.debug` calls are how most debugging starts, and
+many are left behind. Some are the program's real output (a command-line
+tool printing results), so the engine asks rather than assumes. keep records
+it as intentional; remove deletes it.
+
+Only library code is asked about: console output in tests, examples, scripts, documentation and benchmarks is usually the point of the code (see `file_purpose()`).
+"""
+shape = '''
+(expression_statement
+  (call_expression
+    function: (member_expression object: (identifier) @object property: (property_identifier) @method)) @call
+  (#eq? @object "console")
+  (#any-of? @method "log" "debug")) @stmt
+'''
+focus = "@stmt"
+where = [
+  "file_purpose() == 'library'",
+  "occupies_lines(@stmt)",
+  "!js.defines('console')",
+]
+
+[ask]
+question = "Keep this console output?"
+
+[[ask.option]]
+answer = "keep"
+means = "it is real output of the program; record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "it is leftover debugging; delete it"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+before = '''
+function add(a, b) {
+  console.log("add called with", a, b);
+  return a + b;
+}
+process.stdout.write(String(add(2, 3)) + "\n");
+'''
+after = '''
+function add(a, b) {
+  return a + b;
+}
+process.stdout.write(String(add(2, 3)) + "\n");
+'''
+output = "5\n"
+
+[[counterexample]]
+name = "warnings and errors are not debugging leftovers"
+code = '''
+console.error("failed");
+console.warn("careful");
+'''
+
+[[counterexample]]
+name = "a local console is the program's own logger"
+code = '''
+const console = { log: (...xs) => process.stdout.write(xs.join(" ") + "\\n") };
+console.log("report ready");
+'''
+
+[[counterexample]]
+name = "output is the point of an example"
+path = "examples/server.mjs"
+code = '''
+const port = 3000;
+console.log("listening on", port);
+'''
+
+[[counterexample]]
+name = "and of a script"
+path = "scripts/build.mjs"
+code = '''
+console.log("built");
+'''
+
+[[counterexample]]
+name = "the only statement of an if: deleting its line would delete the if"
+code = '''
+export function load(config) {
+  if (config.verbose) console.log("loading", config.name);
+  return config;
+}
+'''

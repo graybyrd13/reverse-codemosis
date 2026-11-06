@@ -1,0 +1,152 @@
+id = "fixed-wait"
+title = "Fixed wait"
+tags = ["timing", "flaky-tests"]
+category = "hazard"
+semantics = "preserved"
+summary = "`${call}` pauses for a fixed time instead of waiting for what the code actually needs."
+explain = """
+A fixed wait is a guess about timing: too short and the code is flaky (what
+it waited for is not ready yet), too long and every run is slow. CI
+pipelines, deployment scripts and tests collect them. The safe form waits for
+the condition itself: poll the port, the file or the job, with a time limit.
+
+Some waits are deliberate (rate limits, back-off, pacing), so the engine
+asks. keep records the wait as intentional; remove deletes the line. This
+rule reads text, so it cannot tell a wait inside a polling loop from one on
+its own: keep the ones that pace a loop.
+
+Examples, documentation and benchmarks are left alone (see `file_purpose()`): a pause there is part of the demonstration.
+"""
+patterns = "wait_patterns"
+focus = "@match"
+# Every pattern in wait_patterns matches whole lines (^...$), so the match
+# always occupies its lines; a test in codemosis-core keeps it so.
+where = ["file_purpose() not in ['example', 'docs', 'benchmark']"]
+
+[ask]
+question = "Keep this fixed wait?"
+
+[[ask.option]]
+answer = "keep"
+means = "the wait is deliberate (rate limit, back-off, pacing, a polling loop); record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "delete it; if something must be ready first, wait for that condition instead"
+edits = [{ delete_lines = "@match" }]
+
+[[example]]
+name = "PowerShell"
+path = "deploy.ps1"
+answer = "remove"
+before = '''
+Write-Host "Deploying"
+Start-Sleep -Seconds 5
+Write-Host "Done"
+'''
+after = '''
+Write-Host "Deploying"
+Write-Host "Done"
+'''
+
+[[example]]
+name = "a batch file's ping trick"
+path = "build.bat"
+answer = "remove"
+before = '''
+@echo off
+echo Building
+ping -n 6 127.0.0.1 > nul
+echo Built
+'''
+after = '''
+@echo off
+echo Building
+echo Built
+'''
+
+[[example]]
+name = "T-SQL"
+path = "nightly.sql"
+answer = "remove"
+before = '''
+SET NOCOUNT ON;
+EXEC dbo.StartJob;
+WAITFOR DELAY '00:00:05';
+EXEC dbo.CheckJob;
+'''
+after = '''
+SET NOCOUNT ON;
+EXEC dbo.StartJob;
+EXEC dbo.CheckJob;
+'''
+
+[[example]]
+name = "R, kept"
+path = "scrape.R"
+answer = "keep"
+before = '''
+pages <- lapply(urls, download)
+Sys.sleep(2)
+'''
+after = '''
+pages <- lapply(urls, download)
+Sys.sleep(2)
+'''
+
+[[example]]
+name = "a Makefile recipe"
+path = "Makefile"
+answer = "remove"
+before = '''
+up:
+	docker compose up -d
+	sleep 10
+	./migrate.sh
+'''
+after = '''
+up:
+	docker compose up -d
+	./migrate.sh
+'''
+
+[[counterexample]]
+name = "a commented-out wait"
+path = "deploy.ps1"
+code = '''
+# Start-Sleep -Seconds 5
+Write-Host "Done"
+'''
+
+[[counterexample]]
+name = "inside a here-string"
+path = "deploy.ps1"
+code = '''
+$script = @"
+Start-Sleep 5
+"@
+'''
+
+[[counterexample]]
+name = "a language with its own pack"
+path = "app.py"
+code = '''
+import time
+time.sleep(5)
+'''
+
+[[counterexample]]
+name = "the same wait in an example: pausing there is usually the point"
+path = "examples/deploy.ps1"
+code = '''
+Write-Host "Deploying"
+Start-Sleep -Seconds 5
+Write-Host "Done"
+'''
+
+[[counterexample]]
+name = "a wait that shares its line"
+path = "deploy.ps1"
+code = '''
+Write-Host "deploying"; Start-Sleep -Seconds 5
+'''

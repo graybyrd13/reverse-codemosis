@@ -6,7 +6,6 @@ use crate::eval::{children, err, line_end, EvalCtx, EvalError, FactDoc, Value};
 use crate::model::Edit;
 use crate::process::{self, ScratchDir};
 use crate::project::SourceFile;
-use std::process::Command;
 use std::time::Duration;
 use tree_sitter::Node;
 
@@ -178,6 +177,7 @@ pub const BUILTINS: &[&str] = &[
     "Warning",
     "WindowsError",
     "ZeroDivisionError",
+    "frozendict",
 ];
 
 const FACTS: &[FactDoc] = &[
@@ -193,6 +193,8 @@ const FACTS: &[FactDoc] = &[
     FactDoc { name: "first_statement", signature: "py.first_statement(block) -> nodes", doc: "The first statement of a block that is not its docstring (empty when there is none)." },
     FactDoc { name: "is_docstring", signature: "py.is_docstring(nodes) -> bool", doc: "True when the node is (or is the string of) a module, class or function docstring." },
     FactDoc { name: "top_level", signature: "py.top_level(nodes) -> bool", doc: "True when the statement sits directly in the module, not inside a block." },
+    FactDoc { name: "used_as_template", signature: "py.used_as_template(string) -> bool", doc: "True when a string is evidently a template filled in later, so its `{...}` are not meant as f-string placeholders: an argument of a gettext-style call (`_`, `gettext`, `ngettext`, `pgettext`, `gettext_lazy`...), an argument of a call whose result is `.format`-ed, assigned to a name that is later `.format`-ed or whose name says template (`*template*`, `*fmt*`, `*format*`), or a statement on its own (an attribute docstring)." },
+    FactDoc { name: "in_main_block", signature: "py.in_main_block(nodes) -> bool", doc: "True when the node is inside an `if __name__ == \"__main__\":` block: code that runs only when the file is executed as a script, often a demonstration." },
     FactDoc { name: "imported_elsewhere", signature: "py.imported_elsewhere(name) -> bool", doc: "True when another file of the project imports the name from this module, or reads `module.name`." },
     FactDoc { name: "defined_in_project", signature: "py.defined_in_project(name, module?) -> bool", doc: "True when another file of the project defines the name at module level, or the project has a module or package of that name: importing it from the standard library would then be a guess. Bindings that import the name from `module` itself (`import json`, `from pathlib import Path`) are not counted." },
     FactDoc { name: "string_prefix", signature: "py.string_prefix(string) -> string", doc: "The lower-cased prefix letters of a string literal: '', 'f', 'rb'..." },
@@ -220,8 +222,12 @@ impl Language for Python {
         "py"
     }
 
-    fn extensions(&self) -> &'static [&'static str] {
-        &["py", "pyi"]
+    fn linguist_names(&self) -> &'static [&'static str] {
+        &["Python"]
+    }
+
+    fn definition_kinds(&self) -> &'static [(&'static str, &'static str)] {
+        &[("function_definition", "name"), ("class_definition", "name")]
     }
 
     fn grammar(&self) -> tree_sitter::Language {
@@ -292,6 +298,16 @@ impl Language for Python {
     fn runner(&self) -> Option<&dyn Runner> {
         Some(&PythonRunner)
     }
+
+    fn binding_changes(
+        &self,
+        old: &SourceFile,
+        new: &SourceFile,
+        edits: &[Edit],
+        repaired: bool,
+    ) -> Option<Vec<String>> {
+        Some(binding_changes(old, new, edits, repaired))
+    }
 }
 
 fn analysis<'a>(ctx: &EvalCtx<'a>) -> &'a PyAnalysis {
@@ -357,14 +373,15 @@ fn call_fact<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Va
             let last = *nodes.last().unwrap();
             Ok(match name {
                 "is_reference" => Value::Bool(
-                    a.occurrences
-                        .iter()
-                        .any(|o| o.start == first.start_byte() && o.role == Role::Reference),
+                    a.occurrence_at(first.start_byte())
+                        .is_some_and(|o| o.role == Role::Reference),
                 ),
                 "removal_preserves_scope" => Value::Bool(removal_preserves_scope(a, &nodes, first, last)),
                 "first_statement" => Value::Nodes(first_statement(&first, ctx).into_iter().collect()),
                 "is_docstring" => Value::Bool(is_docstring(&first)),
                 "top_level" => Value::Bool(first.parent().is_some_and(|p| p.kind() == "module")),
+                "in_main_block" => Value::Bool(in_main_block(&first, ctx)),
+                "used_as_template" => Value::Bool(used_as_template(&first, ctx)),
                 "string_prefix" => Value::Str(string_prefix(&first, ctx)),
                 "placeholders_bound" => Value::Bool(placeholders_bound(a, &first, ctx)),
                 "yields_bool" => Value::Bool(yields_bool(&first)),
@@ -375,6 +392,109 @@ fn call_fact<'a>(name: &str, args: &[Value<'a>], ctx: &EvalCtx<'a>) -> Result<Va
 }
 
 const NESTED_SCOPES: &[&str] = &["function_definition", "lambda", "class_definition"];
+
+const GETTEXT: &[&str] = &[
+    "_",
+    "N_",
+    "gettext",
+    "ngettext",
+    "pgettext",
+    "npgettext",
+    "dgettext",
+    "dngettext",
+    "gettext_lazy",
+    "ngettext_lazy",
+    "pgettext_lazy",
+    "npgettext_lazy",
+    "gettext_noop",
+    "lazy_gettext",
+    "lazy_ngettext",
+    "ugettext",
+    "ungettext",
+    "ugettext_lazy",
+    "ungettext_lazy",
+];
+
+/// The called name of a call: `f` in `f(...)`, `g` in `a.b.g(...)`.
+fn called_name<'t>(call: &Node<'t>, ctx: &EvalCtx<'t>) -> Option<&'t str> {
+    let f = call.child_by_field_name("function")?;
+    let n = match f.kind() {
+        "attribute" => f.child_by_field_name("attribute")?,
+        _ => f,
+    };
+    Some(ctx.node_text(&n))
+}
+
+/// See the `used_as_template` fact.
+fn used_as_template(node: &Node, ctx: &EvalCtx<'_>) -> bool {
+    // A string inside a concatenation counts as the concatenation.
+    let mut s = *node;
+    while let Some(p) = s.parent().filter(|p| p.kind() == "concatenated_string") {
+        s = p;
+    }
+    let Some(parent) = s.parent() else { return false };
+    match parent.kind() {
+        // A statement on its own: an attribute docstring, or dead text.
+        "expression_statement" => true,
+        "argument_list" => {
+            let Some(call) = parent.parent().filter(|c| c.kind() == "call") else {
+                return false;
+            };
+            if called_name(&call, ctx).is_some_and(|n| GETTEXT.contains(&n)) {
+                return true;
+            }
+            // `something("...{x}...").format(...)`
+            call.parent().is_some_and(|a| {
+                a.kind() == "attribute"
+                    && a.child_by_field_name("attribute")
+                        .is_some_and(|m| matches!(ctx.node_text(&m), "format" | "format_map"))
+            })
+        }
+        "assignment" => {
+            let Some(left) = parent.child_by_field_name("left") else {
+                return false;
+            };
+            let target = match left.kind() {
+                "attribute" => left.child_by_field_name("attribute"),
+                "identifier" => Some(left),
+                _ => None,
+            };
+            let Some(target) = target else { return false };
+            let name = ctx.node_text(&target);
+            let lower = name.to_lowercase();
+            if ["template", "tmpl", "fmt", "format"].iter().any(|w| lower.contains(w)) {
+                return true;
+            }
+            let text = &ctx.file.text;
+            text.contains(&format!("{name}.format(")) || text.contains(&format!("{name}.format_map("))
+        }
+        _ => false,
+    }
+}
+
+/// Inside `if __name__ == "__main__":` (either operand order, either quote).
+fn in_main_block(node: &Node, ctx: &EvalCtx<'_>) -> bool {
+    let mut cur = node.parent();
+    while let Some(n) = cur {
+        if n.kind() == "if_statement" {
+            if let Some(cond) = n.child_by_field_name("condition") {
+                let text: String = ctx.node_text(&cond).chars().filter(|c| !c.is_whitespace()).collect();
+                let text = text.replace('\'', "\"");
+                if text == "__name__==\"__main__\"" || text == "\"__main__\"==__name__" {
+                    // Only the consequence counts, not an `else` branch.
+                    let in_body = n
+                        .child_by_field_name("consequence")
+                        .is_some_and(|b| b.start_byte() <= node.start_byte() && node.end_byte() <= b.end_byte());
+                    if in_body {
+                        return true;
+                    }
+                }
+            }
+        }
+        cur = n.parent();
+    }
+    false
+}
 
 fn removal_preserves_scope(a: &PyAnalysis, nodes: &[Node], first: Node, last: Node) -> bool {
     // Statements that change the meaning of the whole scope, wherever they are.
@@ -474,9 +594,11 @@ fn placeholders_bound(a: &PyAnalysis, node: &Node, ctx: &EvalCtx<'_>) -> bool {
     let Some(body) = string_body(node, ctx) else {
         return false;
     };
-    let re =
+    static PLACEHOLDER: std::sync::OnceLock<regex::Regex> = std::sync::OnceLock::new();
+    let re = PLACEHOLDER.get_or_init(|| {
         regex::Regex::new(r"^([A-Za-z_][A-Za-z0-9_]*)(\.[A-Za-z_][A-Za-z0-9_]*)*(\[[^\[\]{}]*\])?(![rsa])?(:[^{}]*)?$")
-            .expect("valid regex");
+            .expect("valid regex")
+    });
     let scope = a.scope_at(node.start_byte(), node.end_byte());
     let mut found = 0;
     let mut rest = body;
@@ -568,7 +690,9 @@ fn negate(node: &Node, text: &str, ctx: &EvalCtx<'_>) -> String {
         }
     }
     match node.kind() {
-        "boolean_operator" | "conditional_expression" | "lambda" | "named_expression" => {
+        // `not a != b` parses as `not (a != b)`, but readers stumble on it;
+        // the parentheses say what Python already does.
+        "boolean_operator" | "conditional_expression" | "lambda" | "named_expression" | "comparison_operator" => {
             format!("not ({text})")
         }
         _ => format!("not {text}"),
@@ -592,13 +716,14 @@ fn imported_elsewhere(ctx: &EvalCtx<'_>, name: &str) -> bool {
     }
     let dotted = format!("{stem}.{name}");
     for other in &ctx.project.files {
-        if other.path == *path || other.lang.id() != "python" {
+        if other.path == *path || other.lang.map(|l| l.id()) != Some("python") {
             continue;
         }
         if other.text.contains(&dotted) {
             return true;
         }
-        let mut stack = vec![other.tree.root_node()];
+        let Some(other_root) = other.root() else { continue };
+        let mut stack = vec![other_root];
         while let Some(n) = stack.pop() {
             if n.kind() == "import_from_statement" {
                 let module = n
@@ -631,7 +756,7 @@ fn imported_elsewhere(ctx: &EvalCtx<'_>, name: &str) -> bool {
 /// True when the binding at `start..end` imports `name` from `module`:
 /// `import module` (when name == module) or `from module import name`.
 fn imports_from(file: &SourceFile, start: usize, end: usize, name: &str, module: &str) -> bool {
-    let Some(node) = file.tree.root_node().descendant_for_byte_range(start, end) else {
+    let Some(node) = file.root().and_then(|r| r.descendant_for_byte_range(start, end)) else {
         return false;
     };
     let mut cur = node.parent();
@@ -657,7 +782,7 @@ fn imports_from(file: &SourceFile, start: usize, end: usize, name: &str, module:
 
 fn defined_in_project(ctx: &EvalCtx<'_>, name: &str, module: Option<&str>) -> bool {
     for other in &ctx.project.files {
-        if other.path == ctx.file.path || other.lang.id() != "python" {
+        if other.path == ctx.file.path || other.lang.map(|l| l.id()) != Some("python") {
             continue;
         }
         let stem = other.path.file_stem().map(|s| s.to_string_lossy().into_owned());
@@ -804,7 +929,7 @@ fn is_relative(node: &Node) -> bool {
 
 fn add_import(file: &SourceFile, statement: &str) -> Result<Edit, String> {
     let text = &file.text;
-    let root = file.tree.root_node();
+    let root = file.root().ok_or("the file has no syntax tree")?;
     let top: Vec<Node> = children(&root);
 
     // `from m import n`: join an existing single-line import from m.
@@ -978,7 +1103,7 @@ impl PythonRunner {
         // Not `-I`: it implies `-E`, which would ignore PYTHONHASHSEED and make
         // set and dict-of-str ordering differ between runs. `-s` skips user
         // site-packages; the scratch directory is the only path entry added.
-        let mut cmd = Command::new(python_command());
+        let mut cmd = process::snippet_command(python_command());
         cmd.arg("-s").arg("-X").arg("utf8");
         if compile_only {
             cmd.arg("-c")
@@ -1024,4 +1149,71 @@ impl Runner for PythonRunner {
     fn run(&self, code: &str) -> RunOutcome {
         self.exec(code, false)
     }
+}
+
+/// References outside the edits whose resolution the edits change.
+pub fn binding_changes(old: &SourceFile, new: &SourceFile, edits: &[Edit], repaired: bool) -> Vec<String> {
+    let edits = match crate::edit::normalize(edits) {
+        Ok(e) => e,
+        Err(e) => return vec![e.to_string()],
+    };
+    let a = analyze(old);
+    let b = analyze(new);
+    let touches = |s: usize, e: usize| {
+        edits
+            .iter()
+            .any(|x| (x.start < e && s < x.end) || (x.start == x.end && s < x.start && x.start < e))
+    };
+    let mut out = Vec::new();
+    for o in a.occurrences.iter().filter(|o| o.role == Role::Reference) {
+        if touches(o.start, o.end) {
+            continue;
+        }
+        let Some(at) = super::map_offset(&edits, o.start) else {
+            continue;
+        };
+        let Some(n) = b
+            .occurrences
+            .iter()
+            .find(|x| x.role == Role::Reference && x.start == at && x.name == o.name)
+        else {
+            continue;
+        };
+        let before = a.resolve(o);
+        let after = b.resolve(n);
+        let same = match (before, after) {
+            (None, None) => true,
+            (None, Some(_)) => repaired,
+            (Some(_), None) => false,
+            (Some(x), Some(y)) if a.scopes[x].kind == ScopeKind::Module => b.scopes[y].kind == ScopeKind::Module,
+            (Some(x), Some(y)) => match super::map_offset(&edits, a.scopes[x].start) {
+                Some(start) => b.scopes[y].start == start && b.scopes[y].kind == a.scopes[x].kind,
+                // The scope that held the binding was itself rewritten: its
+                // identity cannot be compared, and the rule's own facts decide.
+                None => true,
+            },
+        };
+        if !same {
+            let describe = |scopes: &[super::python_scope::Scope], s: Option<usize>| match s {
+                None => "a builtin or nothing".to_string(),
+                Some(i) if scopes[i].kind == ScopeKind::Module => "the module's binding".to_string(),
+                Some(i) => format!(
+                    "the binding in the {:?} scope at line {}",
+                    scopes[i].kind,
+                    old.line_of(scopes[i].start)
+                )
+                .to_lowercase(),
+            };
+            out.push(format!(
+                "`{}` on line {} would resolve to {} instead of {}",
+                o.name,
+                old.line_of(o.start),
+                describe(&b.scopes, after),
+                describe(&a.scopes, before)
+            ));
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
 }
