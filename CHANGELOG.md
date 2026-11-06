@@ -49,6 +49,17 @@ follows [Semantic Versioning](https://semver.org/) as described in
   Solidity, each with a conformance corpus. Heuristics for `.ex` (Elixir
   or Euphoria), `.ml` (OCaml or Standard ML) and `.sol` (Solidity or
   Gerber); definitions named by `*` or by call targets (Elixir's `def`).
+- Packs for the new languages, every fact proven by a counterexample:
+  `elixir-core` (IO.inspect left in code), `r-core` (comparisons with
+  NA, browser()), `haskell-core` (undefined in library code), `terraform`
+  (public bucket ACLs, SSH/RDP open to the internet, secrets in code),
+  `solidity-core` (tx.origin authorization, selfdestruct), `nix-core`
+  (fetches without a hash), `powershell-core` (Invoke-Expression),
+  `elm-core` (Debug.log), `ocaml-core` (Obj.magic), `zig-core`
+  (std.debug.print), `dart-core` (print in library code). Spot-checked on
+  one real project per language (docs/FIELD_TEST.md). `.Rd`, `.mli`,
+  `.mll` and `.mly` files are read lexically, and Dart's `tool/` holds
+  scripts.
 - Agentic coding tools: `codemosis mcp` (an MCP server with check, fix,
   answer, explain, map, rules and verify_proof), `codemosis hook` (reports
   findings on the lines an agent just changed, with what to do; exit 2 feeds

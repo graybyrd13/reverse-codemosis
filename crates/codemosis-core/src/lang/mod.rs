@@ -218,6 +218,7 @@ pub const STRING_KINDS: &[&str] = &[
     // HCL, Nix, Elm, Elixir, OCaml, Solidity, PowerShell, Julia.
     "string_lit",
     "heredoc_template",
+    "quoted_template",
     "string_expression",
     "indented_string_expression",
     "string_constant_expr",
@@ -255,12 +256,26 @@ pub fn for_linguist(name: &str) -> Option<&'static dyn Language> {
 /// A dialect a grammar does not read, though Linguist files it under the
 /// grammar's language: zsh, which Linguist counts as Shell but whose syntax
 /// (glob qualifiers, `${(f)...}` flags, `#compdef` files) the bash grammar
-/// misparses. Such a file keeps its language and its comment and string
+/// misparses; R documentation (`.Rd`); OCaml interfaces and lexer and parser
+/// specifications (`.mli`, `.mll`, `.mly`). Such a file keeps its language and its comment and string
 /// syntax, but gets no syntax tree: it is read in the lexical tier, and no
 /// syntax-tree rule touches it.
 pub fn unread_dialect(lang: &dyn Language, path: &std::path::Path, text: &str) -> Option<&'static str> {
-    if lang.id() != "bash" {
-        return None;
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(str::to_ascii_lowercase)
+        .unwrap_or_default();
+    match (lang.id(), ext.as_str()) {
+        // Linguist files R documentation (.Rd, LaTeX-like markup) under R.
+        ("r", "rd") => return Some("Rd documentation"),
+        // OCaml interfaces need a different grammar; lexer and parser
+        // specifications are not OCaml at all.
+        ("ocaml", "mli") => return Some("OCaml interface"),
+        ("ocaml", "mll") => return Some("ocamllex"),
+        ("ocaml", "mly") => return Some("ocamlyacc"),
+        ("bash", _) => {}
+        _ => return None,
     }
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     let zsh_name = name.ends_with(".zsh")

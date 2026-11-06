@@ -229,6 +229,48 @@ there, and `check` lists them.
   counted here too; zsh is now read lexically.)
 - **JavaScript (Django, 2):** template-processed and Python-2-era files.
 
+## The new languages
+
+When 13 languages joined the deep tier (and 11 packs with them), one well-known project per language was
+checked (`check` only, at the commit shown), to catch what the corpus could not. These projects are a spot
+check, not part of the ledger.
+
+| Project | Language | Commit | Questions | Explained | Parse damage |
+|---|---|---|---|---|---|
+| phoenixframework/phoenix | Elixir | `6daf29b` | 8 | 3 | 0 |
+| terraform-aws-modules/terraform-aws-vpc | HCL | `b3abd6d` | 0 | 0 | 0 |
+| dart-lang/shelf | Dart | `9946de5` | 5 | 1 | 0 |
+| tidyverse/dplyr | R | `819c99f` | 0 | 0 | 1 |
+| koalaman/shellcheck | Haskell | `e11f964` | 1 | 3 | 2 |
+| nix-community/home-manager | Nix | `b787c48` | 0 | 0 | 7 |
+| OpenZeppelin/openzeppelin-contracts | Solidity | `efaa6f7` | 2 | 0 | 8 |
+| dahlbyk/posh-git | PowerShell | `bbc5ac3` | 0 | 0 | 15 |
+| zigtools/zls | Zig | `c275dd2` | 14 | 0 | 3 |
+| rtfeldman/elm-spa-example | Elm | `cb32acd` | 0 | 0 | 0 |
+| janestreet/base | OCaml | `49a861e` | 0 | 14 | 0 |
+| JuliaData/DataFrames.jl | Julia | `e867c34` | 2 | 0 | 2 |
+| ninenines/cowboy | Erlang | `b9ca9e9` | 129 | 3 | 0 |
+
+What the first run found, and what changed:
+
+- **R documentation**: dplyr's 112 `.Rd` files (LaTeX-like markup that Linguist files under R) were parsed as
+  R. They are now read lexically, like zsh; parse damage 113 → 1 (a C++ header the `.h` heuristic reads as C).
+- **OCaml interfaces** (`.mli`, which needs tree-sitter-ocaml's interface grammar) and `.mll`/`.mly` lexer and
+  parser specifications: read lexically; base's parse damage 37 → 0.
+- **Dart's `tool/`** directory holds scripts by convention: 11 of shelf's 16 `print` questions were there.
+  The other five are a compliance harness and the default request logger, which prints on purpose: a
+  question is the right answer.
+- **`Invoke-Expression` in tests**: all 28 in posh-git were in its test suite, where the evaluated string is
+  fixed by the test's author. Tests, examples and docs are now left alone.
+
+The rest was judged as intended. zls's `std.debug.print` calls are in a testing helper and debug dumps:
+questions the user answers in a moment. base's `Obj.magic` is deliberate inside its low-level arrays, and
+the explanation says what it risks. shellcheck's `newSTRef undefined` placeholders crash if read before
+they are written. cowboy's 129 fixed waits are in its test suite, which is what that question is for.
+The remaining parse damage is in the grammars: PowerShell bareword paths with variables
+(`$env:X\lib\$name*`), TypeScript 5's `export type *`, and shell scripts that are really Nix templates
+(`@initHomeManagerLib@`).
+
 ## Rerunning it
 
 ```console

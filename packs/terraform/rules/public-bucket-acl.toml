@@ -1,0 +1,36 @@
+id = "public-bucket-acl"
+title = "Bucket readable by anyone"
+category = "hazard"
+cwe = ["CWE-732"]
+tags = ["security", "aws"]
+summary = "`${attr}` lets anyone on the internet read this bucket."
+explain = """
+The canned ACLs `public-read` and `public-read-write` grant every anonymous user access to the bucket's
+objects. Most leaked data on S3 started this way. Keep buckets private and serve public files through a
+CDN or a bucket policy scoped to them; if this bucket really is public, say so with a suppression and its
+reason. Nothing is changed automatically: whether data is public is a decision.
+"""
+shape = '''
+(attribute
+  (identifier) @key
+  (expression (literal_value (string_lit (template_literal) @value)))
+  (#eq? @key "acl")
+  (#match? @value "^public-read(-write)?$")) @attr
+'''
+focus = "@attr"
+
+[[example]]
+before = '''
+resource "aws_s3_bucket_acl" "reports" {
+  bucket = aws_s3_bucket.reports.id
+  acl    = "public-read"
+}
+'''
+
+[[counterexample]]
+code = '''
+resource "aws_s3_bucket_acl" "reports" {
+  bucket = aws_s3_bucket.reports.id
+  acl    = "private"
+}
+'''

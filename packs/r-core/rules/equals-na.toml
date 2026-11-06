@@ -1,0 +1,69 @@
+id = "equals-na"
+title = "Comparison with NA"
+tags = ["missing-values"]
+category = "contradiction"
+semantics = "corrected"
+summary = "`${cmp}` is always NA, never TRUE or FALSE; `${check}` tests for a missing value."
+explain = """
+In R, any comparison with `NA` is itself `NA`: `x == NA` is `NA` whatever `x` is, so an `if` on it fails
+with "missing value where TRUE/FALSE needed" and a filter on it keeps nothing. `is.na(x)` is the test for
+a missing value.
+
+A class can redefine `==` (through `Ops`), so the engine asks before correcting.
+"""
+shape = '''
+(binary_operator lhs: (_) @value operator: ["==" "!="] @op rhs: (na) @_na) @cmp
+(binary_operator lhs: (na) @_na operator: ["==" "!="] @op rhs: (_) @value) @cmp
+'''
+focus = "@cmp"
+where = [
+  "kind(@value) != 'na'",
+  "!r.defines('is.na')",
+]
+
+[let]
+check = "choose(text(@op) == '==', concat('is.na(', text(@value), ')'), concat('!is.na(', text(@value), ')'))"
+
+[ask]
+question = "Did you mean `${check}`?"
+
+[fix]
+edits = [{ replace = "@cmp", with = "${check}" }]
+
+[[example]]
+before = '''
+clean <- function(x) {
+  if (x == NA) 0 else x
+}
+print(clean(NA))
+'''
+after = '''
+clean <- function(x) {
+  if (is.na(x)) 0 else x
+}
+print(clean(NA))
+'''
+output = "[1] 0\n"
+
+
+[[example]]
+name = "not equal"
+before = '''
+present <- scores[NA != scores]
+'''
+after = '''
+present <- scores[!is.na(scores)]
+'''
+
+[[counterexample]]
+name = "NA against NA"
+code = '''
+both <- NA == NA
+'''
+
+[[counterexample]]
+name = "is.na is redefined here"
+code = '''
+is.na <- function(x) FALSE
+missing <- x == NA
+'''

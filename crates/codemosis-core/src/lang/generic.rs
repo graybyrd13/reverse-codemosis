@@ -148,6 +148,7 @@ fn identifiers_in(node: Node, text: &str, out: &mut BTreeSet<String>) {
         || k == "name"
         || k == "constant"
         || k == "variable_name"
+        || k == "variable"
     {
         out.insert(text[node.byte_range()].trim_start_matches('$').to_string());
     }

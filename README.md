@@ -107,10 +107,11 @@ The precise model is in [docs/SEMANTICS.md](docs/SEMANTICS.md).
   Zig, Dart, R, Julia, Elm, Nix, HCL/Terraform, PowerShell, Solidity), 330
   lexically (comments and strings), the rest by identity.
   [Details](docs/LANGUAGES.md).
-- **Rules**: 16 built-in packs with 62 rules: missing imports, identity
+- **Rules**: 27 built-in packs with 77 rules: missing imports, identity
   comparisons with literals, `=== NaN`, unreachable code, unused imports,
   vacuous asserts, empty catches, debugging leftovers, fixed waits in 48
-  languages, merge conflicts, committed keys, and more.
+  languages, merge conflicts, committed keys, public buckets and secrets in
+  Terraform, `tx.origin` in Solidity, unpinned Nix fetches, and more.
   [Reference](docs/packs/README.md).
 - **Agents**: an MCP server (`codemosis mcp`) and a hook (`codemosis hook`)
   for Claude Code, Cursor, Copilot, Codex, Gemini CLI, Zed, Aider and more.

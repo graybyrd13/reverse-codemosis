@@ -1,0 +1,54 @@
+id = "tx-origin-auth"
+title = "Authorization with tx.origin"
+category = "hazard"
+cwe = ["CWE-863"]
+tags = ["security", "swc-115"]
+summary = "`${cmp}` trusts whoever started the transaction, not whoever is calling."
+explain = """
+`tx.origin` is the account that signed the transaction, however many contracts it passed through. A
+malicious contract the owner is tricked into calling can then call this one, and `tx.origin` is still the
+owner (SWC-115). Use `msg.sender` for authorization. Nothing is changed automatically: replacing it changes
+who may call, which is a design decision.
+
+`tx.origin == msg.sender`, which only checks that the caller is not a contract, is not reported.
+"""
+shape = '''
+(binary_expression
+  left: (expression (member_expression object: (identifier) @object property: (identifier) @property))
+  operator: ["==" "!="]
+  right: (expression) @other
+  (#eq? @object "tx") (#eq? @property "origin")) @cmp
+(binary_expression
+  left: (expression) @other
+  operator: ["==" "!="]
+  right: (expression (member_expression object: (identifier) @object property: (identifier) @property))
+  (#eq? @object "tx") (#eq? @property "origin")) @cmp
+'''
+focus = "@cmp"
+where = ["text(@other) != 'msg.sender'"]
+
+[[example]]
+before = '''
+pragma solidity ^0.8.0;
+
+contract Wallet {
+    address owner;
+
+    function withdraw(uint amount) public {
+        require(tx.origin == owner);
+        payable(msg.sender).transfer(amount);
+    }
+}
+'''
+
+[[counterexample]]
+name = "only callers that are not contracts"
+code = '''
+pragma solidity ^0.8.0;
+
+contract Mint {
+    function mint() public {
+        require(tx.origin == msg.sender);
+    }
+}
+'''

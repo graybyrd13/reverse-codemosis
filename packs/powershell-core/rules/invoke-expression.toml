@@ -1,0 +1,40 @@
+id = "invoke-expression"
+title = "Invoke-Expression"
+category = "hazard"
+cwe = ["CWE-95"]
+tags = ["security", "injection"]
+summary = "`${cmd}` runs a string as code."
+explain = """
+`Invoke-Expression` (alias `iex`) evaluates a string as PowerShell. If any part of the string comes from
+input, a file or the network, whoever controls it runs code with this script's rights. Call the command
+directly, use the call operator `&` with arguments, or a script block. Nothing is changed automatically:
+the safe form depends on what the string contains.
+
+Tests, examples and documentation are left alone: what they evaluate is fixed by their author.
+"""
+shape = '(command command_name: (command_name) @name) @cmd'
+focus = "@cmd"
+where = [
+  "matches(text(@name), '(?i)^(invoke-expression|iex)$')",
+  "file_purpose() in ['library', 'script']",
+]
+
+[[example]]
+before = '''
+$command = Read-Host "Command"
+Invoke-Expression $command
+'''
+
+[[counterexample]]
+code = '''
+$name = Read-Host "Name"
+Get-Process -Name $name
+'''
+
+[[counterexample]]
+name = "a test builds and runs its own command"
+path = "test/Prompt.Tests.ps1"
+code = '''
+$command = "Get-Date"
+Invoke-Expression $command
+'''

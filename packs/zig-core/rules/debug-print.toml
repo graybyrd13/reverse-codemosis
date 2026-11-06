@@ -1,0 +1,89 @@
+id = "debug-print"
+title = "std.debug.print left in code"
+tags = ["debugging"]
+category = "waste"
+semantics = "preserved"
+summary = "`${stmt}` prints to standard error for debugging."
+explain = """
+`std.debug.print` writes to standard error without any error handling: it is meant for debugging, and easy
+to leave in library code. Real output goes through a writer the caller chooses, and diagnostics through
+`std.log`. The engine asks: keep records it as intentional; remove deletes the line.
+"""
+shape = '(expression_statement (call_expression function: (field_expression) @function)) @stmt'
+focus = "@stmt"
+where = [
+  "text(@function) == 'std.debug.print'",
+  "file_purpose() == 'library'",
+  "occupies_lines(@stmt)",
+]
+[ask]
+question = "Keep this std.debug.print?"
+
+[[ask.option]]
+answer = "keep"
+means = "it is wanted output; record it as intentional"
+
+[[ask.option]]
+answer = "remove"
+means = "it is leftover debugging; delete it"
+edits = [{ delete_lines = "@stmt" }]
+
+[[example]]
+answer = "remove"
+path = "src/cart.zig"
+before = '''
+const std = @import("std");
+
+pub fn total(items: []const u32) u32 {
+    var sum: u32 = 0;
+    for (items) |item| sum += item;
+    std.debug.print("sum={d}\\n", .{sum});
+    return sum;
+}
+'''
+after = '''
+const std = @import("std");
+
+pub fn total(items: []const u32) u32 {
+    var sum: u32 = 0;
+    for (items) |item| sum += item;
+    return sum;
+}
+'''
+
+[[counterexample]]
+name = "logging through std.log"
+path = "src/cart.zig"
+code = '''
+const std = @import("std");
+
+pub fn total(items: []const u32) u32 {
+    var sum: u32 = 0;
+    for (items) |item| sum += item;
+    std.log.info("sum={d}", .{sum});
+    return sum;
+}
+'''
+
+[[counterexample]]
+name = "in an example, printing is the point"
+path = "examples/cart.zig"
+code = '''
+const std = @import("std");
+
+pub fn main() void {
+    std.debug.print("hello\\n", .{});
+    return;
+}
+'''
+
+[[counterexample]]
+name = "a statement that shares its line"
+path = "src/cart.zig"
+code = '''
+const std = @import("std");
+
+pub fn total(a: u32, b: u32) u32 {
+    std.debug.print("a\\n", .{}); return a + b;
+}
+'''

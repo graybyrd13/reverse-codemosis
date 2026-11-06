@@ -11,33 +11,33 @@ Every one of the 845 languages in GitHub Linguist is known: **30** deep (a synta
 | C | `c` | tree-sitter-c 0.24.2 | generic + 1 | `cc` | conditional compilation, parse damage, comments | 4 |
 | C# | `csharp` | tree-sitter-c-sharp 0.23.5 | generic + 1 | none | conditional compilation, parse damage, comments | 4 |
 | C++ | `cpp` | tree-sitter-cpp 0.23.4 | generic + 1 | `c++` | conditional compilation, parse damage, comments | 4 |
-| Dart | `dart` | tree-sitter-dart 0.3.0 | generic + 1 | none | parse damage, comments | 3 |
-| Elixir | `elixir` | tree-sitter-elixir 0.3.5 | generic + 1 | none | parse damage, comments | 3 |
-| Elm | `elm` | tree-sitter-elm 5.9.4 | generic + 1 | none | parse damage, comments | 2 |
+| Dart | `dart` | tree-sitter-dart 0.3.0 | generic + 1 | none | parse damage, comments | 4 |
+| Elixir | `elixir` | tree-sitter-elixir 0.3.5 | generic + 1 | none | parse damage, comments | 4 |
+| Elm | `elm` | tree-sitter-elm 5.9.4 | generic + 1 | none | parse damage, comments | 3 |
 | Erlang | `erlang` | tree-sitter-erlang 0.21.0 | generic + 1 | none | parse damage, comments | 3 |
 | Go | `go` | tree-sitter-go 0.25.0 | generic + 1 | `go` | parse damage, comments | 5 |
-| HCL | `hcl` | tree-sitter-hcl 1.1.0 | generic + 1 | none | parse damage, comments | 2 |
-| Haskell | `haskell` | tree-sitter-haskell 0.24.1 | generic + 1 | none | parse damage, comments | 3 |
+| HCL | `hcl` | tree-sitter-hcl 1.1.0 | generic + 1 | none | parse damage, comments | 5 |
+| Haskell | `haskell` | tree-sitter-haskell 0.24.1 | generic + 1 | none | parse damage, comments | 4 |
 | Java | `java` | tree-sitter-java 0.23.5 | generic + 1 | `java` | parse damage, comments | 6 |
 | JavaScript | `javascript` | tree-sitter-javascript 0.25.0 | generic + 1 | `node` | parse damage, comments | 11 |
 | Julia | `julia` | tree-sitter-julia 0.23.1 | generic + 1 | none | parse damage, comments | 3 |
 | Kotlin | `kotlin` | tree-sitter-kotlin-ng 1.1.0 | generic + 1 | none | parse damage, comments | 3 |
 | Lua | `lua` | tree-sitter-lua 0.5.0 | generic + 1 | `lua` | parse damage, comments | 3 |
-| Nix | `nix` | tree-sitter-nix 0.3.0 | generic + 1 | none | parse damage, comments | 2 |
-| OCaml | `ocaml` | tree-sitter-ocaml 0.26.0 | generic + 1 | none | parse damage, comments | 3 |
+| Nix | `nix` | tree-sitter-nix 0.3.0 | generic + 1 | none | parse damage, comments | 3 |
+| OCaml | `ocaml` | tree-sitter-ocaml 0.26.0 | generic + 1 | none | parse damage, comments | 4 |
 | PHP | `php` | tree-sitter-php 0.25.1 | generic + 1 | `php` | parse damage, comments | 4 |
-| PowerShell | `powershell` | tree-sitter-powershell 0.26.6 | generic + 1 | none | parse damage, comments | 3 |
+| PowerShell | `powershell` | tree-sitter-powershell 0.26.6 | generic + 1 | none | parse damage, comments | 4 |
 | Python | `python` | tree-sitter-python 0.25.0 | generic + 19 + bindings | `python3` | parse damage, comments | 26 |
-| R | `r` | tree-sitter-r 1.3.0 | generic + 1 | none | parse damage, comments | 3 |
+| R | `r` | tree-sitter-r 1.3.0 | generic + 1 | none | parse damage, comments | 5 |
 | Ruby | `ruby` | tree-sitter-ruby 0.23.1 | generic + 1 | `ruby` | parse damage, comments | 4 |
 | Rust | `rust` | tree-sitter-rust 0.24.2 | generic + 0 | `rustc` | #[cfg], macro bodies, parse damage, comments | 8 |
 | Scala | `scala` | tree-sitter-scala 0.26.4 | generic + 1 | none | parse damage, comments | 3 |
 | Shell | `bash` | tree-sitter-bash 0.25.1 | generic + 1 | `bash` | parse damage, comments, zsh read lexically | 4 |
-| Solidity | `solidity` | tree-sitter-solidity 1.2.13 | generic + 1 | none | parse damage, comments | 2 |
+| Solidity | `solidity` | tree-sitter-solidity 1.2.13 | generic + 1 | none | parse damage, comments | 4 |
 | Swift | `swift` | tree-sitter-swift 0.7.4 | generic + 1 | `swift` | conditional compilation, parse damage, comments | 3 |
 | TSX | `tsx` | tree-sitter-typescript 0.23.2 | generic + 1 | none | parse damage, comments | 11 |
 | TypeScript | `typescript` | tree-sitter-typescript 0.23.2 | generic + 1 | `node` | parse damage, comments | 11 |
-| Zig | `zig` | tree-sitter-zig 1.1.2 | generic + 1 | none | parse damage, comments | 3 |
+| Zig | `zig` | tree-sitter-zig 1.1.2 | generic + 1 | none | parse damage, comments | 4 |
 
 ## Lexical tier
 
