@@ -155,7 +155,7 @@ Examples, documentation and benchmarks are left alone (see `file_purpose()`): a 
 ```diff
 --- a/example.c
 +++ b/example.c
-@@ -3,7 +3,6 @@
+@@ -4,7 +4,6 @@
  
  int main(void) {
      puts("start");

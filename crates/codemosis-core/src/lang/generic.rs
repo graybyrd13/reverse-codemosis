@@ -305,8 +305,26 @@ static JAVA: CommandRunner = CommandRunner {
 };
 static C: CommandRunner = CommandRunner {
     file: "snippet.c",
-    check: &["cc", "-std=c11", "-fsyntax-only", "{file}"],
-    run: &[&["cc", "-std=c11", "-o", "{dir}/snippet", "{file}"], &["{dir}/snippet"]],
+    // An undeclared function is an error, as in GCC 14 and Clang 16, so an
+    // example compiles the same with every compiler.
+    check: &[
+        "cc",
+        "-std=c11",
+        "-Werror=implicit-function-declaration",
+        "-fsyntax-only",
+        "{file}",
+    ],
+    run: &[
+        &[
+            "cc",
+            "-std=c11",
+            "-Werror=implicit-function-declaration",
+            "-o",
+            "{dir}/snippet",
+            "{file}",
+        ],
+        &["{dir}/snippet"],
+    ],
     runnable_if: Some("main("),
 };
 static CPP: CommandRunner = CommandRunner {
